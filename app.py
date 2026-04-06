@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Query, HTTPException
+from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -6,7 +6,7 @@ from sqlalchemy import and_, desc
 from typing import List, Optional
 from datetime import date
 from db import get_db, AttendanceLog
-from sync import sync_all_machines, get_machine_list
+from sync import sync_all_machines, get_machine_list, sync_status
 import uvicorn
 import os
 
@@ -63,12 +63,16 @@ def get_attendance(
     }
 
 @app.post("/api/sync")
-def trigger_sync():
-    try:
-        count = sync_all_machines()
-        return {"message": f"Sync completed. Added {count} new records.", "count": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def trigger_sync(background_tasks: BackgroundTasks):
+    if sync_status["is_running"]:
+        return {"message": "Sync is already in progress.", "is_running": True}
+    
+    background_tasks.add_task(sync_all_machines)
+    return {"message": "Sync started in background.", "is_running": True}
+
+@app.get("/api/sync-status")
+def get_sync_status():
+    return sync_status
 
 # Serving Static Files (Frontend)
 if not os.path.exists("static"):

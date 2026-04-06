@@ -58,6 +58,7 @@
             font-weight: 600;
             background: linear-gradient(to right, #fff, #94a3b8);
             -webkit-background-clip: text;
+            background-clip: text; /* Fixed compatibility */
             -webkit-text-fill-color: transparent;
         }
 
@@ -288,6 +289,10 @@
             </button>
         </header>
 
+        <div id="syncStatus" style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); padding: 12px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 0.9rem; color: var(--accent);">
+            <span id="syncStatusText">Syncing in progress...</span>
+        </div>
+
         <section class="filters">
             <div class="filter-group">
                 <label>Employee ID</label>
@@ -334,6 +339,7 @@
     <script>
         let currentPage = 1;
         const pageSize = 50;
+        let isSyncing = false;
 
         async function fetchMachines() {
             try {
@@ -407,48 +413,115 @@
             const container = document.getElementById('paginationControls');
             if (total <= 1) return;
 
-            // Previous button
-            const prevBtn = document.createElement('button');
-            prevBtn.className = 'btn-page';
-            prevBtn.textContent = 'Prev';
-            prevBtn.disabled = current === 1;
-            prevBtn.onclick = () => loadData(current - 1);
+            // Info bar combined with numbers
+            const createBtn = (p, text, active = false, disabled = false) => {
+                const b = document.createElement('button');
+                b.className = `btn-page ${active ? 'active' : ''}`;
+                b.textContent = text || p;
+                b.disabled = disabled;
+                b.onclick = () => loadData(p);
+                return b;
+            };
+
+            const prevBtn = createBtn(current - 1, 'Prev', false, current === 1);
             container.appendChild(prevBtn);
 
-            // Info
+            // Logic for 1, 2, 3 ... Total
+            if (total <= 5) {
+                for (let i = 1; i <= total; i++) container.appendChild(createBtn(i, i, i === current));
+            } else {
+                // Always show first 3
+                for (let i = 1; i <= 3; i++) container.appendChild(createBtn(i, i, i === current));
+                
+                if (current > 3 && current < total) {
+                    // If current is beyond 3, show ellipsis and current? 
+                    // Let's refine: 1, 2, 3 ... [Last]
+                    const ellipsis = document.createElement('button');
+                    ellipsis.className = 'btn-page';
+                    ellipsis.textContent = '...';
+                    ellipsis.onclick = () => {
+                        const p = prompt(`Nhập số trang (1 - ${total}):`, current);
+                        if (p && !isNaN(p)) {
+                            const target = parseInt(p);
+                            if (target >= 1 && target <= total) loadData(target);
+                        }
+                    };
+                    container.appendChild(ellipsis);
+                } else if (total > 4) {
+                    const ellipsis = document.createElement('button');
+                    ellipsis.className = 'btn-page';
+                    ellipsis.textContent = '...';
+                    ellipsis.onclick = () => {
+                        const p = prompt(`Nhập số trang (1 - ${total}):`, current);
+                        if (p && !isNaN(p)) {
+                            const target = parseInt(p);
+                            if (target >= 1 && target <= total) loadData(target);
+                        }
+                    };
+                    container.appendChild(ellipsis);
+                }
+
+                // Always show last
+                container.appendChild(createBtn(total, total, current === total));
+            }
+
+            const nextBtn = createBtn(current + 1, 'Next', false, current === total);
+            container.appendChild(nextBtn);
+
             const info = document.createElement('span');
             info.className = 'page-info';
-            info.textContent = `Trang ${current} / ${total} (${totalRecords} bản ghi)`;
+            info.style.marginLeft = '20px';
+            info.textContent = `(${totalRecords} bản ghi)`;
             container.appendChild(info);
-
-            // Next button
-            const nextBtn = document.createElement('button');
-            nextBtn.className = 'btn-page';
-            nextBtn.textContent = 'Next';
-            nextBtn.disabled = current === total;
-            nextBtn.onclick = () => loadData(current + 1);
-            container.appendChild(nextBtn);
         }
 
         async function syncData() {
             const btn = document.getElementById('syncBtn');
-            btn.classList.add('loading');
+            if (isSyncing) return;
             
             try {
                 const response = await fetch('/api/sync', { method: 'POST' });
                 const result = await response.json();
-                alert(result.message);
-                loadData(1);
+                checkSyncStatus();
             } catch (err) {
-                alert('Sync failed: ' + err.message);
-            } finally {
-                btn.classList.remove('loading');
+                alert('Sync trigger failed: ' + err.message);
+            }
+        }
+
+        async function checkSyncStatus() {
+            try {
+                const response = await fetch('/api/sync-status');
+                const status = await response.json();
+                
+                const statusDiv = document.getElementById('syncStatus');
+                const statusText = document.getElementById('syncStatusText');
+                const syncBtn = document.getElementById('syncBtn');
+
+                if (status.is_running) {
+                    isSyncing = true;
+                    statusDiv.style.display = 'block';
+                    syncBtn.classList.add('loading');
+                    statusText.textContent = `Đang đồng bộ máy ${status.current_machine_index}/${status.total_machines}: ${status.current_machine_ip}... (Đã thêm ${status.total_added} bản ghi)`;
+                    setTimeout(checkSyncStatus, 2000); // Poll every 2s
+                } else {
+                    if (isSyncing) {
+                        // Just finished
+                        alert(`Đồng bộ hoàn tất! Tổng cộng thêm ${status.total_added} bản ghi.`);
+                        loadData(1);
+                    }
+                    isSyncing = false;
+                    statusDiv.style.display = 'none';
+                    syncBtn.classList.remove('loading');
+                }
+            } catch (err) {
+                console.error('Status check failed:', err);
             }
         }
 
         // Initialize
         fetchMachines();
         loadData(1);
+        checkSyncStatus(); // Poll status on load in case sync is already running
     </script>
 </body>
 </html>
