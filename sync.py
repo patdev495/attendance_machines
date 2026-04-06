@@ -1,8 +1,10 @@
 from zk import ZK
-from db import SessionLocal, AttendanceLog
+from db import SessionLocal, AttendanceLog, EmployeeMetadata
 from sqlalchemy import exists, and_
 import logging
 import datetime
+import pandas as pd
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -114,6 +116,68 @@ def sync_all_machines():
         sync_status["last_sync_time"] = datetime.datetime.now().isoformat()
     
     return local_total_added
+
+def delete_user_from_all_machines(employee_id: str):
+    """Deletes a user from all machines listed in machines.txt."""
+    machine_ips = get_machine_list()
+    results = {}
+    
+    for ip in machine_ips:
+        logger.info(f"Connecting to {ip} to delete user {employee_id}...")
+        zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+        conn = None
+        try:
+            conn = zk.connect()
+            conn.disable_device()
+            # delete_user returns True if successful
+            success = conn.delete_user(user_id=str(employee_id))
+            results[ip] = "Success" if success else "Not Found / Failed"
+            conn.enable_device()
+        except Exception as e:
+            logger.error(f"Error on machine {ip}: {e}")
+            results[ip] = f"Error: {str(e)}"
+        finally:
+            if conn:
+                conn.disconnect()
+    return results
+
+def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx"):
+    """Reads Excel and updates the Employee table."""
+    try:
+        df = pd.read_excel(file_path)
+        # Expected columns: EMP_ID, SHIFT
+        if 'EMP_ID' not in df.columns or 'SHIFT' not in df.columns:
+            logger.error("Excel file missing required columns: EMP_ID, SHIFT")
+            return 0, "Missing columns"
+
+        db = SessionLocal()
+        count = 0
+        for _, row in df.iterrows():
+            emp_id = str(row['EMP_ID'])
+            shift_val = str(row['SHIFT']).strip().upper()
+            
+            # Map TV to Resigned status
+            status = 'TV' if shift_val == 'TV' else 'Active'
+            # For TV, we don't necessarily update the shift string, just the status
+            
+            # Try to find existing employee
+            employee = db.query(EmployeeMetadata).filter(EmployeeMetadata.employee_id == emp_id).first()
+            if not employee:
+                employee = EmployeeMetadata(employee_id=emp_id)
+                db.add(employee)
+            
+            # Update values
+            if shift_val != 'TV':
+                employee.shift = shift_val
+            employee.status = status
+            count += 1
+        
+        db.commit()
+        db.close()
+        return count, "Success"
+    except Exception as e:
+        logger.error(f"Failed to sync employees from Excel: {e}")
+        return 0, str(e)
 
 if __name__ == "__main__":
     count = sync_all_machines()

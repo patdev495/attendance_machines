@@ -7,20 +7,18 @@ try:
     conn = zk.connect()
     attendances = conn.get_attendance()
 
-    # Nhóm theo employee_id
-    grouped = defaultdict(list)
+    print(f"Total records found: {len(attendances)}\n")
+    
+    print("--- RAW ATTENDANCE OBJECTS (First 10) ---")
+    # In ra 10 bản ghi đầu tiên dưới dạng raw nhất có thể
+    for i, att in enumerate(attendances[:10]):
+        # Sử dụng vars() để xem toàn bộ các thuộc tính bên trong object
+        print(f"Record {i+1}: {vars(att)}")
 
+    print("\n--- ALL RAW DATA (user_id, timestamp, status, punch, uid) ---")
     for att in attendances:
-        grouped[att.user_id].append(att.timestamp)
-
-    # Xử lý từng nhân viên
-    for user_id, times in grouped.items():
-        times.sort()
-
-        print(f"\nEmployee: {user_id}")
-
-        for t in times:
-            print("  -", t)
+        print(att)
 
 finally:
-    conn.disconnect()
+    if 'conn' in locals() and conn:
+        conn.disconnect()

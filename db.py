@@ -25,6 +25,13 @@ class AttendanceLog(Base):
     machine_ip = Column(String(50), nullable=False, index=True)
     created_at = Column(DateTime, server_default=func.current_timestamp())
 
+class EmployeeMetadata(Base):
+    __tablename__ = "EmployeeMetadata"
+    employee_id = Column(String(50), primary_key=True)
+    shift = Column(String(10), nullable=True)  # 'N' or 'D'
+    status = Column(String(20), nullable=True) # 'Active' or 'TV'
+    updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
