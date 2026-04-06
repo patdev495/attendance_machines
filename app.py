@@ -5,7 +5,7 @@ from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, desc, func, text, Date, case
+from sqlalchemy import func, desc, text, Date, case, or_
 from typing import List, Optional
 from datetime import date, datetime, time, timedelta
 from db import get_db, AttendanceLog, EmployeeMetadata
@@ -119,7 +119,10 @@ def get_attendance_summary(
     if end_date:
         query = query.filter(base_calc_sub.c.work_date <= end_date)
     if shift:
-        query = query.filter(base_calc_sub.c.shift == shift)
+        if shift == "NA":
+            query = query.filter(or_(base_calc_sub.c.shift == None, base_calc_sub.c.shift == ""))
+        else:
+            query = query.filter(base_calc_sub.c.shift == shift)
     if status:
         query = query.filter(base_calc_sub.c.status == status)
         
