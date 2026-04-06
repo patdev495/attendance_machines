@@ -424,6 +424,63 @@
                 flex-wrap: wrap;
             }
         }
+        /* Device Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.8);
+            backdrop-filter: blur(8px);
+        }
+        .modal-content {
+            background: var(--bg-card);
+            margin: 5% auto;
+            padding: 30px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .close-modal {
+            color: var(--text-muted);
+            font-size: 28px;
+            cursor: pointer;
+        }
+        .capacity-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .capacity-table th, .capacity-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+        }
+        .capacity-table th { color: var(--text-muted); font-weight: 500; }
+        .capacity-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            margin-top: 4px;
+            overflow: hidden;
+        }
+        .capacity-fill {
+            height: 100%;
+            background: var(--primary);
+            border-radius: 4px;
+        }
+
     </style>
 </head>
 
@@ -437,6 +494,9 @@
             <div style="display: flex; gap: 12px;">
                 <button id="excelSyncBtn" class="btn-sync" style="background: rgba(45, 212, 191, 0.1); border-color: #2dd4bf;" onclick="syncExcel()">
                     <span>Sync Excel</span>
+                </button>
+                <button id="deviceBtn" class="btn-sync" style="background: rgba(139, 92, 246, 0.1); border-color: #8b5cf6;" onclick="openDeviceModal()">
+                    <span>Device Status</span>
                 </button>
                 <button id="syncBtn" class="btn-sync" onclick="syncData()">
                     <div class="spinner"></div>
@@ -526,6 +586,19 @@
 
             <div class="pagination" id="paginationControls">
                 <!-- Pagination buttons will be here -->
+            </div>
+        </div>
+
+        <!-- Device Status Modal -->
+        <div id="deviceModal" class="modal">
+            <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-header">
+                    <h2>Machine Capacity & Status</h2>
+                    <span class="close-modal" onclick="closeDeviceModal()">&times;</span>
+                </div>
+                <div id="deviceModalBody">
+                    <p>Fetching real-time data from machines...</p>
+                </div>
             </div>
         </div>
     </div>
@@ -879,6 +952,89 @@
         }
 
         checkSyncStatus(); // Poll status on load in case sync is already running
+        async function openDeviceModal() {
+            document.getElementById('deviceModal').style.display = 'block';
+            await fetchDeviceCapacity();
+        }
+
+        function closeDeviceModal() {
+            document.getElementById('deviceModal').style.display = 'none';
+        }
+
+        async function fetchDeviceCapacity() {
+            const body = document.getElementById('deviceModalBody');
+            body.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="display:inline-block;"></div><p style="margin-top:20px;">Connecting to machines...</p></div>';
+            
+            try {
+                const response = await fetch('/api/devices/capacity');
+                const devices = await response.json();
+                
+                let html = `
+                    <table class="capacity-table">
+                        <thead>
+                            <tr>
+                                <th>Machine IP</th>
+                                <th>Status</th>
+                                <th>Users</th>
+                                <th>Fingerprints</th>
+                                <th>Logs</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                devices.forEach(d => {
+                    const statusClass = d.status === 'Online' ? 'active' : 'tv';
+                    const statusText = d.status === 'Online' ? 'Online' : 'Offline';
+                    
+                    if (d.status === 'Online') {
+                        const userPct = Math.min((d.users / d.users_cap) * 100, 100);
+                        const fingerPct = Math.min((d.fingers / d.fingers_cap) * 100, 100);
+                        const recordPct = Math.min((d.records / d.records_cap) * 100, 100);
+
+                        html += `
+                            <tr>
+                                <td>${d.ip}</td>
+                                <td><span class="badge-status" style="color: ${d.status === 'Online' ? '#4ade80' : '#f87171'}">${statusText}</span></td>
+                                <td>
+                                    <div>${d.users} / ${d.users_cap}</div>
+                                    <div class="capacity-bar"><div class="capacity-fill" style="width: ${userPct}%; background: #6366f1;"></div></div>
+                                </td>
+                                <td>
+                                    <div>${d.fingers} / ${d.fingers_cap}</div>
+                                    <div class="capacity-bar"><div class="capacity-fill" style="width: ${fingerPct}%; background: #2dd4bf;"></div></div>
+                                </td>
+                                <td>
+                                    <div>${d.records} / ${d.records_cap}</div>
+                                    <div class="capacity-bar"><div class="capacity-fill" style="width: ${recordPct}%; background: #8b5cf6;"></div></div>
+                                </td>
+                            </tr>
+                        `;
+                    } else {
+                        html += `
+                            <tr>
+                                <td>${d.ip}</td>
+                                <td><span class="badge-status" style="color: #f87171">Offline</span></td>
+                                <td colspan="3" style="color: var(--text-muted);">${d.error || 'Connection Failed'}</td>
+                            </tr>
+                        `;
+                    }
+                });
+                
+                html += `</tbody></table>`;
+                body.innerHTML = html;
+            } catch (err) {
+                body.innerHTML = `<p style="color: #f87171;">Error: ${err.message}</p>`;
+            }
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('deviceModal');
+            if (event.target == modal) {
+                closeDeviceModal();
+            }
+        }
     </script>
 </body>
 

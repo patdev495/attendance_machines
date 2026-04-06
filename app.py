@@ -218,6 +218,11 @@ def trigger_sync(background_tasks: BackgroundTasks):
     background_tasks.add_task(sync_all_machines)
     return {"message": "Sync started in background.", "is_running": True}
 
+@app.get("/api/devices/capacity")
+def get_devices_capacity():
+    from sync import get_devices_capacity_info
+    return get_devices_capacity_info()
+
 @app.get("/api/sync-status")
 def get_sync_status():
     return sync_status

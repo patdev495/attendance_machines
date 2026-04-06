@@ -18,9 +18,43 @@ sync_status = {
     "total_machines": 0,
     "current_machine_index": 0,
     "current_machine_ip": "",
-    "total_added": 0,
+    "processed_count": 0,
     "last_sync_time": None
 }
+
+def get_devices_capacity_info():
+    machines = get_machine_list()
+    results = []
+    for ip in machines:
+        zk = ZK(ip, port=4370, timeout=5)
+        conn = None
+        try:
+            conn = zk.connect()
+            # This populates users, users_cap, fingers, fingers_cap, records, records_cap
+            conn.read_sizes()
+            results.append({
+                "ip": ip,
+                "status": "Online",
+                "users": getattr(conn, 'users', 0),
+                "users_cap": getattr(conn, 'users_cap', 0),
+                "fingers": getattr(conn, 'fingers', 0),
+                "fingers_cap": getattr(conn, 'fingers_cap', 0),
+                "records": getattr(conn, 'records', 0),
+                "records_cap": getattr(conn, 'records_cap', 0)
+            })
+        except Exception as e:
+            results.append({
+                "ip": ip,
+                "status": "Offline",
+                "error": str(e)
+            })
+        finally:
+            if conn:
+                try:
+                    conn.disconnect()
+                except:
+                    pass
+    return results
 status_lock = threading.Lock()
 
 def get_machine_list(file_path="machines.txt"):
