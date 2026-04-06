@@ -474,6 +474,14 @@
                 <label>Date To</label>
                 <input type="date" id="endDate" onchange="loadData(1)">
             </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select id="statusFilter" onchange="loadData(1)">
+                    <option value="">All Status</option>
+                    <option value="Active">Active</option>
+                    <option value="TV">Resigned (TV)</option>
+                </select>
+            </div>
         </section>
 
         <section class="filter-group-summary" id="summaryFilters">
@@ -608,6 +616,7 @@
             const machineIp = document.getElementById('machineIp').value;
             const startDate = document.getElementById('startDate').value;
             const endDate = document.getElementById('endDate').value;
+            const statusFilter = document.getElementById('statusFilter').value;
 
             // Summary-specific filters
             const minHours = document.getElementById('minHours').value;
@@ -622,6 +631,7 @@
             if (machineIp) url += `machine_ip=${machineIp}&`;
             if (startDate) url += `start_date=${startDate}&`;
             if (endDate) url += `end_date=${endDate}&`;
+            if (statusFilter) url += `status=${statusFilter}&`;
 
             if (currentView === 'summary') {
                 if (minHours) url += `min_hours=${minHours}&`;

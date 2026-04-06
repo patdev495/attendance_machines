@@ -32,11 +32,12 @@ def get_attendance(
     machine_ip: Optional[str] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1),
     db: Session = Depends(get_db)
 ):
-    query = db.query(AttendanceLog)
+    query = db.query(AttendanceLog).outerjoin(EmployeeMetadata, AttendanceLog.employee_id == EmployeeMetadata.employee_id)
     
     if employee_id:
         query = query.filter(AttendanceLog.employee_id == employee_id)
@@ -46,6 +47,8 @@ def get_attendance(
         query = query.filter(AttendanceLog.attendance_date >= start_date)
     if end_date:
         query = query.filter(AttendanceLog.attendance_date <= end_date)
+    if status:
+        query = query.filter(EmployeeMetadata.status == status)
         
     total_count = query.count()
     total_pages = (total_count + size - 1) // size
@@ -73,6 +76,7 @@ def get_attendance_summary(
     max_hours: Optional[float] = Query(None),
     only_missing: bool = Query(False),
     shift: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1),
     db: Session = Depends(get_db)
@@ -116,6 +120,8 @@ def get_attendance_summary(
         query = query.filter(base_calc_sub.c.work_date <= end_date)
     if shift:
         query = query.filter(base_calc_sub.c.shift == shift)
+    if status:
+        query = query.filter(base_calc_sub.c.status == status)
         
     query = query.group_by(
         base_calc_sub.c.employee_id, 
