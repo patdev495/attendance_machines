@@ -506,8 +506,13 @@
         </header>
 
         <div id="syncStatus"
-            style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); padding: 12px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 0.9rem; color: var(--accent);">
+            style="display: none; background: rgba(99, 102, 241, 0.1); border: 1px solid var(--primary); padding: 12px 20px; border-radius: 12px; margin-bottom: 12px; font-size: 0.9rem; color: var(--accent);">
             <span id="syncStatusText">Syncing in progress...</span>
+        </div>
+
+        <div id="deleteStatus"
+            style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; padding: 12px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 0.9rem; color: #f87171;">
+            <span id="deleteStatusText">Deleting employee data...</span>
         </div>
 
         <div class="view-toggle">
@@ -940,14 +945,53 @@
                 const response = await fetch(`/api/employees/${employeeId}/machine-data`, { method: 'DELETE' });
                 const data = await response.json();
                 
-                let message = "Deletion Results:\n";
-                for (const [ip, result] of Object.entries(data.results)) {
-                    message += `- ${ip}: ${result}\n`;
+                if (data.is_running) {
+                    checkDeleteStatus();
+                } else {
+                    alert(data.message || 'Operation failed.');
                 }
-                alert(message);
             } catch (err) {
-                console.error('Delete failed:', err);
-                alert('Delete operation failed.');
+                console.error('Delete initiation failed:', err);
+                alert('Delete operation failed to start.');
+            }
+        }
+
+        let isDeleting = false;
+        async function checkDeleteStatus() {
+            if (isDeleting) return;
+            isDeleting = true;
+            
+            const statusDiv = document.getElementById('deleteStatus');
+            const statusText = document.getElementById('deleteStatusText');
+            statusDiv.style.display = 'block';
+
+            try {
+                while (true) {
+                    const response = await fetch('/api/employees/delete-status');
+                    const data = await response.json();
+                    
+                    if (data.is_running) {
+                        statusText.innerText = `Deleting ID ${data.employee_id}: Machine ${data.processed_count}/${data.total_machines} (${data.current_ip})`;
+                    } else {
+                        statusText.innerText = `Deletion Finished for ID ${data.employee_id}.`;
+                        
+                        let summary = `Deletion Results for ID ${data.employee_id}:\n`;
+                        for (const [ip, result] of Object.entries(data.results)) {
+                            summary += `- ${ip}: ${result}\n`;
+                        }
+                        alert(summary);
+                        
+                        setTimeout(() => {
+                            statusDiv.style.display = 'none';
+                        }, 3000);
+                        break;
+                    }
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            } catch (err) {
+                console.error('Delete status monitor failed:', err);
+            } finally {
+                isDeleting = false;
             }
         }
 

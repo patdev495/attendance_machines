@@ -22,6 +22,15 @@ sync_status = {
     "last_sync_time": None
 }
 
+delete_status = {
+    "is_running": False,
+    "employee_id": None,
+    "total_machines": 0,
+    "processed_count": 0,
+    "current_ip": "",
+    "results": {}
+}
+
 def get_devices_capacity_info():
     machines = get_machine_list()
     results = []
@@ -153,27 +162,59 @@ def sync_all_machines():
 
 def delete_user_from_all_machines(employee_id: str):
     """Deletes a user from all machines listed in machines.txt."""
-    machine_ips = get_machine_list()
-    results = {}
+    with status_lock:
+        if delete_status["is_running"]:
+            return
+        delete_status["is_running"] = True
+        delete_status["employee_id"] = employee_id
+        delete_status["results"] = {}
+        delete_status["processed_count"] = 0
+        delete_status["current_ip"] = ""
     
-    for ip in machine_ips:
-        logger.info(f"Connecting to {ip} to delete user {employee_id}...")
-        zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-        conn = None
-        try:
-            conn = zk.connect()
-            conn.disable_device()
-            # delete_user returns True if successful
-            success = conn.delete_user(user_id=str(employee_id))
-            results[ip] = "Success" if success else "Not Found / Failed"
-            conn.enable_device()
-        except Exception as e:
-            logger.error(f"Error on machine {ip}: {e}")
-            results[ip] = f"Error: {str(e)}"
-        finally:
-            if conn:
-                conn.disconnect()
-    return results
+    try:
+        machine_ips = get_machine_list()
+        delete_status["total_machines"] = len(machine_ips)
+        
+        for ip in machine_ips:
+            with status_lock:
+                delete_status["current_ip"] = ip
+            
+            logger.info(f"Connecting to {ip} to delete user {employee_id}...")
+            zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+            conn = None
+            try:
+                conn = zk.connect()
+                conn.disable_device()
+                
+                # Fetch all users to find the correct UID and verify existence
+                users = conn.get_users()
+                target_user = next((u for u in users if u.user_id == str(employee_id)), None)
+                
+                if target_user:
+                    # Deleting by both UID and UserID is the most reliable method
+                    conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
+                    with status_lock:
+                        delete_status["results"][ip] = "Success"
+                else:
+                    with status_lock:
+                        delete_status["results"][ip] = "Not in device"
+                
+                conn.enable_device()
+            except Exception as e:
+                logger.error(f"Error on machine {ip}: {e}")
+                with status_lock:
+                    delete_status["results"][ip] = f"Error: {str(e)}"
+            finally:
+                if conn:
+                    try:
+                        conn.disconnect()
+                    except:
+                        pass
+                with status_lock:
+                    delete_status["processed_count"] += 1
+    finally:
+        with status_lock:
+            delete_status["is_running"] = False
 
 def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx"):
     """Reads Excel and updates the Employee table."""

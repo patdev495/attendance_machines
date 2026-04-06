@@ -225,7 +225,13 @@ def get_devices_capacity():
 
 @app.get("/api/sync-status")
 def get_sync_status():
+    from sync import sync_status
     return sync_status
+
+@app.get("/api/employees/delete-status")
+def get_delete_status():
+    from sync import delete_status
+    return delete_status
 
 @app.post("/api/employees/sync")
 def sync_employees():
@@ -235,10 +241,13 @@ def sync_employees():
     return {"message": f"Successfully synced {count} employees from Excel."}
 
 @app.delete("/api/employees/{employee_id}/machine-data")
-def delete_employee_from_machines(employee_id: str):
-    # This is the remote deletion from ZKTeco hardware
-    results = delete_user_from_all_machines(employee_id)
-    return {"results": results}
+def delete_employee_from_machines(employee_id: str, background_tasks: BackgroundTasks):
+    from sync import delete_user_from_all_machines, delete_status
+    if delete_status["is_running"]:
+        return {"message": "A deletion is already in progress.", "is_running": True}
+        
+    background_tasks.add_task(delete_user_from_all_machines, employee_id)
+    return {"message": f"Deletion of employee {employee_id} started.", "is_running": True}
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
