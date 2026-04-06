@@ -171,6 +171,7 @@
             padding: 16px 24px;
             border-bottom: 1px solid var(--border);
             font-size: 0.95rem;
+            color: #e2e8f0;
         }
 
         tr:last-child td {
@@ -393,7 +394,7 @@
 
                 data.items.forEach(log => {
                     const row = document.createElement('tr');
-                    const time = new Date(log.attendance_time).toLocaleString('vi-VN');
+                    const time = new Date(log.attendance_time).toLocaleString('en-US');
                     row.innerHTML = `
                         <td style="font-weight: 600; color: #fff;">${log.employee_id}</td>
                         <td>${time}</td>
@@ -413,7 +414,6 @@
             const container = document.getElementById('paginationControls');
             if (total <= 1) return;
 
-            // Info bar combined with numbers
             const createBtn = (p, text, active = false, disabled = false) => {
                 const b = document.createElement('button');
                 b.className = `btn-page ${active ? 'active' : ''}`;
@@ -423,55 +423,67 @@
                 return b;
             };
 
-            const prevBtn = createBtn(current - 1, 'Prev', false, current === 1);
-            container.appendChild(prevBtn);
+            const createEllipsis = () => {
+                const b = document.createElement('button');
+                b.className = 'btn-page';
+                b.textContent = '...';
+                b.onclick = () => {
+                    const p = prompt(`Enter page number (1 - ${total}):`, current);
+                    if (p && !isNaN(p)) {
+                        const target = parseInt(p);
+                        if (target >= 1 && target <= total) loadData(target);
+                    }
+                };
+                return b;
+            };
 
-            // Logic for 1, 2, 3 ... Total
-            if (total <= 5) {
-                for (let i = 1; i <= total; i++) container.appendChild(createBtn(i, i, i === current));
+            // Previous
+            container.appendChild(createBtn(current - 1, 'Prev', false, current === 1));
+
+            // Dynamic Pagination Logic
+            const pages = [];
+            
+            if (total <= 7) {
+                for (let i = 1; i <= total; i++) pages.push(i);
             } else {
-                // Always show first 3
-                for (let i = 1; i <= 3; i++) container.appendChild(createBtn(i, i, i === current));
+                pages.push(1);
                 
-                if (current > 3 && current < total) {
-                    // If current is beyond 3, show ellipsis and current? 
-                    // Let's refine: 1, 2, 3 ... [Last]
-                    const ellipsis = document.createElement('button');
-                    ellipsis.className = 'btn-page';
-                    ellipsis.textContent = '...';
-                    ellipsis.onclick = () => {
-                        const p = prompt(`Nhập số trang (1 - ${total}):`, current);
-                        if (p && !isNaN(p)) {
-                            const target = parseInt(p);
-                            if (target >= 1 && target <= total) loadData(target);
-                        }
-                    };
-                    container.appendChild(ellipsis);
-                } else if (total > 4) {
-                    const ellipsis = document.createElement('button');
-                    ellipsis.className = 'btn-page';
-                    ellipsis.textContent = '...';
-                    ellipsis.onclick = () => {
-                        const p = prompt(`Nhập số trang (1 - ${total}):`, current);
-                        if (p && !isNaN(p)) {
-                            const target = parseInt(p);
-                            if (target >= 1 && target <= total) loadData(target);
-                        }
-                    };
-                    container.appendChild(ellipsis);
+                if (current > 4) {
+                    pages.push('...');
                 }
-
-                // Always show last
-                container.appendChild(createBtn(total, total, current === total));
+                
+                let start = Math.max(2, current - 1);
+                let end = Math.min(total - 1, current + 1);
+                
+                if (current <= 4) end = 5;
+                if (current >= total - 3) start = total - 4;
+                
+                for (let i = start; i <= end; i++) {
+                    if (!pages.includes(i)) pages.push(i);
+                }
+                
+                if (current < total - 3) {
+                    pages.push('...');
+                }
+                
+                if (!pages.includes(total)) pages.push(total);
             }
 
-            const nextBtn = createBtn(current + 1, 'Next', false, current === total);
-            container.appendChild(nextBtn);
+            pages.forEach(p => {
+                if (p === '...') {
+                    container.appendChild(createEllipsis());
+                } else {
+                    container.appendChild(createBtn(p, p, p === current));
+                }
+            });
+
+            // Next
+            container.appendChild(createBtn(current + 1, 'Next', false, current === total));
 
             const info = document.createElement('span');
             info.className = 'page-info';
             info.style.marginLeft = '20px';
-            info.textContent = `(${totalRecords} bản ghi)`;
+            info.textContent = `(${totalRecords} records)`;
             container.appendChild(info);
         }
 
@@ -501,12 +513,12 @@
                     isSyncing = true;
                     statusDiv.style.display = 'block';
                     syncBtn.classList.add('loading');
-                    statusText.textContent = `Đang đồng bộ máy ${status.current_machine_index}/${status.total_machines}: ${status.current_machine_ip}... (Đã thêm ${status.total_added} bản ghi)`;
+                    statusText.textContent = `Syncing machine ${status.current_machine_index}/${status.total_machines}: ${status.current_machine_ip}... (Added ${status.total_added} records)`;
                     setTimeout(checkSyncStatus, 2000); // Poll every 2s
                 } else {
                     if (isSyncing) {
                         // Just finished
-                        alert(`Đồng bộ hoàn tất! Tổng cộng thêm ${status.total_added} bản ghi.`);
+                        alert(`Sync completed! Total added: ${status.total_added} records.`);
                         loadData(1);
                     }
                     isSyncing = false;

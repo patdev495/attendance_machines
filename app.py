@@ -1,3 +1,6 @@
+import argparse
+import os
+import uvicorn
 from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -7,8 +10,6 @@ from typing import List, Optional
 from datetime import date
 from db import get_db, AttendanceLog
 from sync import sync_all_machines, get_machine_list, sync_status
-import uvicorn
-import os
 
 app = FastAPI(title="Time Attendance System")
 
@@ -81,4 +82,10 @@ if not os.path.exists("static"):
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    parser = argparse.ArgumentParser(description="Run the Time Attendance System API.")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host address to bind to")
+    parser.add_argument("--port", type=int, default=8001, help="Port to listen on")
+    
+    args = parser.parse_args()
+    
+    uvicorn.run(app, host=args.host, port=args.port)

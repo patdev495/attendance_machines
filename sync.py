@@ -96,7 +96,7 @@ def sync_all_machines():
                 db.commit()
                 local_total_added += len(new_logs)
             
-            logger.info(f"Machine {ip}: Finished. Sync added {local_total_added} in total so far.")
+            logger.info(f"Machine {ip}: Finished. Sync added {local_total_added} records in total.")
             
         except Exception as e:
             logger.error(f"Error syncing machine {ip}: {e}")
