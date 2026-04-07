@@ -248,10 +248,11 @@ def delete_user_from_machine(ip: str, employee_id: str):
             try: conn.disconnect()
             except: pass
 
-def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx"):
-    """Reads Excel and updates the Employee table."""
+def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx", file_bytes=None):
+    """Reads Excel and updates the Employee table. Accepts a file path or a BytesIO object."""
     try:
-        df = pd.read_excel(file_path)
+        source = file_bytes if file_bytes is not None else file_path
+        df = pd.read_excel(source)
         # Strip whitespace/newlines from column headers
         df.columns = df.columns.str.strip()
         

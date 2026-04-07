@@ -1,7 +1,7 @@
 import argparse
 import os
 import uvicorn
-from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -286,8 +286,10 @@ def get_delete_status():
     return delete_status
 
 @app.post("/api/employees/sync")
-def sync_employees():
-    count, msg = sync_employees_from_excel()
+async def sync_employees(file: UploadFile = File(...)):
+    import io
+    contents = await file.read()
+    count, msg = sync_employees_from_excel(file_bytes=io.BytesIO(contents))
     if msg != "Success":
         raise HTTPException(status_code=500, detail=msg)
     return {"message": f"Successfully synced {count} employees from Excel."}

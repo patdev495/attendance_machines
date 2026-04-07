@@ -500,9 +500,10 @@
                 <button id="exportExcelBtn" class="btn-sync" style="background: rgba(14, 165, 233, 0.1); border-color: #0ea5e9; color: #38bdf8;" onclick="exportExcel()">
                     <span>Export Excel</span>
                 </button>
-                <button id="excelSyncBtn" class="btn-sync" style="background: rgba(45, 212, 191, 0.1); border-color: #2dd4bf;" onclick="syncExcel()">
+                <button id="excelSyncBtn" class="btn-sync" style="background: rgba(45, 212, 191, 0.1); border-color: #2dd4bf;" onclick="triggerExcelSync()">
                     <span>Sync Excel</span>
                 </button>
+                <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none;" onchange="syncExcel(this)">
                 <button id="deviceBtn" class="btn-sync" style="background: rgba(139, 92, 246, 0.1); border-color: #8b5cf6;" onclick="openDeviceModal()">
                     <span>Device Status</span>
                 </button>
@@ -1021,22 +1022,34 @@
             loadData(1);
         }
 
-        async function syncExcel() {
+        function triggerExcelSync() {
+            document.getElementById('excelFileInput').value = '';
+            document.getElementById('excelFileInput').click();
+        }
+
+        async function syncExcel(input) {
+            const file = input.files[0];
+            if (!file) return;
+
             const btn = document.getElementById('excelSyncBtn');
-            const originalText = btn.innerText;
-            btn.innerText = "Syncing...";
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<div class="spinner" style="display:inline-block;"></div><span>${file.name}</span>`;
             btn.disabled = true;
-            
+
+            const formData = new FormData();
+            formData.append('file', file);
+
             try {
-                const response = await fetch('/api/employees/sync', { method: 'POST' });
+                const response = await fetch('/api/employees/sync', { method: 'POST', body: formData });
                 const result = await response.json();
+                if (!response.ok) throw new Error(result.detail || 'Sync failed');
                 alert(result.message);
                 loadData(1);
             } catch (err) {
                 console.error('Excel Sync failed:', err);
                 alert('Excel Sync failed: ' + err.message);
             } finally {
-                btn.innerText = originalText;
+                btn.innerHTML = originalHTML;
                 btn.disabled = false;
             }
         }
