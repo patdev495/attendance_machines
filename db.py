@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date, func
+from sqlalchemy import create_engine, Column, Integer, String, Unicode, DateTime, Date, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import urllib.parse
@@ -28,6 +28,10 @@ class AttendanceLog(Base):
 class EmployeeMetadata(Base):
     __tablename__ = "EmployeeMetadata"
     employee_id = Column(String(50), primary_key=True)
+    emp_name = Column(Unicode(255), nullable=True)
+    department = Column(Unicode(255), nullable=True)
+    group = Column(Unicode(255), nullable=True)
+    start_date = Column(Date, nullable=True)
     shift = Column(String(10), nullable=True)  # 'N' or 'D'
     status = Column(String(20), nullable=True) # 'Active' or 'TV'
     updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp())

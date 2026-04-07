@@ -117,6 +117,8 @@ def sync_all_machines():
             new_logs = []
             for att in attendances:
                 user_id = str(att.user_id)
+                if user_id == '1':
+                    continue
                 timestamp = att.timestamp.replace(tzinfo=None)
                 
                 # O(1) Memory lookup instead of O(N) DB query
@@ -220,6 +222,9 @@ def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx"):
     """Reads Excel and updates the Employee table."""
     try:
         df = pd.read_excel(file_path)
+        # Strip whitespace/newlines from column headers
+        df.columns = df.columns.str.strip()
+        
         # Expected columns: EMP_ID, SHIFT
         if 'EMP_ID' not in df.columns or 'SHIFT' not in df.columns:
             logger.error("Excel file missing required columns: EMP_ID, SHIFT")
@@ -245,6 +250,16 @@ def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx"):
             if shift_val != 'TV':
                 employee.shift = shift_val
             employee.status = status
+            
+            if 'EMP_NAME' in df.columns and pd.notna(row['EMP_NAME']):
+                employee.emp_name = str(row['EMP_NAME'])
+            if 'DEPARTMENT' in df.columns and pd.notna(row['DEPARTMENT']):
+                employee.department = str(row['DEPARTMENT'])
+            if 'GROUP' in df.columns and pd.notna(row['GROUP']):
+                employee.group = str(row['GROUP'])
+            if 'START_DATE' in df.columns and pd.notna(row['START_DATE']):
+                employee.start_date = pd.to_datetime(row['START_DATE']).date()
+                
             count += 1
         
         db.commit()

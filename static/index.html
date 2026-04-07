@@ -491,7 +491,15 @@
                 <h1>Nienyi Employees Time Attendance</h1>
                 <p style="color: var(--text-muted); margin-top: 4px;"></p>
             </div>
-            <div style="display: flex; gap: 12px;">
+            <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+                <select id="exportMode" style="background: rgba(15, 23, 42, 0.5); border: 1px solid var(--border); color: white; padding: 12px; border-radius: 12px; outline: none; height: 100%;">
+                    <option value="time">Xuất: Giờ (In/Out)</option>
+                    <option value="hours">Xuất: Công (Working/Overtime)</option>
+                    <option value="both">Xuất: Cả Giờ & Công (4 thẻ)</option>
+                </select>
+                <button id="exportExcelBtn" class="btn-sync" style="background: rgba(14, 165, 233, 0.1); border-color: #0ea5e9; color: #38bdf8;" onclick="exportExcel()">
+                    <span>Export Excel</span>
+                </button>
                 <button id="excelSyncBtn" class="btn-sync" style="background: rgba(45, 212, 191, 0.1); border-color: #2dd4bf;" onclick="syncExcel()">
                     <span>Sync Excel</span>
                 </button>
@@ -546,6 +554,11 @@
                     <option value="Active">Active</option>
                     <option value="TV">Resigned (TV)</option>
                 </select>
+            </div>
+            <div class="filter-group" style="justify-content: flex-end;">
+                <button type="button" class="btn-sync" style="background: rgba(239, 68, 68, 0.1); border-color: #ef4444; color: #f87171; height: 42px;" onclick="resetFilters()">
+                    <span>Clear Filters</span>
+                </button>
             </div>
         </section>
 
@@ -646,6 +659,20 @@
             } catch (err) {
                 console.error('Failed to load machines:', err);
             }
+        }
+        
+        function exportExcel() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+            const viewMode = document.getElementById('exportMode').value;
+            
+            if (!startDate || !endDate) {
+                alert("Please select both Date From and Date To before exporting.");
+                return;
+            }
+            
+            // Open export API endpoint which returns file
+            window.location.href = `/api/export-attendance?start_date=${startDate}&end_date=${endDate}&view_mode=${viewMode}`;
         }
 
         function setView(view) {
@@ -917,6 +944,21 @@
         // Initialize
         fetchMachines();
         loadData(1);
+        
+        function resetFilters() {
+            document.getElementById('employeeId').value = "";
+            document.getElementById('machineIp').value = "";
+            document.getElementById('startDate').value = "";
+            document.getElementById('endDate').value = "";
+            document.getElementById('statusFilter').value = "";
+            document.getElementById('minHours').value = "";
+            document.getElementById('maxHours').value = "";
+            document.getElementById('shiftFilter').value = "";
+            document.getElementById('onlyMissing').checked = false;
+            document.getElementById('exportMode').value = "time";
+            loadData(1);
+        }
+
         async function syncExcel() {
             const btn = document.getElementById('excelSyncBtn');
             const originalText = btn.innerText;
