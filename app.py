@@ -25,6 +25,60 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Shift Rule Helpers ────────────────────────────────────────────
+XUONG1_DEPT_KEYWORD = "Xưởng 1"
+
+def get_shift_rules(department, shift):
+    """Return shift rules dict based on department + shift type."""
+    is_xuong1 = bool(department and XUONG1_DEPT_KEYWORD in str(department))
+    if is_xuong1:
+        if shift == 'D':  # Night: 20:00 → 08:00 next day
+            return dict(official_start=time(20,0), official_end=time(8,0), end_next_day=True,
+                        max_hours=12.0, standard_hours=12.0, deduct_break=False, has_overtime=False)
+        else:              # Day:   08:00 → 20:00
+            return dict(official_start=time(8,0),  official_end=time(20,0), end_next_day=False,
+                        max_hours=12.0, standard_hours=12.0, deduct_break=False, has_overtime=False)
+    else:
+        if shift == 'D':  # Night: 20:00 → 05:00 next day
+            return dict(official_start=time(20,0), official_end=time(5,0),  end_next_day=True,
+                        max_hours=None,  standard_hours=8.0,  deduct_break=True,  has_overtime=True)
+        else:              # Day:   08:00 → 17:00
+            return dict(official_start=time(8,0),  official_end=time(17,0), end_next_day=False,
+                        max_hours=None,  standard_hours=8.0,  deduct_break=True,  has_overtime=True)
+
+def compute_day_stats(first, last, w_date, department, shift):
+    """Return (work_hours, hours_standard, hours_ot, minutes_late, minutes_early)."""
+    rules = get_shift_rules(department, shift)
+    official_start_dt = datetime.combine(w_date, rules['official_start'])
+    official_end_dt   = (datetime.combine(w_date + timedelta(days=1), rules['official_end'])
+                         if rules['end_next_day']
+                         else datetime.combine(w_date, rules['official_end']))
+
+    minutes_late  = max(0, int((first - official_start_dt).total_seconds() / 60))
+    minutes_early = max(0, int((official_end_dt - last).total_seconds() / 60))
+
+    effective_in  = max(first, official_start_dt)
+    effective_out = min(last, official_end_dt) if not rules['has_overtime'] else last
+    total_secs    = max(0.0, (effective_out - effective_in).total_seconds())
+
+    if rules['deduct_break']:
+        work_hours = round((total_secs - 3600) / 3600, 2) if total_secs > 3600 else round(total_secs / 3600, 2)
+    else:
+        work_hours = round(total_secs / 3600, 2)
+
+    if rules['max_hours'] is not None:
+        work_hours = min(work_hours, rules['max_hours'])
+
+    if rules['has_overtime'] and work_hours >= rules['standard_hours']:
+        hours_standard = rules['standard_hours']
+        hours_ot       = round(work_hours - rules['standard_hours'], 2)
+    else:
+        hours_standard = work_hours
+        hours_ot       = 0.0
+
+    return work_hours, hours_standard, hours_ot, minutes_late, minutes_early
+# ──────────────────────────────────────────────────────────────────
+
 @app.get("/api/machines")
 def get_machines():
     return get_machine_list()
@@ -93,9 +147,10 @@ def get_attendance_summary(
         AttendanceLog.id,
         AttendanceLog.attendance_time,
         AttendanceLog.employee_id,
-        AttendanceLog.machine_ip, # Included for potential further filtering
+        AttendanceLog.machine_ip,
         EmployeeMetadata.shift,
         EmployeeMetadata.status,
+        EmployeeMetadata.department,
         case(
             (EmployeeMetadata.shift == text("'D'"), func.cast(func.dateadd(text("hour"), text("-10"), AttendanceLog.attendance_time), Date)),
             else_=func.cast(func.dateadd(text("hour"), text("-4"), AttendanceLog.attendance_time), Date)
@@ -110,7 +165,8 @@ def get_attendance_summary(
         func.max(base_calc_sub.c.attendance_time).label("last_tap"),
         func.count(base_calc_sub.c.id).label("tap_count"),
         base_calc_sub.c.shift,
-        base_calc_sub.c.status
+        base_calc_sub.c.status,
+        base_calc_sub.c.department
     )
     
     if employee_id:
@@ -130,10 +186,11 @@ def get_attendance_summary(
         query = query.filter(base_calc_sub.c.status == status)
         
     query = query.group_by(
-        base_calc_sub.c.employee_id, 
-        base_calc_sub.c.work_date, 
-        base_calc_sub.c.shift, 
-        base_calc_sub.c.status
+        base_calc_sub.c.employee_id,
+        base_calc_sub.c.work_date,
+        base_calc_sub.c.shift,
+        base_calc_sub.c.status,
+        base_calc_sub.c.department
     )
     
     # Advanced Filtering using HAVING
@@ -164,38 +221,25 @@ def get_attendance_summary(
     
     summary_items = []
     for row in results:
-        first = row.first_tap
-        last = row.last_tap
-        count = row.tap_count
-        w_date = row.work_date
-        shift = row.shift # 'N'=Day, 'D'=Night
-        
-        work_hours = 0.0
+        first      = row.first_tap
+        last       = row.last_tap
+        count      = row.tap_count
+        w_date     = row.work_date
+        row_shift  = row.shift
+        department = row.department
+
+        work_hours       = 0.0
+        minutes_late     = None
+        minutes_early_lv = None
         note = ""
-        
+
         if count > 1 and first != last:
-            # Determine official shift start for clipping
-            # Official start times: Day (N) = 08:00, Night (D) = 20:00
-            if shift == 'D': # D = Night
-                official_start = datetime.combine(w_date, time(20, 0))
-            else: # N = Day or N/A
-                official_start = datetime.combine(w_date, time(8, 0))
-            
-            # Clip start time: Early check-ins don't count
-            effective_in = max(first, official_start)
-            
-            diff = last - effective_in
-            total_secs = diff.total_seconds()
-            
-            # Subtract 1 hour for break (3600 seconds)
-            # Only if duration is positive
-            if total_secs > 3600:
-                work_hours = round((total_secs - 3600) / 3600, 2)
-            else:
-                work_hours = round(max(0, total_secs) / 3600, 2)
+            work_hours, _, _, minutes_late, minutes_early_lv = compute_day_stats(
+                first, last, w_date, department, row_shift
+            )
         else:
             note = "Missing Check-in/out (Only 1 tap)"
-            
+
         summary_items.append({
             "employee_id": row.employee_id,
             "attendance_date": w_date,
@@ -203,9 +247,11 @@ def get_attendance_summary(
             "last_tap": last,
             "tap_count": count,
             "work_hours": work_hours,
-            "shift": row.shift or "N/A",
+            "shift": row_shift or "N/A",
             "status": row.status or "Active",
-            "note": note
+            "note": note,
+            "minutes_late": minutes_late,
+            "minutes_early_leave": minutes_early_lv,
         })
         
     return {
@@ -410,7 +456,13 @@ def export_attendance(
     
     # Data Rows
     current_row = 2
-    num_rows = 4 if view_mode == "both" else 2
+    # time → 4 rows (In/Out + Đi muộn/Về sớm)
+    # hours → 4 rows (Công/TăngCa + Đi muộn/Về sớm)
+    # both  → 6 rows
+    if view_mode == "both":
+        num_rows = 6
+    else:
+        num_rows = 4
     
     for emp_id in sorted_emp_ids:
         emp_data_info = data[emp_id]
@@ -442,13 +494,12 @@ def export_attendance(
             
             # Indicator column
             if view_mode == "time":
-                indicator = "Giờ In" if is_first else "Giờ Out"
+                all_indicators = ["Giờ In", "Giờ Out", "Đi muộn (phút)", "Về sớm (phút)"]
             elif view_mode == "hours":
-                indicator = "Giờ Công" if is_first else "Tăng Ca"
-            else: # both
-                indicators = ["Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca"]
-                indicator = indicators[r_idx - current_row]
-                
+                all_indicators = ["Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)"]
+            else:
+                all_indicators = ["Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)"]
+            indicator = all_indicators[r_idx - current_row]
             c7 = ws.cell(row=r_idx, column=7, value=indicator)
 
             # Apply font white to duplicate employee info to look cleaner, but keep the data for filtering
@@ -484,57 +535,121 @@ def export_attendance(
                 for c in cells: c.value = "-"
             else:
                 day_stat = emp_data[d]
-                c_count = day_stat["count"]
-                
-                # Base vars
-                first_val = "-"
-                last_val = "-"
-                hours_8 = "-"
-                hours_ot = "-"
-                
+                c_count  = day_stat["count"]
+                emp_dept = emp_m.department if emp_m else None
+
+                first_val      = "-"
+                last_val       = "-"
+                hours_std_val  = "-"
+                hours_ot_val   = "-"
+                late_val       = "-"
+                early_val      = "-"
+
                 if c_count >= 1 and day_stat["first_tap"]:
                     first_val = day_stat["first_tap"].strftime("%H:%M")
-                
+
                 if c_count >= 2 and day_stat["first_tap"] != day_stat["last_tap"]:
                     last_val = day_stat["last_tap"].strftime("%H:%M")
-                    
-                    first = day_stat["first_tap"]
-                    last = day_stat["last_tap"]
-                    shift = day_stat["shift"]
-                    
-                    if shift == 'D':
-                        official_start = datetime.combine(d, time(20, 0))
-                    else:
-                        official_start = datetime.combine(d, time(8, 0))
-                    
-                    effective_in = max(first, official_start)
-                    total_secs = (last - effective_in).total_seconds()
-                    
-                    if total_secs > 3600:
-                        work_hours = round((total_secs - 3600) / 3600, 2)
-                    else:
-                        work_hours = round(max(0, total_secs) / 3600, 2)
-                        
-                    if work_hours >= 8:
-                        hours_8 = 8
-                        hours_ot = round(work_hours - 8, 2)
-                    else:
-                        hours_8 = work_hours
-                        hours_ot = "-"
-                
+                    _, hours_std, hours_ot, min_late, min_early = compute_day_stats(
+                        day_stat["first_tap"], day_stat["last_tap"],
+                        d, emp_dept, day_stat["shift"]
+                    )
+                    hours_std_val = hours_std
+                    hours_ot_val  = hours_ot if hours_ot > 0 else "-"
+                    late_val      = min_late
+                    early_val     = min_early
+
+                has2 = c_count >= 2
                 if view_mode == "time":
                     cells[0].value = first_val
                     cells[1].value = last_val
+                    cells[2].value = late_val  if has2 else "-"
+                    cells[3].value = early_val if has2 else "-"
                 elif view_mode == "hours":
-                    cells[0].value = hours_8 if c_count >= 2 else "-"
-                    cells[1].value = hours_ot if c_count >= 2 else "-"
-                else: # both
+                    cells[0].value = hours_std_val if has2 else "-"
+                    cells[1].value = hours_ot_val  if has2 else "-"
+                    cells[2].value = late_val      if has2 else "-"
+                    cells[3].value = early_val     if has2 else "-"
+                else:  # both
                     cells[0].value = first_val
                     cells[1].value = last_val
-                    cells[2].value = hours_8 if c_count >= 2 else "-"
-                    cells[3].value = hours_ot if c_count >= 2 else "-"
+                    cells[2].value = hours_std_val if has2 else "-"
+                    cells[3].value = hours_ot_val  if has2 else "-"
+                    cells[4].value = late_val      if has2 else "-"
+                    cells[5].value = early_val     if has2 else "-"
                             
         current_row += num_rows
+
+    # ─── Sheet 2: Flat/Filterable "Late & Early Leave" table ─────────
+    ws2 = wb.create_sheet(title="Thông tin chi tiết")
+
+    flat_headers = [
+        "Mã NV", "Tên nhân viên", "Phòng ban", "Nhóm", "Ca",
+        "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca",
+        "Đi muộn (phút)", "Về sớm (phút)"
+    ]
+    ws2.append(flat_headers)
+    h2_row = ws2[1]
+    for cell in h2_row:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border_style
+        cell.fill = header_fill
+
+    # Column widths for sheet 2
+    for col_letter, width in zip("ABCDEFGHIJKL", [12, 25, 20, 12, 6, 12, 10, 10, 10, 10, 16, 16]):
+        ws2.column_dimensions[col_letter].width = width
+
+    for emp_id in sorted_emp_ids:
+        emp_data    = data[emp_id]["days"]
+        emp_m       = emp_meta.get(emp_id)
+        emp_name    = emp_m.emp_name   if emp_m and emp_m.emp_name   else emp_id
+        emp_dept    = emp_m.department if emp_m and emp_m.department else "-"
+        emp_group   = emp_m.group      if emp_m and emp_m.group      else "-"
+        emp_dept_raw = emp_m.department if emp_m else None
+
+        for d in dates_list:
+            if d not in emp_data:
+                continue
+            day_stat = emp_data[d]
+            c_count  = day_stat["count"]
+            row_shift = day_stat["shift"] or "N"
+            shift_text = "D" if row_shift == "D" else "N"
+
+            first_val = day_stat["first_tap"].strftime("%H:%M") if c_count >= 1 and day_stat["first_tap"] else "-"
+            last_val  = "-"
+            hours_std_val = "-"
+            hours_ot_val  = "-"
+            late_val      = "-"
+            early_val     = "-"
+
+            if c_count >= 2 and day_stat["first_tap"] != day_stat["last_tap"]:
+                last_val = day_stat["last_tap"].strftime("%H:%M")
+                _, hours_std, hours_ot, min_late, min_early = compute_day_stats(
+                    day_stat["first_tap"], day_stat["last_tap"],
+                    d, emp_dept_raw, row_shift
+                )
+                hours_std_val = hours_std
+                hours_ot_val  = hours_ot if hours_ot > 0 else 0
+                late_val      = min_late
+                early_val     = min_early
+
+            flat_row = [
+                emp_id, emp_name, emp_dept, emp_group, shift_text,
+                d.strftime("%d/%m/%Y"),
+                first_val, last_val,
+                hours_std_val, hours_ot_val,
+                late_val, early_val
+            ]
+            ws2.append(flat_row)
+            last_ws2_row = ws2.max_row
+            for col_idx, cell in enumerate(ws2[last_ws2_row], start=1):
+                cell.border = border_style
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Apply AutoFilter to sheet 2
+    ws2.auto_filter.ref = f"A1:L{ws2.max_row}"
+    # ──────────────────────────────────────────────────────────────────
         
     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     wb.save(temp_file.name)
