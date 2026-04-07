@@ -5,3 +5,5 @@ pyzk
 sqlalchemy
 pydantic
 python-dotenv
+pytest
+httpx

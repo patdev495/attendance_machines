@@ -6,6 +6,7 @@ __pycache__
 *.db
 *.sqlite
 *.db-journal
+.pytest_cache
 
 # Node / Frontend
 node_modules/
@@ -23,3 +24,7 @@ Thumbs.db
 temp_*
 *.xlsx
 !employee_work_shift.xlsx
+*.log
+backend/logs/
+backend/static/
+backend/__pycache__/

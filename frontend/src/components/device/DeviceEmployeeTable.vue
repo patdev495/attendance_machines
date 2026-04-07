@@ -3,29 +3,29 @@
     <table>
       <thead>
         <tr>
-          <th>Employee ID</th>
-          <th>Name (Device)</th>
-          <th>Name (DB)</th>
-          <th>Status</th>
-          <th>Department</th>
-          <th style="text-align:right">Action</th>
+          <th>{{ $t('device.table.emp_id') }}</th>
+          <th>{{ $t('device.table.name_device') }}</th>
+          <th>{{ $t('device.table.name_db') }}</th>
+          <th>{{ $t('device.table.status') }}</th>
+          <th>{{ $t('device.table.department') }}</th>
+          <th style="text-align:right">{{ $t('device.table.action') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="employees.length === 0">
-          <td colspan="6" class="empty-state">No matching employees found on this machine.</td>
+          <td colspan="6" class="empty-state">{{ $t('device.table.no_records') }}</td>
         </tr>
         <tr v-for="u in employees" :key="u.user_id">
           <td style="font-weight:600;color:#fff;">{{ u.user_id }}</td>
           <td>{{ u.name || '-' }}</td>
           <td style="color:#fff;">
             <span v-if="u.db_name">{{ u.db_name }}</span>
-            <small v-else style="color:var(--text-muted)">Not Synced</small>
+            <small v-else style="color:var(--text-muted)">{{ $t('device.table.not_synced') }}</small>
           </td>
           <td>
-            <span v-if="u.status === 'TV'" class="badge-status-tv">Resigned</span>
-            <span v-else-if="u.status === 'Unknown'" style="color:var(--text-muted);font-size:0.83rem;">Unknown</span>
-            <span v-else class="badge-status-active">Active</span>
+            <span v-if="u.status === 'TV'" class="badge-status-tv">{{ $t('device.table.resigned') }}</span>
+            <span v-else-if="u.status === 'Unknown'" style="color:var(--text-muted);font-size:0.83rem;">{{ $t('device.table.unknown') }}</span>
+            <span v-else class="badge-status-active">{{ $t('device.table.active') }}</span>
           </td>
           <td>{{ u.department || '-' }}</td>
           <td style="text-align:right;">

@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "title": "Chấm Công & Thời Gian",
+    "dashboard": "Bảng Điều Khiển",
+    "machines": "Máy Chấm Công"
+  },
+  "attendance": {
+    "raw_logs": "Log Thô",
+    "daily_summary": "Tóm Tắt Hàng Ngày",
+    "filters": {
+      "emp_id": "Mã NV",
+      "machine_ip": "IP Máy",
+      "all_machines": "Tất Cả Máy",
+      "date_from": "Từ Ngày",
+      "date_to": "Đến Ngày",
+      "status": "Trạng Thái",
+      "all_status": "Tất Cả",
+      "active": "Đang Làm Việc",
+      "resigned": "Nghỉ Việc (TV)",
+      "unknown": "Không Rõ (Không có trong DB)",
+      "search": "Tìm kiếm",
+      "clear": "Xóa Lọc",
+      "min_hours": "Giờ Tối Thiểu",
+      "max_hours": "Giờ Tối Đa",
+      "shift": "Lọc Ca",
+      "all_shifts": "Tất Cả Ca",
+      "day_shift": "Ca Ngày (N)",
+      "night_shift": "Ca Đêm (D)",
+      "na_shift": "NA",
+      "only_missing": "Chỉ Thiếu Thông Tin"
+    },
+    "table": {
+      "emp_id": "Mã NV",
+      "attendance_time": "Thời Gian Chấm Công",
+      "machine_ip": "IP Máy",
+      "date": "Ngày",
+      "check_in": "Vào",
+      "check_out": "Ra",
+      "work_hours": "Giờ Làm",
+      "shift": "Ca",
+      "status": "Trạng Thái",
+      "note": "Ghi Chú",
+      "action": "Thao Tác",
+      "no_records": "Không tìm thấy dữ liệu.",
+      "loading": "Đang tải dữ liệu...",
+      "late": "⚠ +{m}p đi trễ",
+      "early": "⚠ -{m}p về sớm"
+    }
+  },
+  "device": {
+    "status": "Trạng Thái Thiết Bị",
+    "help": "Nhấp vào máy để quản lý",
+    "help_short": "Nhấn để quản lý nhân viên →",
+    "unreachable": "Không thể kết nối",
+    "refresh": "Làm mới",
+    "checking": "Đang kiểm tra...",
+    "no_machines": "Chưa cấu hình máy nào.",
+    "all_devices": "Tất Cả Thiết Bị",
+    "machine": "Máy: ",
+    "employee_count": "{filtered} / {total} nhân viên",
+    "connecting": "Đang kết nối máy...",
+    "table": {
+      "emp_id": "Mã NV",
+      "name_device": "Tên (Máy)",
+      "name_db": "Tên (DB)",
+      "status": "Trạng Thái",
+      "department": "Phòng Ban",
+      "action": "Thao Tác",
+      "no_records": "Không tìm thấy nhân viên.",
+      "not_synced": "Chưa đồng bộ",
+      "unknown": "Không Rõ",
+      "resigned": "Nghỉ Việc",
+      "active": "Liên Hệ"
+    }
+  },
+  "machines": {
+    "list_title": "Danh Sách Máy",
+    "detail_title": "Chi Tiết Máy",
+    "connection": "Kết Nối",
+    "users": "Người Dùng",
+    "fingerprints": "Vân Tay",
+    "records": "Bản Ghi",
+    "sync_status": "Đồng Bộ"
+  },
+  "actions": {
+    "delete_confirm": "Xóa nhân viên {id} khỏi máy {ip}?",
+    "delete_all_confirm": "Xóa nhân viên {id} khỏi tất cả các máy?",
+    "confirm": "Xác nhận xóa"
+  },
+  "export": {
+    "time": "Xuất: Thời Gian",
+    "hours": "Xuất: Giờ",
+    "both": "Xuất: Tất Cả",
+    "btn": "Xuất Excel",
+    "cancel": "Hủy "
+  },
+  "sync": {
+    "excel": "Đồng bộ Excel",
+    "syncing": "Đang đồng bộ ",
+    "machines": "Đồng bộ Máy"
+  }
+}

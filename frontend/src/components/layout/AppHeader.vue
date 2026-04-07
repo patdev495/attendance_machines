@@ -1,44 +1,51 @@
 <template>
   <header class="site-header">
     <div class="header-left">
-      <router-link to="/" class="site-title">Nienyi Attendance</router-link>
+      <router-link to="/" class="site-title">{{ $t('nav.title') }}</router-link>
       <p class="tagline">Time Attendance Management System</p>
     </div>
     <nav class="header-actions">
+      <!-- Language Switcher -->
+      <select v-model="currentLang" @change="changeLanguage">
+        <option value="vi">🇻🇳 Tiếng Việt</option>
+        <option value="en">🇬🇧 English</option>
+        <option value="zh">🇨🇳 中文</option>
+      </select>
+
       <!-- Export mode -->
       <select id="exportMode" v-model="exportMode">
-        <option value="time">Export: Time (In/Out)</option>
-        <option value="hours">Export: Hours (Work/OT)</option>
-        <option value="both">Export: Time + Hours</option>
+        <option value="time">{{ $t('export.time') }}</option>
+        <option value="hours">{{ $t('export.hours') }}</option>
+        <option value="both">{{ $t('export.both') }}</option>
       </select>
 
       <!-- Export Excel -->
       <button v-if="!exportStore.isRunning" class="btn btn-ghost" id="exportExcelBtn" @click="handleExport">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Export Excel
+        {{ $t('export.btn') }}
       </button>
       <button v-else class="btn btn-ghost" @click="exportStore.cancel" style="border-color:#f87171; color:#f87171;">
         <span class="spin-icon">⟳</span>
-        Cancel ({{ exportStore.progress }}%)
+        {{ $t('export.cancel') }}({{ exportStore.progress }}%)
       </button>
 
       <!-- Sync Excel -->
       <button class="btn btn-ghost" id="excelSyncBtn" :disabled="syncStore.excelSyncRunning" @click="triggerExcelPicker" style="border-color:#2dd4bf; color:#2dd4bf;">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        {{ syncStore.excelSyncRunning ? `Syncing (${syncStore.excelSyncProgress}%)` : 'Sync Excel' }}
+        {{ syncStore.excelSyncRunning ? `${$t('sync.syncing')} (${syncStore.excelSyncProgress}%)` : $t('sync.excel') }}
       </button>
       <input ref="excelInput" type="file" accept=".xlsx,.xls" style="display:none" @change="onExcelSelected" />
 
       <!-- Device Status → navigate to /devices -->
       <router-link to="/devices" class="btn btn-ghost" style="border-color:#8b5cf6; color:#a78bfa;">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Device Status
+        {{ $t('device.status') }}
       </router-link>
 
       <!-- Sync Machines -->
       <button class="btn btn-primary" id="syncBtn" :disabled="syncStore.syncRunning" @click="syncStore.startSync()">
         <span v-if="syncStore.syncRunning" class="spin-icon">⟳</span>
-        {{ syncStore.syncRunning ? 'Syncing...' : 'Sync Machines' }}
+        {{ syncStore.syncRunning ? $t('sync.syncing') + '...' : $t('sync.machines') }}
       </button>
     </nav>
   </header>
@@ -71,11 +78,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useSyncStore } from '@/stores/sync.js'
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useExportStore } from '@/stores/export.js'
 import { useNotificationStore } from '@/stores/notification.js'
+import { useI18n } from 'vue-i18n'
+import { setLanguage } from '@/i18n/index.js'
 
 const syncStore = useSyncStore()
 const attendanceStore = useAttendanceStore()
@@ -84,6 +93,13 @@ const notification = useNotificationStore()
 const exportMode = ref('time')
 const excelInput = ref(null)
 const syncingExcel = ref(false)
+
+const { locale } = useI18n()
+const currentLang = ref(locale.value)
+
+function changeLanguage() {
+  setLanguage(currentLang.value)
+}
 
 function handleExport() {
   const { startDate, endDate } = attendanceStore.filters

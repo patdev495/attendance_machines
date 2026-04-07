@@ -1,19 +1,19 @@
 <template>
   <div class="table-wrap card">
-    <LoadingSpinner v-if="store.loading" message="Loading data..." />
+    <LoadingSpinner v-if="store.loading" :message="$t('attendance.table.loading')" />
     <div v-else-if="store.error" class="empty-state" style="color:#f87171;">{{ store.error }}</div>
     <template v-else>
       <table>
         <thead>
           <tr>
-            <th>Employee ID</th>
-            <th>Attendance Time</th>
-            <th>Machine IP</th>
+            <th>{{ $t('attendance.table.emp_id') }}</th>
+            <th>{{ $t('attendance.table.attendance_time') }}</th>
+            <th>{{ $t('attendance.table.machine_ip') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="store.items.length === 0">
-            <td colspan="3" class="empty-state">No records found.</td>
+            <td colspan="3" class="empty-state">{{ $t('attendance.table.no_records') }}</td>
           </tr>
           <tr v-for="row in store.items" :key="row.id">
             <td style="font-weight:600; color:#fff;">{{ row.employee_id }}</td>

@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "title": "考勤与时间管理员",
+    "dashboard": "仪表板",
+    "machines": "考勤机管理"
+  },
+  "attendance": {
+    "raw_logs": "原始记录",
+    "daily_summary": "每日摘要",
+    "filters": {
+      "emp_id": "员工编号",
+      "machine_ip": "考勤机IP",
+      "all_machines": "所有考勤机",
+      "date_from": "开始日期",
+      "date_to": "结束日期",
+      "status": "状态",
+      "all_status": "所有状态",
+      "active": "在职",
+      "resigned": "离职 (TV)",
+      "unknown": "未知",
+      "search": "搜索",
+      "clear": "清除筛选项",
+      "min_hours": "最少工时",
+      "max_hours": "最多工时",
+      "shift": "班次",
+      "all_shifts": "所有班次",
+      "day_shift": "白班",
+      "night_shift": "夜班",
+      "na_shift": "未知",
+      "only_missing": "仅缺卡"
+    },
+    "table": {
+      "emp_id": "员工编号",
+      "attendance_time": "考勤时间",
+      "machine_ip": "考勤机IP",
+      "date": "日期",
+      "check_in": "上班签到",
+      "check_out": "下班签退",
+      "work_hours": "工时",
+      "shift": "班次",
+      "status": "状态",
+      "note": "备注",
+      "action": "操作",
+      "no_records": "未找到记录。",
+      "loading": "正在加载...",
+      "late": "⚠ 迟到 +{m}分钟",
+      "early": "⚠ 早退 -{m}分钟"
+    }
+  },
+  "device": {
+    "status": "设备状态",
+    "help": "点击管理在线设备",
+    "help_short": "点击管理员工 →",
+    "unreachable": "无法连接",
+    "refresh": "刷新",
+    "checking": "正在检查...",
+    "no_machines": "未配置机器。",
+    "all_devices": "所有设备",
+    "machine": "设备：",
+    "employee_count": "{filtered} / {total} 员工",
+    "connecting": "正在连接...",
+    "table": {
+      "emp_id": "员工编号",
+      "name_device": "姓名 (设备)",
+      "name_db": "姓名 (数据库)",
+      "status": "状态",
+      "department": "部门",
+      "action": "操作",
+      "no_records": "未找到匹配的员工。",
+      "not_synced": "未同步",
+      "unknown": "未知",
+      "resigned": "离职",
+      "active": "在职"
+    }
+  },
+  "machines": {
+    "list_title": "设备列表",
+    "detail_title": "设备详情",
+    "connection": "连接",
+    "users": "用户",
+    "fingerprints": "指纹",
+    "records": "记录",
+    "sync_status": "同步状态"
+  },
+  "actions": {
+    "delete_confirm": "是否从设备 {ip} 中删除员工 {id}？",
+    "delete_all_confirm": "是否从所有考勤机中删除员工 {id}？",
+    "confirm": "确认删除"
+  },
+  "export": {
+    "time": "导出：时间",
+    "hours": "导出：工时",
+    "both": "导出：所有",
+    "btn": "导出Excel",
+    "cancel": "取消 "
+  },
+  "sync": {
+    "excel": "同步Excel",
+    "syncing": "同步中 ",
+    "machines": "同步机器"
+  }
+}

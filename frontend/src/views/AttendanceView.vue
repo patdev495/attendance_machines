@@ -2,8 +2,8 @@
   <div class="anim-up">
     <!-- View Toggle -->
     <div class="view-toggle">
-      <button :class="['toggle-btn', store.currentView === 'raw' ? 'active' : '']" @click="store.setView('raw')">Raw Logs</button>
-      <button :class="['toggle-btn', store.currentView === 'summary' ? 'active' : '']" @click="store.setView('summary')">Daily Summary</button>
+      <button :class="['toggle-btn', store.currentView === 'raw' ? 'active' : '']" @click="store.setView('raw')">{{ $t('attendance.raw_logs') }}</button>
+      <button :class="['toggle-btn', store.currentView === 'summary' ? 'active' : '']" @click="store.setView('summary')">{{ $t('attendance.daily_summary') }}</button>
     </div>
 
     <AttendanceFilters />

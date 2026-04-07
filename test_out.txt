@@ -1,0 +1,74 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.8, pytest-9.0.2, pluggy-1.6.0 -- D:\Workspace\Time_Attendance_Machine\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: D:\Workspace\Time_Attendance_Machine
+plugins: anyio-4.13.0
+collecting ... collected 9 items
+
+backend/tests/test_shift_utils.py::test_get_shift_rules_xuong1_night PASSED [ 11%]
+backend/tests/test_shift_utils.py::test_get_shift_rules_xuong1_day PASSED [ 22%]
+backend/tests/test_shift_utils.py::test_get_shift_rules_default_fallback PASSED [ 33%]
+backend/tests/test_shift_utils.py::test_get_shift_rules_empty_db_fallback PASSED [ 44%]
+backend/tests/test_stats_utils.py::test_compute_day_stats_standard_day FAILED [ 55%]
+backend/tests/test_stats_utils.py::test_compute_day_stats_standard_night FAILED [ 66%]
+backend/tests/test_stats_utils.py::test_compute_day_stats_early_leave PASSED [ 77%]
+backend/tests/test_stats_utils.py::test_compute_day_stats_xuong1_day PASSED [ 88%]
+backend/tests/test_stats_utils.py::test_compute_day_stats_missing_last_tap PASSED [100%]
+
+================================== FAILURES ===================================
+_____________________ test_compute_day_stats_standard_day _____________________
+
+db_session = <sqlalchemy.orm.session.Session object at 0x00000206A82C1610>
+
+    def test_compute_day_stats_standard_day(db_session):
+        setup_standard_rules(db_session)
+    
+        # 08:30 -> 17:30 (Late 30m, No Early, 8h Standard, 0.5h OT)
+        first = datetime(2026, 4, 7, 8, 30)
+        last = datetime(2026, 4, 7, 17, 30)
+        d = date(2026, 4, 7)
+    
+        # department="Office", shift="N"
+        _, hours_std, hours_ot, min_late, min_early = compute_day_stats(first, last, d, "Office", "N")
+    
+        assert min_late == 30
+        assert min_early == 0
+        assert hours_std == 8.0
+>       assert hours_ot == 0.5
+E       assert 0.0 == 0.5
+
+backend\tests\test_stats_utils.py:44: AssertionError
+____________________ test_compute_day_stats_standard_night ____________________
+
+db_session = <sqlalchemy.orm.session.Session object at 0x00000206AA5AD7F0>
+
+    def test_compute_day_stats_standard_night(db_session):
+        setup_standard_rules(db_session)
+    
+        # 20:05 -> 05:10 (Late 5m, No Early, 8h Standard, 0.166...h OT)
+        # Note: 10 mins OT = 10/60 = 0.1666...
+        first = datetime(2026, 4, 7, 20, 5)
+        last = datetime(2026, 4, 8, 5, 10)
+        d = date(2026, 4, 7)
+    
+        _, hours_std, hours_ot, min_late, min_early = compute_day_stats(first, last, d, "Store", "D")
+    
+        assert min_late == 5
+        assert min_early == 0
+        assert hours_std == 8.0
+>       assert round(hours_ot, 2) == 0.17 # 10/60
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert 0.08 == 0.17
+E        +  where 0.08 = round(0.08, 2)
+
+backend\tests\test_stats_utils.py:60: AssertionError
+============================== warnings summary ===============================
+backend\src\database.py:9
+  D:\Workspace\Time_Attendance_Machine\backend\src\database.py:9: MovedIn20Warning: The ``declarative_base()`` function is now available as sqlalchemy.orm.declarative_base(). (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+    Base = declarative_base()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED backend/tests/test_stats_utils.py::test_compute_day_stats_standard_day
+FAILED backend/tests/test_stats_utils.py::test_compute_day_stats_standard_night
+=================== 2 failed, 7 passed, 1 warning in 1.27s ====================

@@ -1,0 +1,102 @@
+{
+  "nav": {
+    "title": "Time & Attendance",
+    "dashboard": "Dashboard",
+    "machines": "Machines"
+  },
+  "attendance": {
+    "raw_logs": "Raw Logs",
+    "daily_summary": "Daily Summary",
+    "filters": {
+      "emp_id": "Employee ID",
+      "machine_ip": "Machine IP",
+      "all_machines": "All Machines",
+      "date_from": "Date From",
+      "date_to": "Date To",
+      "status": "Status",
+      "all_status": "All Status",
+      "active": "Active",
+      "resigned": "Resigned (TV)",
+      "unknown": "Unknown (Not in DB)",
+      "search": "Search",
+      "clear": "Clear Filters",
+      "min_hours": "Min Hours",
+      "max_hours": "Max Hours",
+      "shift": "Shift Filter",
+      "all_shifts": "All Shifts",
+      "day_shift": "Day Shift",
+      "night_shift": "Night Shift",
+      "na_shift": "NA",
+      "only_missing": "Only Missing"
+    },
+    "table": {
+      "emp_id": "Employee ID",
+      "attendance_time": "Time",
+      "machine_ip": "Machine IP",
+      "date": "Date",
+      "check_in": "Check In",
+      "check_out": "Check Out",
+      "work_hours": "Work Hours",
+      "shift": "Shift",
+      "status": "Status",
+      "note": "Note",
+      "action": "Action",
+      "no_records": "No records.",
+      "loading": "Loading...",
+      "late": "⚠ +{m}m late",
+      "early": "⚠ -{m}m early"
+    }
+  },
+  "device": {
+    "status": "Device Status",
+    "help": "Click terminal to manage",
+    "help_short": "Click to manage employees →",
+    "unreachable": "Unreachable",
+    "refresh": "Refresh",
+    "checking": "Checking...",
+    "no_machines": "No machines.",
+    "all_devices": "All Devices",
+    "machine": "Machine: ",
+    "employee_count": "{filtered} / {total} emp",
+    "connecting": "Connecting...",
+    "table": {
+      "emp_id": "Employee ID",
+      "name_device": "Name (Device)",
+      "name_db": "Name (DB)",
+      "status": "Status",
+      "department": "Dept",
+      "action": "Action",
+      "no_records": "No matching records.",
+      "not_synced": "Not Synced",
+      "unknown": "Unknown",
+      "resigned": "Resigned",
+      "active": "Active"
+    }
+  },
+  "machines": {
+    "list_title": "List",
+    "detail_title": "Detail",
+    "connection": "Connection",
+    "users": "Users",
+    "fingerprints": "Fingers",
+    "records": "Records",
+    "sync_status": "Sync"
+  },
+  "actions": {
+    "delete_confirm": "Delete {id} from {ip}?",
+    "delete_all_confirm": "Delete {id} from all machines?",
+    "confirm": "Confirm"
+  },
+  "export": {
+    "time": "Export: Time",
+    "hours": "Export: Hours",
+    "both": "Export: All",
+    "btn": "Export Excel",
+    "cancel": "Cancel "
+  },
+  "sync": {
+    "excel": "Sync Excel",
+    "syncing": "Syncing ",
+    "machines": "Sync Machines"
+  }
+}

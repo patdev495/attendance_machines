@@ -10,7 +10,7 @@
     <div v-if="device.status === 'Online'" class="capacity-info">
       <!-- Users Section -->
       <div class="cap-row">
-        <span class="label">Users</span>
+        <span class="label">{{ $t('machines.users') }}</span>
         <span class="val">{{ device.users }} / {{ device.users_cap }}</span>
       </div>
       <div class="capacity-bar">
@@ -19,7 +19,7 @@
 
       <!-- Fingers Section -->
       <div class="cap-row mt-12">
-        <span class="label">Fingers</span>
+        <span class="label">{{ $t('machines.fingerprints') }}</span>
         <span class="val">{{ device.fingers }} / {{ device.fingers_cap }}</span>
       </div>
       <div class="capacity-bar">
@@ -28,7 +28,7 @@
 
       <!-- Logs Section -->
       <div class="cap-row mt-12">
-        <span class="label">Attendance Logs</span>
+        <span class="label">{{ $t('machines.records') }}</span>
         <span class="val">{{ device.records?.toLocaleString() }} / {{ device.records_cap?.toLocaleString() }}</span>
       </div>
       <div class="capacity-bar">
@@ -38,10 +38,10 @@
 
     <div v-else-if="device.status === 'Offline'" class="offline-label">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="m2 2 20 20"/><path d="m19.2 13.5c.3-.5.4-1.1.4-1.7 0-1.9-1.5-3.4-3.4-3.4-.6 0-1.2.2-1.7.5"/><path d="M12 12c-1.9 0-3.4-1.5-3.4-3.4 0-.6.2-1.2.5-1.7"/><path d="M10.5 19.2c-.5.3-1.1.4-1.7.4-1.9 0-3.4-1.5-3.4-3.4 0-.6.2-1.2.5-1.7"/><path d="M13.5 19.2c.5.3 1.1.4 1.7.4 1.9 0 3.4-1.5 3.4-3.4 0-.6-.2-1.2-.5-1.7"/></svg>
-      Unreachable
+      {{ $t('device.unreachable') }}
     </div>
 
-    <div v-if="device.status === 'Online'" class="hint">Click to manage employees →</div>
+    <div v-if="device.status === 'Online'" class="hint">{{ $t('device.help_short') }}</div>
   </div>
 </template>
 

@@ -1,25 +1,25 @@
 <template>
   <div class="table-wrap card">
-    <LoadingSpinner v-if="store.loading" message="Loading summary..." />
+    <LoadingSpinner v-if="store.loading" :message="$t('attendance.table.loading')" />
     <div v-else-if="store.error" class="empty-state" style="color:#f87171;">{{ store.error }}</div>
     <template v-else>
       <table>
         <thead>
           <tr>
-            <th>Employee ID</th>
-            <th>Date</th>
-            <th>Check In</th>
-            <th>Check Out</th>
-            <th>Work Hours</th>
-            <th>Shift</th>
-            <th>Status</th>
-            <th>Note</th>
-            <th style="text-align:right">Action</th>
+            <th>{{ $t('attendance.table.emp_id') }}</th>
+            <th>{{ $t('attendance.table.date') }}</th>
+            <th>{{ $t('attendance.table.check_in') }}</th>
+            <th>{{ $t('attendance.table.check_out') }}</th>
+            <th>{{ $t('attendance.table.work_hours') }}</th>
+            <th>{{ $t('attendance.table.shift') }}</th>
+            <th>{{ $t('attendance.table.status') }}</th>
+            <th>{{ $t('attendance.table.note') }}</th>
+            <th style="text-align:right">{{ $t('attendance.table.action') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="store.items.length === 0">
-            <td colspan="9" class="empty-state">No records found.</td>
+            <td colspan="9" class="empty-state">{{ $t('attendance.table.no_records') }}</td>
           </tr>
           <tr v-for="row in store.items" :key="`${row.employee_id}-${row.attendance_date}`">
             <td style="font-weight:600; color:#fff;">{{ row.employee_id }}</td>
@@ -40,8 +40,8 @@
             <td>
               <span v-if="row.note" class="note-missing">{{ row.note }}</span>
               <span v-else style="color: var(--text-muted); font-size:0.83rem;">
-                <span v-if="row.minutes_late > 0" style="color:#fbbf24;">⚠ +{{ row.minutes_late }}m late</span>
-                <span v-if="row.minutes_early_leave > 0" style="color:#fb923c;"> ⚠ -{{ row.minutes_early_leave }}m early out</span>
+                <span v-if="row.minutes_late > 0" style="color:#fbbf24;">{{ $t('attendance.table.late', { m: row.minutes_late }) }}</span>
+                <span v-if="row.minutes_early_leave > 0" style="color:#fb923c;">{{ $t('attendance.table.early', { m: row.minutes_early_leave }) }}</span>
               </span>
             </td>
             <td style="text-align:right;">
@@ -65,13 +65,14 @@
 <script setup>
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useSyncStore } from '@/stores/sync.js'
-import { useNotificationStore } from '@/stores/notification.js'
+import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 
 const store = useAttendanceStore()
 const syncStore = useSyncStore()
 const notification = useNotificationStore()
+const { t } = useI18n()
 
 function formatTime(dt) {
   if (!dt) return '-'
@@ -80,8 +81,8 @@ function formatTime(dt) {
 
 async function confirmDelete(employeeId) {
   const confirmed = await notification.confirm(
-    `Delete employee ${employeeId} from all machines?\nThis cannot be undone.`,
-    'Confirm Deletion'
+    t('actions.delete_confirm', { id: employeeId }),
+    t('actions.confirm')
   )
   if (!confirmed) return
   syncStore.startDeleteEmployee(employeeId)
