@@ -1,4 +1,8 @@
 uv run python app.py --host 0.0.0.0 --port 8001
+cd frontend
+npm run build
+
+
 2jGYwu7Ea43OZJThcIFBFV3kmOH_5D79sTJQ545teoKNWnCHr
 uv run ngrok config add-authtoken 2jGYwu7Ea43OZJThcIFBFV3kmOH_5D79sTJQ545teoKNWnCHr
 uv run ngrok http 8001

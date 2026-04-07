@@ -1,3 +1,4 @@
+# Python
 .venv
 .env
 __pycache__
@@ -5,3 +6,20 @@ __pycache__
 *.db
 *.sqlite
 *.db-journal
+
+# Node / Frontend
+node_modules/
+dist/
+.npm
+build_error.txt
+
+# Editor / System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Data / Temp
+temp_*
+*.xlsx
+!employee_work_shift.xlsx
