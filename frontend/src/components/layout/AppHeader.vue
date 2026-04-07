@@ -23,9 +23,9 @@
       </button>
 
       <!-- Sync Excel -->
-      <button class="btn btn-ghost" id="excelSyncBtn" :disabled="syncStore.syncRunning" @click="triggerExcelPicker" style="border-color:#2dd4bf; color:#2dd4bf;">
+      <button class="btn btn-ghost" id="excelSyncBtn" :disabled="syncStore.excelSyncRunning" @click="triggerExcelPicker" style="border-color:#2dd4bf; color:#2dd4bf;">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        {{ syncingExcel ? 'Syncing...' : 'Sync Excel' }}
+        {{ syncStore.excelSyncRunning ? `Syncing (${syncStore.excelSyncProgress}%)` : 'Sync Excel' }}
       </button>
       <input ref="excelInput" type="file" accept=".xlsx,.xls" style="display:none" @change="onExcelSelected" />
 
@@ -54,7 +54,18 @@
       <div class="progress-container">
         <div class="progress-fill" :style="{ width: exportStore.progress + '%' }"></div>
       </div>
-      <span>{{ exportStore.currentStep }} ({{ exportStore.progress }}%)</span>
+      <span>Export: {{ exportStore.currentStep }} ({{ exportStore.progress }}%)</span>
+    </div>
+  </div>
+
+  <!-- Excel Sync Progress Banner -->
+  <div v-if="syncStore.excelSyncRunning || syncStore.excelSyncError" class="status-banner" :class="syncStore.excelSyncError ? 'delete-banner' : 'sync-banner'" style="background: rgba(45, 212, 191, 0.1); border-bottom-color: #2dd4bf;">
+    <div v-if="syncStore.excelSyncError" style="color: #f87171;">{{ syncStore.excelSyncError }}</div>
+    <div v-else class="export-banner-content">
+      <div class="progress-container">
+        <div class="progress-fill" :style="{ width: syncStore.excelSyncProgress + '%', backgroundColor: '#2dd4bf' }"></div>
+      </div>
+      <span style="color: #2dd4bf;">Sync: {{ syncStore.excelSyncStep }} ({{ syncStore.excelSyncProgress }}%)</span>
     </div>
   </div>
 </template>
@@ -64,17 +75,22 @@ import { ref } from 'vue'
 import { useSyncStore } from '@/stores/sync.js'
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useExportStore } from '@/stores/export.js'
+import { useNotificationStore } from '@/stores/notification.js'
 
 const syncStore = useSyncStore()
 const attendanceStore = useAttendanceStore()
 const exportStore = useExportStore()
+const notification = useNotificationStore()
 const exportMode = ref('time')
 const excelInput = ref(null)
 const syncingExcel = ref(false)
 
 function handleExport() {
   const { startDate, endDate } = attendanceStore.filters
-  if (!startDate || !endDate) { alert('Please select a date range first.'); return }
+  if (!startDate || !endDate) { 
+    notification.warn('Please select a date range first.')
+    return 
+  }
   exportStore.start(startDate, endDate, exportMode.value)
 }
 
@@ -86,15 +102,11 @@ function triggerExcelPicker() {
 async function onExcelSelected(e) {
   const file = e.target.files[0]
   if (!file) return
-  syncingExcel.value = true
   try {
-    const result = await syncStore.syncExcelFile(file)
-    alert(result.message)
+    await syncStore.syncExcelFile(file)
     attendanceStore.loadData(1)
   } catch (err) {
-    alert('Sync failed: ' + err.message)
-  } finally {
-    syncingExcel.value = false
+    console.error('Excel sync failed', err)
   }
 }
 </script>

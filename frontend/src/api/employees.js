@@ -30,3 +30,7 @@ export function deleteEmployeeFromAllMachines(employeeId) {
 export function getDeleteStatus() {
   return apiFetch('/employees/delete-status')
 }
+
+export function getExcelSyncStatus() {
+  return apiFetch('/employees/sync/status')
+}

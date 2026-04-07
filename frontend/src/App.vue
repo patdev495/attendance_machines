@@ -1,6 +1,8 @@
 <template>
   <div class="app-wrapper">
     <AppHeader />
+    <ToastNotification />
+    <ConfirmModal />
     <main class="container">
       <router-view v-slot="{ Component }">
         <transition name="fade" mode="out-in">
@@ -13,6 +15,8 @@
 
 <script setup>
 import AppHeader from '@/components/layout/AppHeader.vue'
+import ToastNotification from '@/components/shared/ToastNotification.vue'
+import ConfirmModal from '@/components/shared/ConfirmModal.vue'
 </script>
 
 <style scoped>

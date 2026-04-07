@@ -1,15 +1,25 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { triggerSync, getSyncStatus, syncEmployeesExcel, deleteEmployeeFromAllMachines, getDeleteStatus } from '@/api/employees.js'
+import { triggerSync, getSyncStatus, syncEmployeesExcel, deleteEmployeeFromAllMachines, getDeleteStatus, getExcelSyncStatus } from '@/api/employees.js'
+import { useNotificationStore } from '@/stores/notification.js'
 
 export const useSyncStore = defineStore('sync', () => {
+  const notification = useNotificationStore()
   const syncRunning = ref(false)
   const syncMessage = ref('')
   const deleteRunning = ref(false)
   const deleteMessage = ref('')
 
+  // Excel Sync State
+  const excelSyncRunning = ref(false)
+  const excelSyncProgress = ref(0)
+  const excelSyncStep = ref('')
+  const excelSyncTotal = ref(0)
+  const excelSyncError = ref(null)
+
   let syncPoller = null
   let deletePoller = null
+  let excelPoller = null
 
   async function startSync() {
     if (syncRunning.value) return
@@ -38,7 +48,54 @@ export const useSyncStore = defineStore('sync', () => {
   }
 
   async function syncExcelFile(file) {
-    return syncEmployeesExcel(file)
+    if (excelSyncRunning.value) return
+    
+    excelSyncError.value = null
+    excelSyncProgress.value = 0
+    excelSyncStep.value = 'Uploading file...'
+    excelSyncRunning.value = true
+
+    try {
+      await syncEmployeesExcel(file)
+      startExcelPolling()
+    } catch (e) {
+      excelSyncError.value = e.message
+      excelSyncRunning.value = false
+      throw e
+    }
+  }
+
+  function startExcelPolling() {
+    if (excelPoller) clearInterval(excelPoller)
+    excelPoller = setInterval(async () => {
+      try {
+        const status = await getExcelSyncStatus()
+        excelSyncProgress.value = status.progress
+        excelSyncStep.value = status.current_step
+        excelSyncTotal.value = status.total
+        excelSyncRunning.value = status.is_running
+        
+        if (status.error) {
+          excelSyncError.value = status.error
+          stopExcelPolling()
+          notification.error('Sync failed: ' + status.error)
+        } else if (!status.is_running && status.progress === 100) {
+          stopExcelPolling()
+          const msg = status.current_step || 'Sync completed.'
+          excelSyncStep.value = msg
+          notification.success(msg)
+          // Hide banner after 5 seconds
+          setTimeout(() => { excelSyncRunning.value = false }, 5000)
+        }
+      } catch (e) {
+        console.error('Excel sync status poll failed', e)
+      }
+    }, 1000)
+  }
+
+  function stopExcelPolling() {
+    if (excelPoller) clearInterval(excelPoller)
+    excelPoller = null
   }
 
   async function startDeleteEmployee(employeeId) {
@@ -67,5 +124,9 @@ export const useSyncStore = defineStore('sync', () => {
     }
   }
 
-  return { syncRunning, syncMessage, deleteRunning, deleteMessage, startSync, syncExcelFile, startDeleteEmployee }
+  return { 
+    syncRunning, syncMessage, deleteRunning, deleteMessage, 
+    excelSyncRunning, excelSyncProgress, excelSyncStep, excelSyncTotal, excelSyncError,
+    startSync, syncExcelFile, startDeleteEmployee 
+  }
 })

@@ -54,24 +54,30 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useDeviceStore } from '@/stores/device.js'
+import { useNotificationStore } from '@/stores/notification.js'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import DeviceEmployeeTable from '@/components/device/DeviceEmployeeTable.vue'
 
 const props = defineProps({ ip: { type: String, required: true } })
 const device = useDeviceStore()
+const notification = useNotificationStore()
 
 onMounted(() => {
   device.loadDeviceEmployees(props.ip)
 })
 
 async function handleDelete(employeeId) {
-  if (!confirm(`Delete employee ${employeeId} from machine ${props.ip}?\nThis cannot be undone.`)) return
+  const confirmed = await notification.confirm(
+    `Delete employee ${employeeId} from machine ${props.ip}?\nThis cannot be undone.`,
+    'Confirm Deletion'
+  )
+  if (!confirmed) return
   try {
     await device.deleteEmployee(employeeId)
-    alert(`Successfully deleted employee ${employeeId}`)
+    notification.success(`Successfully deleted employee ${employeeId}`)
   } catch (e) {
-    alert('Error: ' + e.message)
+    notification.error('Error: ' + e.message)
   }
 }
 </script>

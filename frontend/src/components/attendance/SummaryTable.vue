@@ -65,19 +65,25 @@
 <script setup>
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useSyncStore } from '@/stores/sync.js'
+import { useNotificationStore } from '@/stores/notification.js'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 
 const store = useAttendanceStore()
 const syncStore = useSyncStore()
+const notification = useNotificationStore()
 
 function formatTime(dt) {
   if (!dt) return '-'
   return dt.replace('T', ' ').substring(11, 16)
 }
 
-function confirmDelete(employeeId) {
-  if (!confirm(`Delete employee ${employeeId} from all machines?\nThis cannot be undone.`)) return
+async function confirmDelete(employeeId) {
+  const confirmed = await notification.confirm(
+    `Delete employee ${employeeId} from all machines?\nThis cannot be undone.`,
+    'Confirm Deletion'
+  )
+  if (!confirmed) return
   syncStore.startDeleteEmployee(employeeId)
 }
 </script>
