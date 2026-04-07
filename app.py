@@ -12,7 +12,7 @@ from sqlalchemy import func, desc, text, Date, case, or_
 from typing import List, Optional
 from datetime import date, datetime, time, timedelta
 from db import get_db, AttendanceLog, EmployeeMetadata
-from sync import sync_all_machines, get_machine_list, sync_status, sync_employees_from_excel, delete_user_from_all_machines
+from sync import sync_all_machines, get_machine_list, sync_status, sync_employees_from_excel, delete_user_from_all_machines, get_users_from_machine, delete_user_from_machine
 
 app = FastAPI(title="Time Attendance System")
 
@@ -254,6 +254,55 @@ def delete_employee_from_machines(employee_id: str, background_tasks: Background
         
     background_tasks.add_task(delete_user_from_all_machines, employee_id)
     return {"message": f"Deletion of employee {employee_id} started.", "is_running": True}
+
+@app.get("/api/devices/{ip}/employees")
+def get_device_employees(
+    ip: str, 
+    page: int = Query(1, ge=1), 
+    size: int = Query(50, ge=1),
+    db: Session = Depends(get_db)
+):
+    users, msg = get_users_from_machine(ip)
+    if msg != "Success":
+        raise HTTPException(status_code=500, detail=msg)
+    
+    # Merge with database metadata to get names/status
+    emp_ids = [u["user_id"] for u in users]
+    meta = {m.employee_id: m for m in db.query(EmployeeMetadata).filter(EmployeeMetadata.employee_id.in_(emp_ids)).all()}
+    
+    for u in users:
+        m = meta.get(u["user_id"])
+        if m:
+            u["db_name"] = m.emp_name
+            u["status"] = m.status
+            u["department"] = m.department
+        else:
+            u["db_name"] = None
+            u["status"] = "Unknown"
+            u["department"] = None
+
+    total_count = len(users)
+    total_pages = (total_count + size - 1) // size
+    start = (page - 1) * size
+    end = start + size
+    
+    return {
+        "items": users[start:end],
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "current_page": page,
+        "size": size
+    }
+
+@app.delete("/api/devices/{ip}/employees/{employee_id}")
+def delete_device_employee(ip: str, employee_id: str):
+    result = delete_user_from_machine(ip, employee_id)
+    if result == "Success":
+        return {"message": f"Successfully deleted employee {employee_id} from machine {ip}"}
+    elif result == "Not in device":
+        raise HTTPException(status_code=404, detail="Employee not found on this device")
+    else:
+        raise HTTPException(status_code=500, detail=result)
 
 @app.get("/api/export-attendance")
 def export_attendance(

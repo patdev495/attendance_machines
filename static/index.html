@@ -523,10 +523,11 @@
             <span id="deleteStatusText">Deleting employee data...</span>
         </div>
 
-        <div class="view-toggle">
-            <button id="btnRaw" class="toggle-btn active" onclick="setView('raw')">Raw Logs</button>
-            <button id="btnSummary" class="toggle-btn" onclick="setView('summary')">Daily Summary</button>
-        </div>
+        <div id="mainDashboard">
+            <div class="view-toggle">
+                <button id="btnRaw" class="toggle-btn active" onclick="setView('raw')">Raw Logs</button>
+                <button id="btnSummary" class="toggle-btn" onclick="setView('summary')">Daily Summary</button>
+            </div>
 
         <section class="filters">
             <div class="filter-group">
@@ -607,17 +608,78 @@
                 <!-- Pagination buttons will be here -->
             </div>
         </div>
+        </div> <!-- End mainDashboard -->
+
+        <!-- Device Employee Management View (Page Mode) -->
+        <div id="deviceEmployeeView" style="display: none; animation: fadeInUp 0.5s ease-out;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <button class="btn-page" style="padding: 10px 20px; display: flex; align-items: center; gap: 8px;" onclick="backToDashboard()">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        Back
+                    </button>
+                    <h2 id="deviceViewTitle" style="font-size: 1.5rem; color: #fff;">Machine: 192.168.1.1</h2>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: center;">
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <input type="text" id="deviceEmployeeSearch" placeholder="Search ID or Name..." style="width: 250px; background: rgba(30, 41, 59, 0.7);" oninput="filterDeviceEmployees()">
+                    </div>
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <select id="deviceStatusFilter" style="background: rgba(30, 41, 59, 0.7); min-width: 150px;" onchange="filterDeviceEmployees()">
+                            <option value="">All Status</option>
+                            <option value="Active">Active</option>
+                            <option value="TV">Resigned (TV)</option>
+                            <option value="Unknown">Unknown (Not in DB)</option>
+                        </select>
+                    </div>
+                    <button class="btn-sync" style="background: rgba(99, 102, 241, 0.1); border-color: var(--primary);" onclick="refreshDeviceEmployees()">
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <div id="deviceTableLoading" style="display: none; padding: 60px; text-align: center; color: var(--text-muted);">
+                    <div class="spinner" style="display: inline-block; margin-bottom: 12px;"></div>
+                    <p>Connecting to machine...</p>
+                </div>
+                <table id="deviceEmployeesTable">
+                    <thead>
+                        <tr>
+                            <th>Employee ID</th>
+                            <th>Name (Device)</th>
+                            <th>Name (DB)</th>
+                            <th>Status</th>
+                            <th>Department</th>
+                            <th style="text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deviceEmployeesBody">
+                        <!-- Loaded through JS -->
+                    </tbody>
+                </table>
+                <div id="devicePagination" class="pagination">
+                    <!-- Pagination -->
+                </div>
+            </div>
+        </div>
 
         <!-- Device Status Modal -->
         <div id="deviceModal" class="modal">
-            <div class="modal-content" style="max-width: 900px;">
+            <div class="modal-content" style="max-width: 900px; position: relative;">
                 <div class="modal-header">
-                    <h2>Machine Capacity & Status</h2>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button id="deviceBackBtn" style="display: none; background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;" onclick="fetchDeviceCapacity()">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                        </button>
+                        <h2 id="deviceModalTitle">Machine Capacity & Status</h2>
+                    </div>
                     <span class="close-modal" onclick="closeDeviceModal()">&times;</span>
                 </div>
-                <div id="deviceModalBody">
+                <div id="deviceModalBody" style="min-height: 200px;">
                     <p>Fetching real-time data from machines...</p>
                 </div>
+                <div id="devicePagination" class="pagination" style="display: none; padding: 12px 0 0 0; margin-top: 10px; border-top: 1px solid var(--border);"></div>
             </div>
         </div>
     </div>
@@ -1049,6 +1111,10 @@
         }
 
         async function fetchDeviceCapacity() {
+            document.getElementById('deviceModalTitle').innerText = 'Machine Capacity & Status';
+            document.getElementById('deviceBackBtn').style.display = 'none';
+            document.getElementById('devicePagination').style.display = 'none';
+            
             const body = document.getElementById('deviceModalBody');
             body.innerHTML = '<div style="text-align: center; padding: 40px;"><div class="spinner" style="display:inline-block;"></div><p style="margin-top:20px;">Connecting to machines...</p></div>';
             
@@ -1057,6 +1123,7 @@
                 const devices = await response.json();
                 
                 let html = `
+                    <p style="color: var(--text-muted); margin-bottom: 15px; font-size: 0.85rem;">Click on an online machine to view stored employees.</p>
                     <table class="capacity-table">
                         <thead>
                             <tr>
@@ -1071,18 +1138,18 @@
                 `;
                 
                 devices.forEach(d => {
-                    const statusClass = d.status === 'Online' ? 'active' : 'tv';
                     const statusText = d.status === 'Online' ? 'Online' : 'Offline';
+                    const isOnline = d.status === 'Online';
                     
-                    if (d.status === 'Online') {
+                    if (isOnline) {
                         const userPct = Math.min((d.users / d.users_cap) * 100, 100);
                         const fingerPct = Math.min((d.fingers / d.fingers_cap) * 100, 100);
                         const recordPct = Math.min((d.records / d.records_cap) * 100, 100);
 
                         html += `
-                            <tr>
-                                <td>${d.ip}</td>
-                                <td><span class="badge-status" style="color: ${d.status === 'Online' ? '#4ade80' : '#f87171'}">${statusText}</span></td>
+                            <tr onclick="viewDeviceEmployees('${d.ip}')" style="cursor: pointer;">
+                                <td style="font-weight: 600; color: var(--primary);">${d.ip}</td>
+                                <td><span class="badge-status" style="color: #4ade80">${statusText}</span></td>
                                 <td>
                                     <div>${d.users} / ${d.users_cap}</div>
                                     <div class="capacity-bar"><div class="capacity-fill" style="width: ${userPct}%; background: #6366f1;"></div></div>
@@ -1112,6 +1179,159 @@
                 body.innerHTML = html;
             } catch (err) {
                 body.innerHTML = `<p style="color: #f87171;">Error: ${err.message}</p>`;
+            }
+        }
+
+        let currentMachineIp = '';
+        let allMachineUsers = [];
+        let filteredMachineUsers = [];
+
+        async function viewDeviceEmployees(ip, page = 1) {
+            currentMachineIp = ip;
+            closeDeviceModal();
+            
+            document.getElementById('mainDashboard').style.display = 'none';
+            document.getElementById('deviceEmployeeView').style.display = 'block';
+            document.getElementById('deviceViewTitle').innerText = `Machine: ${ip}`;
+            document.getElementById('deviceEmployeeSearch').value = '';
+            
+            await refreshDeviceEmployees(page);
+        }
+
+        function backToDashboard() {
+            document.getElementById('mainDashboard').style.display = 'block';
+            document.getElementById('deviceEmployeeView').style.display = 'none';
+            currentMachineIp = '';
+        }
+
+        async function refreshDeviceEmployees(page = 1) {
+            const body = document.getElementById('deviceEmployeesBody');
+            const loading = document.getElementById('deviceTableLoading');
+            const table = document.getElementById('deviceEmployeesTable');
+            const pg = document.getElementById('devicePagination');
+            
+            body.innerHTML = '';
+            table.style.display = 'none';
+            loading.style.display = 'block';
+            pg.style.display = 'none';
+
+            try {
+                // We fetch the full list for searching, but use page/size for initial fetch logic if needed
+                // Or just fetch all and handle pagination locally for better search UX
+                const response = await fetch(`/api/devices/${currentMachineIp}/employees?page=1&size=5000`);
+                if (!response.ok) throw new Error(await response.text());
+                const data = await response.json();
+                
+                allMachineUsers = data.items;
+                filteredMachineUsers = [...allMachineUsers];
+                
+                loading.style.display = 'none';
+                table.style.display = 'table';
+                pg.style.display = 'flex';
+                
+                renderFilteredEmployees(page);
+            } catch (err) {
+                loading.innerHTML = `<p style="color: #f87171;">Error: ${err.message}</p>`;
+            }
+        }
+
+        function filterDeviceEmployees() {
+            const searchTerm = document.getElementById('deviceEmployeeSearch').value.toLowerCase();
+            const statusFilter = document.getElementById('deviceStatusFilter').value;
+            
+            filteredMachineUsers = allMachineUsers.filter(u => {
+                const matchesSearch = !searchTerm || 
+                    u.user_id.toLowerCase().includes(searchTerm) || 
+                    (u.name && u.name.toLowerCase().includes(searchTerm)) ||
+                    (u.db_name && u.db_name.toLowerCase().includes(searchTerm));
+                
+                const matchesStatus = !statusFilter || u.status === statusFilter;
+                
+                return matchesSearch && matchesStatus;
+            });
+            
+            renderFilteredEmployees(1);
+        }
+
+        function renderFilteredEmployees(page = 1) {
+            const pageSize = 15;
+            const total = filteredMachineUsers.length;
+            const totalPages = Math.ceil(total / pageSize);
+            const start = (page - 1) * pageSize;
+            const end = start + pageSize;
+            const items = filteredMachineUsers.slice(start, end);
+            
+            const body = document.getElementById('deviceEmployeesBody');
+            body.innerHTML = '';
+            
+            items.forEach(u => {
+                const tr = document.createElement('tr');
+                const statusColor = u.status === 'TV' ? '#f87171' : '#4ade80';
+                tr.innerHTML = `
+                    <td style="font-weight: 600; color: #fff;">${u.user_id}</td>
+                    <td>${u.name || '-'}</td>
+                    <td style="color: #fff;">${u.db_name || '<small style="color:var(--text-muted)">Not Synced</small>'}</td>
+                    <td><span style="color: ${statusColor}">${u.status || 'Active'}</span></td>
+                    <td>${u.department || '-'}</td>
+                    <td style="text-align: right;">
+                        <div class="btn-delete" title="Delete from this machine" onclick="deleteEmployeeFromDevice('${u.user_id}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                        </div>
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+            
+            if (total === 0) {
+                body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 40px; color: var(--text-muted);">No matching employees found on machine.</td></tr>';
+            }
+            
+            renderDevicePagination(page, totalPages, total);
+        }
+
+        function renderDevicePagination(current, total, totalRecords) {
+            const container = document.getElementById('devicePagination');
+            container.innerHTML = '';
+            if (total <= 1) return;
+
+            const createBtn = (p, text, active = false, disabled = false) => {
+                const b = document.createElement('button');
+                b.className = `btn-page ${active ? 'active' : ''}`;
+                b.textContent = text || p;
+                b.disabled = disabled;
+                b.onclick = () => renderFilteredEmployees(p);
+                return b;
+            };
+
+            container.appendChild(createBtn(current - 1, 'Prev', false, current === 1));
+            
+            let start = Math.max(1, current - 2);
+            let end = Math.min(total, current + 2);
+            for (let i = start; i <= end; i++) {
+                container.appendChild(createBtn(i, i, i === current));
+            }
+
+            container.appendChild(createBtn(current + 1, 'Next', false, current === total));
+            
+            const info = document.createElement('span');
+            info.className = 'page-info';
+            info.textContent = `Sorted items: ${totalRecords}`;
+            container.appendChild(info);
+        }
+
+        async function deleteEmployeeFromDevice(employeeId) {
+            if (!confirm(`Are you sure you want to delete employee ${employeeId} from machine ${currentMachineIp}?\nThis cannot be undone.`)) return;
+
+            try {
+                const response = await fetch(`/api/devices/${currentMachineIp}/employees/${employeeId}`, { method: 'DELETE' });
+                const data = await response.json();
+                alert(data.message);
+                
+                // Refresh local data to reflect delete without reconnecting if possible, 
+                // but reconnecting is safer to ensure machine actually did it.
+                refreshDeviceEmployees();
+            } catch (err) {
+                alert('Delete failed: ' + err.message);
             }
         }
 

@@ -178,45 +178,75 @@ def delete_user_from_all_machines(employee_id: str):
         delete_status["total_machines"] = len(machine_ips)
         
         for ip in machine_ips:
+            delete_user_from_machine(ip, employee_id)
             with status_lock:
-                delete_status["current_ip"] = ip
-            
-            logger.info(f"Connecting to {ip} to delete user {employee_id}...")
-            zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-            conn = None
-            try:
-                conn = zk.connect()
-                conn.disable_device()
-                
-                # Fetch all users to find the correct UID and verify existence
-                users = conn.get_users()
-                target_user = next((u for u in users if u.user_id == str(employee_id)), None)
-                
-                if target_user:
-                    # Deleting by both UID and UserID is the most reliable method
-                    conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
-                    with status_lock:
-                        delete_status["results"][ip] = "Success"
-                else:
-                    with status_lock:
-                        delete_status["results"][ip] = "Not in device"
-                
-                conn.enable_device()
-            except Exception as e:
-                logger.error(f"Error on machine {ip}: {e}")
-                with status_lock:
-                    delete_status["results"][ip] = f"Error: {str(e)}"
-            finally:
-                if conn:
-                    try:
-                        conn.disconnect()
-                    except:
-                        pass
-                with status_lock:
-                    delete_status["processed_count"] += 1
+                delete_status["processed_count"] += 1
     finally:
         with status_lock:
             delete_status["is_running"] = False
+
+def get_users_from_machine(ip: str):
+    """Fetches all users from a specific machine."""
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        users = conn.get_users()
+        # Convert ZK user objects to serializable dicts
+        user_list = []
+        for u in users:
+            user_list.append({
+                "uid": u.uid,
+                "user_id": u.user_id,
+                "name": u.name,
+                "privilege": u.privilege,
+                "password": u.password,
+                "group_id": u.group_id,
+                "card": u.card
+            })
+        conn.enable_device()
+        return user_list, "Success"
+    except Exception as e:
+        logger.error(f"Error fetching users from machine {ip}: {e}")
+        return [], str(e)
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def delete_user_from_machine(ip: str, employee_id: str):
+    """Deletes a user from a specific machine."""
+    logger.info(f"Connecting to {ip} to delete user {employee_id}...")
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        
+        # Fetch users to find UID
+        users = conn.get_users()
+        target_user = next((u for u in users if u.user_id == str(employee_id)), None)
+        
+        result = "Not in device"
+        if target_user:
+            conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
+            result = "Success"
+            
+        conn.enable_device()
+        with status_lock:
+            delete_status["results"][ip] = result
+        return result
+    except Exception as e:
+        logger.error(f"Error deleting user from machine {ip}: {e}")
+        msg = f"Error: {str(e)}"
+        with status_lock:
+            delete_status["results"][ip] = msg
+        return msg
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
 
 def sync_employees_from_excel(file_path: str = "employee_work_shift.xlsx"):
     """Reads Excel and updates the Employee table."""
