@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { triggerSync, getSyncStatus, syncEmployeesExcel, deleteEmployeeFromAllMachines, getDeleteStatus, getExcelSyncStatus } from '@/api/employees.js'
 import { useNotificationStore } from '@/stores/notification.js'
+import { i18n } from '@/i18n'
 
 export const useSyncStore = defineStore('sync', () => {
   const notification = useNotificationStore()
@@ -24,19 +25,24 @@ export const useSyncStore = defineStore('sync', () => {
   async function startSync() {
     if (syncRunning.value) return
     syncRunning.value = true
-    syncMessage.value = 'Initiating sync...'
+    syncMessage.value = i18n.global.t('sync.initiating')
     
     // Start polling immediately so the UI reflects the first machine connection
     const poll = async () => {
       try {
         const status = await getSyncStatus()
         if (!status.is_running) {
-          syncMessage.value = 'Sync completed.'
+          syncMessage.value = i18n.global.t('sync.completed')
           clearInterval(syncPoller)
           syncPoller = null
           setTimeout(() => { syncRunning.value = false }, 3000)
         } else {
-          syncMessage.value = `Syncing: Machine ${status.current_machine_index}/${status.total_machines} (${status.current_machine_ip}) - Records added: ${status.total_added || 0}`
+          syncMessage.value = i18n.global.t('sync.progress', { 
+            current: status.current_machine_index, 
+            total: status.total_machines, 
+            ip: status.current_machine_ip, 
+            added: status.total_added || 0 
+          })
         }
       } catch (e) {
         console.error('Status poll failed', e)
@@ -89,13 +95,18 @@ export const useSyncStore = defineStore('sync', () => {
           excelSyncError.value = status.error
           stopExcelPolling()
           notification.error('Sync failed: ' + status.error)
-        } else if (!status.is_running && status.progress === 100) {
+        } else if (!status.is_running) {
           stopExcelPolling()
-          const msg = status.current_step || 'Sync completed.'
-          excelSyncStep.value = msg
-          notification.success(msg)
-          // Hide banner after 5 seconds
-          setTimeout(() => { excelSyncRunning.value = false }, 5000)
+          if (status.progress === 100) {
+            const msg = status.current_step || 'Sync completed.'
+            excelSyncStep.value = msg
+            notification.success(msg)
+            // Hide banner after 5 seconds
+            setTimeout(() => { excelSyncRunning.value = false }, 5000)
+          } else {
+            // Task stopped without finishing (e.g. server reset)
+            excelSyncRunning.value = false
+          }
         }
       } catch (e) {
         console.error('Excel sync status poll failed', e)
@@ -111,18 +122,23 @@ export const useSyncStore = defineStore('sync', () => {
   async function startDeleteEmployee(employeeId) {
     if (deleteRunning.value) return
     deleteRunning.value = true
-    deleteMessage.value = `Initiating deletion for ${employeeId}...`
+    deleteMessage.value = i18n.global.t('actions.delete_initiating', { id: employeeId })
     
     const poll = async () => {
       try {
         const status = await getDeleteStatus(employeeId)
         if (!status.is_running) {
-          deleteMessage.value = `Employee ${employeeId} deleted from all machines.`
+          deleteMessage.value = i18n.global.t('actions.delete_completed', { id: employeeId })
           clearInterval(deletePoller)
           deletePoller = null
           setTimeout(() => { deleteRunning.value = false }, 3000)
         } else {
-          deleteMessage.value = `Deleting ${employeeId}: Machine ${status.processed_count}/${status.total_machines} (${status.current_ip})`
+          deleteMessage.value = i18n.global.t('actions.delete_progress', { 
+            id: employeeId, 
+            current: status.processed_count, 
+            total: status.total_machines, 
+            ip: status.current_ip 
+          })
         }
       } catch (e) {
         console.error('Delete status poll failed', e)

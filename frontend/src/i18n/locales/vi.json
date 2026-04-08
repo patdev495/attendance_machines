@@ -27,7 +27,9 @@
       "day_shift": "Ca Ngày (N)",
       "night_shift": "Ca Đêm (D)",
       "na_shift": "NA",
-      "only_missing": "Chỉ Thiếu Thông Tin"
+      "only_missing": "Chỉ Thiếu Thông Tin",
+      "emp_placeholder": "VD: 101",
+      "hours_placeholder": "VD: {h}"
     },
     "table": {
       "emp_id": "Mã NV",
@@ -59,6 +61,11 @@
     "machine": "Máy: ",
     "employee_count": "{filtered} / {total} nhân viên",
     "connecting": "Đang kết nối máy...",
+    "action": {
+      "sync_finger": "Đồng bộ vân tay",
+      "rename": "Đổi tên",
+      "delete": "Xóa khỏi máy"
+    },
     "table": {
       "emp_id": "Mã NV",
       "name_device": "Tên (Máy)",
@@ -71,7 +78,23 @@
       "unknown": "Không Rõ",
       "resigned": "Nghỉ Việc",
       "active": "Liên Hệ"
-    }
+    },
+    "rename_prompt": "Nhập tên mới cho nhân viên {id}:",
+    "renaming": "Đang cập nhật tên thành \"{name}\" trên tất cả các máy...",
+    "rename_success": "Đã cập nhật tên thành công cho {id}",
+    "rename_failed": "Cập nhật tên thất bại: {err}",
+    "syncing_user": "Đang lấy vân tay từ máy {ip} cho {id}...",
+    "sync_success": "Đã tải thành công {count} vân tay cho {id}",
+    "sync_no_data": "Không tìm thấy vân tay trên máy {ip} cho {id}",
+    "sync_failed": "Đồng bộ thất bại: {err}",
+    "bulk_sync_confirm": "Bạn có chắc chắn muốn tải TẤT CẢ vân tay từ máy {ip}? Quá trình này có thể mất một lúc.",
+    "bulk_syncing": "Đang tải TẤT CẢ vân tay từ máy {ip}...",
+    "bulk_sync_success": "Đã tải thành công {count} vân tay từ máy {ip}",
+    "bulk_sync_failed": "Đồng bộ hàng loạt thất bại: {err}",
+    "bulk_delete_confirm": "Bạn có chắc chắn muốn xóa {count} nhân viên đã chọn khỏi thiết bị này?",
+    "bulk_deleting": "Đang xóa {count} nhân viên...",
+    "bulk_delete_success": "Đã xóa thành công {count} nhân viên (bỏ qua nếu không tồn tại)",
+    "delete_success": "Đã xóa thành công nhân viên {id} khỏi thiết bị"
   },
   "machines": {
     "list_title": "Danh Sách Máy",
@@ -84,8 +107,26 @@
   },
   "actions": {
     "delete_confirm": "Xóa nhân viên {id} khỏi máy {ip}?",
+    "delete_single_warn": "Bạn có chắc chắn muốn xóa nhân viên {id} khỏi máy {ip} KHÔNG?\n(Lưu ý: Hành động này CHỈ xóa dữ liệu trên máy này, không ảnh hưởng đến các máy khác).",
     "delete_all_confirm": "Xóa nhân viên {id} khỏi tất cả các máy?",
-    "confirm": "Xác nhận xóa"
+    "delete_global_warn": "CẢNH BÁO: Bạn đang thực hiện xóa nhân viên {id} trên TOÀN BỘ CÁC MÁY chấm công.\nHành động này không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục không?",
+    "delete_initiating": "Đang khởi tạo lệnh xóa cho {id}...",
+    "delete_completed": "Nhân viên {id} đã được xóa thành công khỏi tất cả các máy.",
+    "delete_progress": "Đang xóa {id}: Máy {current}/{total} ({ip})",
+    "confirm": "Xác nhận"
+  },
+  "biometric": {
+    "view_coverage": "Xem độ phủ vân tay",
+    "coverage_title": "Độ phủ vân tay: {id}",
+    "realtime_scan": "Quét thời gian thực",
+    "scanning": "Đang giao tiếp với các máy chấm công...",
+    "terminal_offline": "Máy ngoại tuyến",
+    "template_ok": "Đã có vân tay",
+    "no_template": "Chưa có vân tay",
+    "not_registered": "Chưa có ID trên máy",
+    "refresh": "Cập nhật lại",
+    "export_fingerprints": "Xuất Excel vân tay",
+    "sync_all": "Đồng bộ tất cả vân tay"
   },
   "export": {
     "time": "Xuất: Thời Gian",
@@ -97,6 +138,9 @@
   "sync": {
     "excel": "Đồng bộ Excel",
     "syncing": "Đang đồng bộ ",
+    "initiating": "Đang khởi tạo đồng bộ...",
+    "completed": "Đồng bộ hoàn tất.",
+    "progress": "Đang đồng bộ: Máy {current}/{total} ({ip}) - Đã thêm: {added}",
     "machines": "Đồng bộ Máy"
   }
 }

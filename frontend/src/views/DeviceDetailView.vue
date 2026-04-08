@@ -10,13 +10,17 @@
         <h2>{{ $t('device.machine') }} <span class="ip-label">{{ ip }}</span></h2>
       </div>
       <div style="display:flex; gap:10px;">
+        <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="handleBulkDelete" style="background:#ef4444; color:#fff; border:none; display:flex; align-items:center; gap:6px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          Delete ({{ selectedIds.length }})
+        </button>
         <button class="btn btn-ghost" @click="handleBulkSyncFinger" style="border-color:#fbbf24; color:#fbbf24;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Sync All Fingerprints
+          {{ $t('biometric.sync_all') }}
         </button>
         <a :href="device.filteredExportUrl" class="btn btn-ghost" style="border-color:#2dd4bf; color:#2dd4bf; text-decoration:none;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Export Excel
+          {{ $t('biometric.export_fingerprints') }}
         </a>
         <button class="btn btn-primary" @click="device.loadDeviceEmployees(ip)">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.08-7.49"/></svg>
@@ -29,7 +33,7 @@
     <div class="filter-bar card">
       <div class="filter-group" style="flex:1;">
         <label>{{ $t('attendance.filters.search') }}</label>
-        <input v-model="device.searchTerm" placeholder="Type to search..." @input="device.applyFilter()" />
+        <input v-model="device.searchTerm" :placeholder="$t('attendance.filters.search') + '...'" @input="device.applyFilter()" />
       </div>
       <div class="filter-group" style="min-width:180px;">
         <label>{{ $t('attendance.filters.status') }}</label>
@@ -55,6 +59,7 @@
         @delete="handleDelete" 
         @rename="handleRename"
         @sync-finger="handleSyncFinger"
+        @selection-change="ids => selectedIds = ids"
       />
       <PaginationBar
         :currentPage="device.empPage"
@@ -67,7 +72,7 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useDeviceStore } from '@/stores/device.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { useI18n } from 'vue-i18n'
@@ -80,52 +85,73 @@ const device = useDeviceStore()
 const notification = useNotificationStore()
 const { t } = useI18n()
 
+const selectedIds = ref([])
+
 onMounted(() => {
   device.loadDeviceEmployees(props.ip)
 })
 
 async function handleDelete(employeeId) {
   const confirmed = await notification.confirm(
-    `Bạn có chắc chắn muốn xóa nhân viên ${employeeId} khỏi máy ${props.ip} KHÔNG?\n(Lưu ý: Hành động này CHỈ xóa dữ liệu trên máy này, không ảnh hưởng đến các máy khác).`,
+    t('actions.delete_single_warn', { id: employeeId, ip: props.ip }),
     t('actions.confirm')
   )
   if (!confirmed) return
   try {
     await device.deleteEmployee(employeeId)
-    notification.success(`Successfully deleted employee ${employeeId}`)
+    notification.success(t('device.delete_success', { id: employeeId }))
   } catch (e) {
-    notification.error('Error: ' + e.message)
+    notification.error(t('device.sync_failed', { err: e.message }))
+  }
+}
+
+async function handleBulkDelete() {
+  const confirmed = await notification.confirm(
+    t('device.bulk_delete_confirm', { count: selectedIds.value.length }),
+    t('actions.confirm')
+  )
+  if (!confirmed) return
+  
+  const notifyId = notification.info(t('device.bulk_deleting', { count: selectedIds.value.length }), 0)
+  try {
+    const res = await device.bulkDeleteEmployees(selectedIds.value)
+    const actualDeleted = res?.count !== undefined ? res.count : selectedIds.value.length
+    notification.success(t('device.bulk_delete_success', { count: actualDeleted }))
+    selectedIds.value = []
+  } catch (e) {
+    notification.error(`Xóa thất bại: ${e.message}`)
+  } finally {
+    notification.remove(notifyId)
   }
 }
 
 async function handleRename(user) {
-  const newName = prompt(`Enter new name for employee ${user.user_id}:`, user.name || '')
+  const newName = prompt(t('device.rename_prompt', { id: user.user_id }), user.name || '')
   if (newName === null || newName === user.name) return
   
-  const notifyId = notification.info(`Updating name to "${newName}" on all machines...`, 0)
+  const notifyId = notification.info(t('device.renaming', { name: newName }), 0)
   try {
     await device.renameEmployee(user.user_id, newName)
-    notification.success(`Name updated successfully for ${user.user_id}`)
+    notification.success(t('device.rename_success', { id: user.user_id }))
   } catch (e) {
-    notification.error('Rename failed: ' + e.message)
+    notification.error(t('device.rename_failed', { err: e.message }))
   } finally {
     notification.remove(notifyId)
-    // Extra safety: make sure all info types are clear after success/error
     setTimeout(() => notification.clearByType('info'), 500)
   }
 }
 
 async function handleSyncFinger(employeeId) {
-  const notifyId = notification.info(`Retrieving fingerprints from machine ${props.ip}...`, 0)
+  const notifyId = notification.info(t('device.syncing_user', { ip: props.ip, id: employeeId }), 0)
   try {
     const res = await device.syncEmployeeFingerprints(employeeId)
     if (res.count > 0) {
-      notification.success(`Successfully downloaded ${res.count} fingerprint(s) for ${employeeId}`)
+      notification.success(t('device.sync_success', { count: res.count, id: employeeId }))
     } else {
-      notification.warn(`No fingerprint found on machine ${props.ip} for ${employeeId}`)
+      notification.warn(t('device.sync_no_data', { ip: props.ip, id: employeeId }))
     }
   } catch (e) {
-    notification.error('Sync failed: ' + e.message)
+    notification.error(t('device.sync_failed', { err: e.message }))
   } finally {
     notification.remove(notifyId)
     setTimeout(() => notification.clearByType('info'), 500)
@@ -134,17 +160,17 @@ async function handleSyncFinger(employeeId) {
 
 async function handleBulkSyncFinger() {
   const confirmed = await notification.confirm(
-    `Are you sure you want to download ALL fingerprints from machine ${props.ip}? This may take a while.`,
+    t('device.bulk_sync_confirm', { ip: props.ip }),
     t('actions.confirm')
   )
   if (!confirmed) return
 
-  const notifyId = notification.info(`Bulk retrieving ALL fingerprints from machine ${props.ip}...`, 0)
+  const notifyId = notification.info(t('device.bulk_syncing', { ip: props.ip }), 0)
   try {
     const res = await device.bulkSyncFingerprints()
-    notification.success(`Successfully downloaded ${res.count} fingerprint(s) from machine ${props.ip}`)
+    notification.success(t('device.bulk_sync_success', { count: res.count, ip: props.ip }))
   } catch (e) {
-    notification.error('Bulk sync failed: ' + e.message)
+    notification.error(t('device.bulk_sync_failed', { err: e.message }))
   } finally {
     notification.remove(notifyId)
     setTimeout(() => notification.clearByType('info'), 500)

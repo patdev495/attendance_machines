@@ -45,7 +45,10 @@
               </span>
             </td>
             <td style="text-align:right;">
-              <button class="btn-delete" title="Delete from all machines" @click="confirmDelete(row.employee_id)">
+              <button class="btn-fingerprint" :title="$t('biometric.view_coverage')" @click="openCoverage(row.employee_id)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"/><circle cx="7" cy="12" r=".5"/><path d="M12 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"/><circle cx="17" cy="12" r=".5"/><path d="M22 12c0-2.8-2.2-5-5-5s-5 2.2-5 5 2.2 5 5 5 5-2.2 5-5Z"/></svg>
+              </button>
+              <button class="btn-delete" :title="$t('actions.delete_all_confirm')" @click="confirmDelete(row.employee_id)">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
               </button>
             </td>
@@ -60,29 +63,51 @@
       />
     </template>
   </div>
+
+  <!-- Biometric Coverage Modal (Moved to root for visibility) -->
+  <BiometricCoverageModal 
+    :isOpen="showCoverageModal" 
+    :employeeId="selectedEmployeeId"
+    @close="closeCoverage"
+  />
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useSyncStore } from '@/stores/sync.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
+import BiometricCoverageModal from '@/components/employees/BiometricCoverageModal.vue'
 
 const store = useAttendanceStore()
 const syncStore = useSyncStore()
 const notification = useNotificationStore()
 const { t } = useI18n()
 
+const showCoverageModal = ref(false)
+const selectedEmployeeId = ref('')
+
 function formatTime(dt) {
   if (!dt) return '-'
   return dt.replace('T', ' ').substring(11, 16)
 }
 
+function openCoverage(id) {
+  selectedEmployeeId.value = id
+  showCoverageModal.value = true
+}
+
+function closeCoverage() {
+  showCoverageModal.value = false
+  selectedEmployeeId.value = ''
+}
+
 async function confirmDelete(employeeId) {
   const confirmed = await notification.confirm(
-    `CẢNH BÁO: Bạn đang thực hiện xóa nhân viên ${employeeId} trên TOÀN BỘ 8 MÁY chấm công.\nHành động này không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục không?`,
+    t('actions.delete_global_warn', { id: employeeId }),
     t('actions.confirm')
   )
   if (!confirmed) return

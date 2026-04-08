@@ -4,7 +4,7 @@
     <div class="filter-row">
       <div class="filter-group">
         <label>{{ $t('attendance.filters.emp_id') }}</label>
-        <input v-model="store.filters.employeeId" placeholder="e.g. 101" @input="store.loadData(1)" />
+        <input v-model="store.filters.employeeId" :placeholder="$t('attendance.filters.emp_placeholder')" @input="store.loadData(1)" />
       </div>
       <div class="filter-group">
         <label>{{ $t('attendance.filters.machine_ip') }}</label>
@@ -40,11 +40,11 @@
     <div class="filter-row summary-row" v-if="store.currentView === 'summary'">
       <div class="filter-group">
         <label>{{ $t('attendance.filters.min_hours') }}</label>
-        <input type="number" v-model="store.summaryFilters.minHours" placeholder="e.g. 8" @input="store.loadData(1)" />
+        <input type="number" v-model="store.summaryFilters.minHours" :placeholder="$t('attendance.filters.hours_placeholder', { h: 8 })" @input="store.loadData(1)" />
       </div>
       <div class="filter-group">
         <label>{{ $t('attendance.filters.max_hours') }}</label>
-        <input type="number" v-model="store.summaryFilters.maxHours" placeholder="e.g. 12" @input="store.loadData(1)" />
+        <input type="number" v-model="store.summaryFilters.maxHours" :placeholder="$t('attendance.filters.hours_placeholder', { h: 12 })" @input="store.loadData(1)" />
       </div>
       <div class="filter-group">
         <label>{{ $t('attendance.filters.shift') }}</label>

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { 
-  getDevicesCapacity, getDeviceEmployees, deleteDeviceEmployee,
+  getDevicesCapacity, getDeviceEmployees, deleteDeviceEmployee, bulkDeleteDeviceEmployees,
   updateEmployeeName, syncFingerprints, syncAllFingerprints,
   EXPORT_FINGERPRINTS_URL
 } from '@/api/devices.js'
@@ -86,6 +86,12 @@ export const useDeviceStore = defineStore('device', () => {
     await loadDeviceEmployees(currentIp.value)
   }
 
+  async function bulkDeleteEmployees(employeeIds) {
+    const res = await bulkDeleteDeviceEmployees(currentIp.value, employeeIds)
+    await loadDeviceEmployees(currentIp.value)
+    return res
+  }
+
   async function renameEmployee(employeeId, newName) {
     await updateEmployeeName(employeeId, newName)
     await loadDeviceEmployees(currentIp.value)
@@ -104,7 +110,7 @@ export const useDeviceStore = defineStore('device', () => {
     currentIp, allEmployees, filteredEmployees, employeesLoading, employeeError,
     searchTerm, statusFilter, exportUrl,
     empPage, empPageSize, empTotalPages, pagedEmployees,
-    fetchDevices, loadDeviceEmployees, applyFilter, deleteEmployee,
+    fetchDevices, loadDeviceEmployees, applyFilter, deleteEmployee, bulkDeleteEmployees,
     renameEmployee, syncEmployeeFingerprints, bulkSyncFingerprints, filteredExportUrl
   }
 })

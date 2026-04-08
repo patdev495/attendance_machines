@@ -21,6 +21,14 @@ export function deleteDeviceEmployee(ip, employeeId) {
   return apiFetch(`/devices/${encodeURIComponent(ip)}/employees/${employeeId}`, { method: 'DELETE' })
 }
 
+export function bulkDeleteDeviceEmployees(ip, employeeIds) {
+  return apiFetch(`/devices/${encodeURIComponent(ip)}/employees/bulk_delete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_ids: employeeIds })
+  })
+}
+
 export function updateEmployeeName(employeeId, newName) {
   return apiFetch('/devices/update_name', {
     method: 'POST',

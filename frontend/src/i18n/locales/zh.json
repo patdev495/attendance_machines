@@ -27,7 +27,9 @@
       "day_shift": "白班",
       "night_shift": "夜班",
       "na_shift": "未知",
-      "only_missing": "仅缺卡"
+      "only_missing": "仅缺卡",
+      "emp_placeholder": "例如：101",
+      "hours_placeholder": "例如：{h}"
     },
     "table": {
       "emp_id": "员工编号",
@@ -59,6 +61,11 @@
     "machine": "设备：",
     "employee_count": "{filtered} / {total} 员工",
     "connecting": "正在连接...",
+    "action": {
+      "sync_finger": "同步指纹",
+      "rename": "重命名",
+      "delete": "从机器删除"
+    },
     "table": {
       "emp_id": "员工编号",
       "name_device": "姓名 (设备)",
@@ -71,7 +78,23 @@
       "unknown": "未知",
       "resigned": "离职",
       "active": "在职"
-    }
+    },
+    "rename_prompt": "输入员工 {id} 的新名称：",
+    "renaming": "正在所有机器上更新名称为 \"{name}\"...",
+    "rename_success": "员工 {id} 的名称更新成功",
+    "rename_failed": "重命名失败：{err}",
+    "syncing_user": "正在从机器 {ip} 获取员工 {id} 的指纹...",
+    "sync_success": "成功从机器下载了 {id} 的 {count} 个指纹",
+    "sync_no_data": "在机器 {ip} 上未发现员工 {id} 的指纹",
+    "sync_failed": "同步失败：{err}",
+    "bulk_sync_confirm": "您确定要从机器 {ip} 下载所有指纹吗？这可能需要一段时间。",
+    "bulk_syncing": "正在从机器 {ip} 批量获取所有指纹...",
+    "bulk_sync_success": "成功从机器 {ip} 下载了 {count} 个指纹",
+    "bulk_sync_failed": "批量同步失败：{err}",
+    "bulk_delete_confirm": "您确定要从此设备中删除 {count} 名选定的员工吗？",
+    "bulk_deleting": "正在删除 {count} 名员工...",
+    "bulk_delete_success": "成功删除 {count} 名员工（如果不存在则跳过）",
+    "delete_success": "成功删除员工 {id}"
   },
   "machines": {
     "list_title": "设备列表",
@@ -84,8 +107,26 @@
   },
   "actions": {
     "delete_confirm": "是否从设备 {ip} 中删除员工 {id}？",
+    "delete_single_warn": "您确定要从机器 {ip} 中删除员工 {id} 吗？\n（注：此操作仅删除此机器上的数据，不影响其他机器）。",
     "delete_all_confirm": "是否从所有考勤机中删除员工 {id}？",
-    "confirm": "确认删除"
+    "delete_global_warn": "警告：您正在从所有连接的机器中删除员工 {id}。\n此操作无法撤销。您确定要继续吗？",
+    "delete_initiating": "正在初始化 {id} 的删除命令...",
+    "delete_completed": "员工 {id} 已成功从所有机器中删除。",
+    "delete_progress": "正在删除 {id}：第 {current}/{total} 台机器 ({ip})",
+    "confirm": "确认"
+  },
+  "biometric": {
+    "view_coverage": "查看指纹覆盖情况",
+    "coverage_title": "指纹覆盖情况：{id}",
+    "realtime_scan": "实时扫描",
+    "scanning": "正在与所有机器通信...",
+    "terminal_offline": "终端离线",
+    "template_ok": "已有指纹模板",
+    "no_template": "无指纹",
+    "not_registered": "未在设备注册",
+    "refresh": "刷新覆盖情况",
+    "export_fingerprints": "导出指纹 Excel",
+    "sync_all": "同步所有指纹"
   },
   "export": {
     "time": "导出：时间",
@@ -97,6 +138,9 @@
   "sync": {
     "excel": "同步Excel",
     "syncing": "同步中 ",
+    "initiating": "正在初始化同步...",
+    "completed": "同步完成。",
+    "progress": "同步中：第 {current}/{total} 台机器 ({ip}) - 已添加：{added}",
     "machines": "同步机器"
   }
 }

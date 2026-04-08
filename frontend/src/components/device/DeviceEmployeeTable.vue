@@ -3,6 +3,9 @@
     <table>
       <thead>
         <tr>
+          <th style="width:40px; text-align:center;">
+            <input type="checkbox" :checked="isAllSelected" @change="toggleAll" class="custom-chk" />
+          </th>
           <th>{{ $t('device.table.emp_id') }}</th>
           <th>{{ $t('device.table.name_device') }}</th>
           <th>{{ $t('device.table.name_db') }}</th>
@@ -13,9 +16,12 @@
       </thead>
       <tbody>
         <tr v-if="employees.length === 0">
-          <td colspan="6" class="empty-state">{{ $t('device.table.no_records') }}</td>
+          <td colspan="7" class="empty-state">{{ $t('device.table.no_records') }}</td>
         </tr>
-        <tr v-for="u in employees" :key="u.user_id">
+        <tr v-for="u in employees" :key="u.user_id" :class="{'selected-row': selectedIds.includes(u.user_id)}">
+          <td style="text-align:center;">
+            <input type="checkbox" :value="u.user_id" v-model="selectedIds" class="custom-chk" />
+          </td>
           <td style="font-weight:600;color:#fff;">{{ u.user_id }}</td>
           <td>{{ u.name || '-' }}</td>
           <td style="color:#fff;">
@@ -48,8 +54,33 @@
 </template>
 
 <script setup>
-defineProps({ employees: { type: Array, default: () => [] } })
-defineEmits(['delete', 'rename', 'syncFinger'])
+import { ref, computed, watch } from 'vue'
+
+const props = defineProps({ employees: { type: Array, default: () => [] } })
+const emit = defineEmits(['delete', 'rename', 'syncFinger', 'selection-change'])
+
+const selectedIds = ref([])
+
+const isAllSelected = computed(() => {
+  return props.employees.length > 0 && selectedIds.value.length === props.employees.length
+})
+
+function toggleAll(e) {
+  if (e.target.checked) {
+    selectedIds.value = props.employees.map(u => u.user_id)
+  } else {
+    selectedIds.value = []
+  }
+}
+
+watch(selectedIds, (newVal) => {
+  emit('selection-change', newVal)
+}, { deep: true })
+
+watch(() => props.employees, () => {
+  // Clear selection when page changes
+  selectedIds.value = []
+})
 </script>
 
 <style scoped>
@@ -76,5 +107,14 @@ defineEmits(['delete', 'rename', 'syncFinger'])
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
   border-color: var(--primary-color);
+}
+.custom-chk {
+  width: 16px; 
+  height: 16px; 
+  cursor: pointer;
+  accent-color: var(--primary-color);
+}
+.selected-row {
+  background: rgba(99, 102, 241, 0.1) !important;
 }
 </style>

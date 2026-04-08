@@ -27,7 +27,9 @@
       "day_shift": "Day Shift",
       "night_shift": "Night Shift",
       "na_shift": "NA",
-      "only_missing": "Only Missing"
+      "only_missing": "Only Missing",
+      "emp_placeholder": "e.g. 101",
+      "hours_placeholder": "e.g. {h}"
     },
     "table": {
       "emp_id": "Employee ID",
@@ -59,6 +61,11 @@
     "machine": "Machine: ",
     "employee_count": "{filtered} / {total} emp",
     "connecting": "Connecting...",
+    "action": {
+      "sync_finger": "Sync Fingerprint",
+      "rename": "Rename",
+      "delete": "Delete from machine"
+    },
     "table": {
       "emp_id": "Employee ID",
       "name_device": "Name (Device)",
@@ -71,7 +78,23 @@
       "unknown": "Unknown",
       "resigned": "Resigned",
       "active": "Active"
-    }
+    },
+    "rename_prompt": "Enter new name for employee {id}:",
+    "renaming": "Updating name to \"{name}\" on all machines...",
+    "rename_success": "Name updated successfully for {id}",
+    "rename_failed": "Rename failed: {err}",
+    "syncing_user": "Retrieving fingerprints from machine {ip} for {id}...",
+    "sync_success": "Successfully downloaded {count} fingerprint(s) for {id}",
+    "sync_no_data": "No fingerprint found on machine {ip} for {id}",
+    "sync_failed": "Sync failed: {err}",
+    "bulk_sync_confirm": "Are you sure you want to download ALL fingerprints from machine {ip}? This may take a while.",
+    "bulk_syncing": "Bulk retrieving ALL fingerprints from machine {ip}...",
+    "bulk_sync_success": "Successfully downloaded {count} fingerprint(s) from machine {ip}",
+    "bulk_sync_failed": "Bulk sync failed: {err}",
+    "bulk_delete_confirm": "Are you sure you want to delete {count} selected employees from this machine?",
+    "bulk_deleting": "Deleting {count} employees...",
+    "bulk_delete_success": "Successfully deleted {count} employees (skipped if non-existent)",
+    "delete_success": "Successfully deleted employee {id}"
   },
   "machines": {
     "list_title": "List",
@@ -84,8 +107,26 @@
   },
   "actions": {
     "delete_confirm": "Delete {id} from {ip}?",
+    "delete_single_warn": "Are you sure you want to delete employee {id} from machine {ip} ONLY?\n(Note: This action ONLY removes data from this machine and does not affect others).",
     "delete_all_confirm": "Delete {id} from all machines?",
+    "delete_global_warn": "WARNING: You are deleting employee {id} from ALL connected machines.\nThis action cannot be undone. Do you really want to proceed?",
+    "delete_initiating": "Initiating deletion for {id}...",
+    "delete_completed": "Employee {id} has been deleted from all machines.",
+    "delete_progress": "Deleting {id}: Machine {current}/{total} ({ip})",
     "confirm": "Confirm"
+  },
+  "biometric": {
+    "view_coverage": "View Biometric Coverage",
+    "coverage_title": "Biometric Coverage: {id}",
+    "realtime_scan": "Real-time Scan",
+    "scanning": "Communicating with all machines...",
+    "terminal_offline": "Terminal Offline",
+    "template_ok": "Template Present",
+    "no_template": "No Biometrics",
+    "not_registered": "Not Registered",
+    "refresh": "Refresh Coverage",
+    "export_fingerprints": "Export Excel Fingerprints",
+    "sync_all": "Sync All Fingerprints"
   },
   "export": {
     "time": "Export: Time",
@@ -97,6 +138,9 @@
   "sync": {
     "excel": "Sync Excel",
     "syncing": "Syncing ",
+    "initiating": "Initiating sync...",
+    "completed": "Sync completed.",
+    "progress": "Syncing: Machine {current}/{total} ({ip}) - Added: {added}",
     "machines": "Sync Machines"
   }
 }

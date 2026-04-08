@@ -20,17 +20,21 @@ export function getSyncStatus() {
 export function syncEmployeesExcel(file) {
   const fd = new FormData()
   fd.append('file', file)
-  return apiFetch('/employees/sync', { method: 'POST', body: fd })
+  return apiFetch('/sync/excel', { method: 'POST', body: fd })
 }
 
 export function deleteEmployeeFromAllMachines(employeeId) {
   return apiFetch(`/devices/delete_global/${employeeId}`, { method: 'DELETE' })
 }
 
-export function getDeleteStatus() {
-  return apiFetch('/employees/delete-status')
+export function getDeleteStatus(employeeId) {
+  return apiFetch(`/devices/delete_status/${employeeId}`)
 }
 
 export function getExcelSyncStatus() {
-  return apiFetch('/employees/sync/status')
+  return apiFetch('/sync/excel/status')
+}
+
+export function getBiometricCoverage(employeeId) {
+  return apiFetch(`/employees/${employeeId}/biometric_coverage`)
 }
