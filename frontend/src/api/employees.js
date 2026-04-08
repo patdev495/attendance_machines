@@ -4,7 +4,11 @@ async function apiFetch(url, options = {}) {
   const res = await fetch(BASE + url, options)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Request failed')
+    let msg = err.detail || 'Request failed'
+    if (Array.isArray(err.detail)) {
+      msg = err.detail.map(d => `${d.loc?.join('.') || 'error'}: ${d.msg}`).join(', ')
+    }
+    throw new Error(msg)
   }
   return res.json()
 }

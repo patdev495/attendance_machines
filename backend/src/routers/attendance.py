@@ -57,8 +57,8 @@ def get_date_range(db: Session = Depends(get_db)):
 
 @router.get("/summary")
 def get_attendance_summary(
-    start_date: date = Query(...),
-    end_date: date = Query(...),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
     employee_id: Optional[str] = Query(None),
     machine_ip: Optional[str] = Query(None), # Explicitly accept machine_ip filter if needed
     department: Optional[str] = Query(None),
@@ -94,8 +94,10 @@ def get_attendance_summary(
         base_calc_sub.c.status
     )
     
-    query = query.filter(base_calc_sub.c.work_date >= start_date)
-    query = query.filter(base_calc_sub.c.work_date <= end_date)
+    if start_date:
+        query = query.filter(base_calc_sub.c.work_date >= start_date)
+    if end_date:
+        query = query.filter(base_calc_sub.c.work_date <= end_date)
     
     if employee_id:
         query = query.filter(base_calc_sub.c.employee_id == employee_id)
