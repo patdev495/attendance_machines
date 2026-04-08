@@ -7,10 +7,10 @@ from ..database import get_db, EmployeeMetadata
 from ..sync_service import (
     sync_all_machines, get_machine_list, sync_status, 
     sync_employees_from_excel, delete_user_from_all_machines, 
-    get_users_from_machine, delete_user_from_machine,
+    get_users_from_machine, delete_user_from_machine, bulk_delete_users_from_machine,
     excel_sync_status, delete_status, get_devices_capacity_info,
     update_user_name_all_machines, download_fingerprints_from_machine,
-    bulk_download_fingerprints_from_machine
+    bulk_download_fingerprints_from_machine, get_biometric_coverage
 )
 from ..services.biometric_export import BiometricExportService
 from pydantic import BaseModel
@@ -22,6 +22,9 @@ class NameUpdate(BaseModel):
 class FingerprintSyncRequest(BaseModel):
     ip: str
     employee_id: str
+
+class BulkDeleteRequest(BaseModel):
+    employee_ids: List[str]
 
 router = APIRouter(prefix="/api", tags=["Machines"])
 
@@ -48,8 +51,11 @@ def get_sync_status():
     return sync_status
 
 @router.post("/sync/excel")
-def upload_excel(file: UploadFile = File(...)):
-    return sync_employees_from_excel(file)
+async def upload_excel(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    content = await file.read()
+    import io
+    background_tasks.add_task(sync_employees_from_excel, file_bytes=io.BytesIO(content))
+    return {"status": "Started"}
 
 @router.get("/sync/excel/status")
 def get_excel_sync_status():
@@ -91,6 +97,14 @@ def get_devices_capacity():
 def delete_single_device_employee(ip: str, employee_id: str):
     return delete_user_from_machine(ip, employee_id)
 
+@router.post("/devices/{ip}/employees/bulk_delete")
+def bulk_delete_device_employees(ip: str, req: BulkDeleteRequest):
+    count, status = bulk_delete_users_from_machine(ip, req.employee_ids)
+    print(f"Bulk Delete Request for {ip}, received payload: {req.employee_ids}, count: {count}")
+    if status != "Success":
+        raise HTTPException(status_code=500, detail=status)
+    return {"count": count, "status": status}
+
 @router.delete("/devices/delete_global/{employee_id}")
 def delete_global_employee(employee_id: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(delete_user_from_all_machines, employee_id)
@@ -123,6 +137,10 @@ def sync_all_fingerprints(ip: str):
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)
     return {"count": count, "status": status}
+
+@router.get("/employees/{employee_id}/biometric_coverage")
+def get_employee_biometric_coverage(employee_id: str):
+    return get_biometric_coverage(employee_id)
 
 @router.get("/devices/export-fingerprints")
 def export_fingerprints(ip: Optional[str] = Query(None), db: Session = Depends(get_db)):

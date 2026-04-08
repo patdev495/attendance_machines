@@ -7,6 +7,8 @@ import logging
 import datetime
 import pandas as pd
 import threading
+import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -254,6 +256,39 @@ def delete_user_from_machine(ip: str, employee_id: str):
         with status_lock:
             delete_status["results"][ip] = msg
         return msg
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def bulk_delete_users_from_machine(ip: str, employee_ids: list):
+    """Deletes multiple users from a specific machine in a single connection."""
+    logger.info(f"Connecting to {ip} to bulk delete {len(employee_ids)} users...")
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    deleted_count = 0
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        
+        # Fetch users to find UIDs dynamically
+        users = conn.get_users()
+        user_map = {str(u.user_id): u for u in users}
+        
+        for emp_id in employee_ids:
+            target_user = user_map.get(str(emp_id))
+            if target_user:
+                try:
+                    conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
+                    deleted_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to delete {emp_id} from {ip}: {e}")
+                    
+        conn.enable_device()
+        return deleted_count, "Success"
+    except Exception as e:
+        logger.error(f"Error bulk deleting users from machine {ip}: {e}")
+        return deleted_count, str(e)
     finally:
         if conn:
             try: conn.disconnect()
@@ -565,6 +600,41 @@ def bulk_download_fingerprints_from_machine(ip: str):
         if conn:
             try: conn.disconnect()
             except: pass
+
+def check_user_biometric_on_machine(ip: str, employee_id: str):
+    """Checks if a user has fingerprints on a specific machine."""
+    zk = ZK(ip, port=4370, timeout=3, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        # Find user
+        users = conn.get_users()
+        target = next((u for u in users if u.user_id == str(employee_id)), None)
+        
+        if not target:
+            return {"ip": ip, "status": "Online", "has_user": False, "has_finger": False}
+        
+        # Check templates
+        templates = conn.get_templates()
+        has_finger = any(str(t.uid) == str(target.uid) or str(getattr(t, 'user_id', '')) == str(employee_id) for t in templates)
+        
+        return {"ip": ip, "status": "Online", "has_user": True, "has_finger": has_finger}
+    except Exception as e:
+        return {"ip": ip, "status": "Offline", "error": str(e), "has_user": False, "has_finger": False}
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def get_biometric_coverage(employee_id: str):
+    """Checks biometric status for an employee across all machines in parallel."""
+    ips = get_machine_list()
+    results = []
+    with ThreadPoolExecutor(max_workers=max(1, len(ips))) as executor:
+        future_to_ip = {executor.submit(check_user_biometric_on_machine, ip, employee_id): ip for ip in ips}
+        for future in concurrent.futures.as_completed(future_to_ip):
+            results.append(future.result())
+    return results
 
 if __name__ == "__main__":
     count = sync_all_machines()

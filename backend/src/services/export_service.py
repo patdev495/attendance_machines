@@ -7,7 +7,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
-from ..database import AttendanceLog, EmployeeMetadata, SessionLocal
+from ..database import AttendanceLog, EmployeeMetadata, ShiftRule, SessionLocal
 from ..utils.stats_utils import compute_day_stats
 
 export_status = {
@@ -32,6 +32,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "current_step": "Fetching data...", "cancel_requested": False, 
                 "filename": None, "error": None
             })
+
+        # Pre-fetch shift rules for extreme performance
+        rules_pool = db.query(ShiftRule).all()
 
         # Base query for attendance aggregation
         base_calc_sub = db.query(
@@ -67,17 +70,49 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                  export_status.update({"is_running": False, "error": "No data found for this range."})
              return
 
-        # Process results into a dictionary
-        data = {}
+        # Extract set of employee IDs from results
+        all_emp_ids = sorted(list(set(row.employee_id for row in results)))
+        emp_meta_query = db.query(EmployeeMetadata).filter(EmployeeMetadata.employee_id.in_(all_emp_ids)).all()
+        emp_meta = {m.employee_id: m for m in emp_meta_query}
+        
+        # Pre-define styles for high performance
+        border_style = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+        header_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+        alignment_style = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        white_font = Font(color="FFFFFF")
+        bold_font = Font(bold=True)
+
+        # Process results into a dictionary with pre-calculated stats
+        processed_data = {}
+        with export_lock: export_status["current_step"] = "Preparing attendance statistics..."
+        
         for row in results:
             emp_id = row.employee_id
             w_date = row.work_date
-            if emp_id not in data:
-                data[emp_id] = {"general_shift": row.shift, "days": {}}
-            data[emp_id]["days"][w_date] = {
-                "first_tap": row.first_tap, "last_tap": row.last_tap,
-                "count": row.tap_count, "shift": row.shift
+            if emp_id not in processed_data:
+                processed_data[emp_id] = {"general_shift": row.shift, "days": {}}
+            
+            first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
+            if row.tap_count >= 1: first_val = row.first_tap.strftime("%H:%M")
+            if row.tap_count >= 2:
+                last_val = row.last_tap.strftime("%H:%M")
+                emp_m = emp_meta.get(emp_id)
+                _, std, ot, late, early = compute_day_stats(
+                    row.first_tap, 
+                    row.last_tap, 
+                    w_date, 
+                    emp_m.department if emp_m else None, 
+                    row.shift,
+                    rules_pool=rules_pool
+                )
+            
+            processed_data[emp_id]["days"][w_date] = {
+                "first": first_val, "last": last_val, 
+                "std": std, "ot": ot, "late": late, "early": early,
+                "shift": row.shift
             }
+            
+        sorted_emp_ids = sorted(processed_data.keys())
             
         dates_list = []
         curr = start_date
@@ -91,19 +126,14 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         headers = ["Mã nhân viên", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Ca làm việc", "Ghi chú"]
         for d in dates_list: headers.append(f"{d.day}/{d.month}")
         ws.append(headers)
-
+        
         # Style headers
-        border_style = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        header_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
         for cell in ws[1]:
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = bold_font
+            cell.alignment = alignment_style
             cell.border = border_style
             cell.fill = header_fill
 
-        sorted_emp_ids = sorted(data.keys())
-        emp_meta = {m.employee_id: m for m in db.query(EmployeeMetadata).filter(EmployeeMetadata.employee_id.in_(sorted_emp_ids)).all()}
-        
         with export_lock:
             export_status["total"] = len(sorted_emp_ids)
             export_status["current_step"] = "Generating Sheet 1..."
@@ -116,10 +146,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 with export_lock: export_status["is_running"] = False
                 return
             
-            with export_lock:
-                export_status["progress"] = int((idx / len(sorted_emp_ids)) * 50) 
+            if idx % 5 == 0:
+                with export_lock:
+                    export_status["progress"] = int((idx / len(sorted_emp_ids)) * 50) 
 
-            emp_data_info = data[emp_id]
+            emp_data_info = processed_data[emp_id]
             emp_data = emp_data_info["days"]
             shift_val = emp_data_info["general_shift"]
             emp_m = emp_meta.get(emp_id)
@@ -132,97 +163,104 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             for r_offset in range(num_rows):
                 r_idx = current_row + r_offset
                 is_first = (r_offset == 0)
-                ws.cell(row=r_idx, column=1, value=emp_id)
-                ws.cell(row=r_idx, column=2, value=emp_name)
-                ws.cell(row=r_idx, column=3, value=emp_dept)
-                ws.cell(row=r_idx, column=4, value=emp_group)
-                ws.cell(row=r_idx, column=5, value=emp_start)
-                ws.cell(row=r_idx, column=6, value=shift_text)
                 
+                # Optimized cell assignment with inline styling
+                vals = [emp_id, emp_name, emp_dept, emp_group, emp_start, shift_text]
+                for c_idx, val in enumerate(vals, 1):
+                    cell = ws.cell(row=r_idx, column=c_idx, value=val)
+                    cell.border = border_style
+                    cell.alignment = alignment_style
+                    if not is_first:
+                        cell.font = white_font
+                
+                # Indicator column
                 if view_mode == "time": all_indicators = ["Giờ In", "Giờ Out", "Đi muộn (phút)", "Về sớm (phút)"]
                 elif view_mode == "hours": all_indicators = ["Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)"]
                 else: all_indicators = ["Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)"]
-                ws.cell(row=r_idx, column=7, value=all_indicators[r_offset])
-
-                if not is_first:
-                    for c_idx in range(1, 7):
-                        ws.cell(row=r_idx, column=c_idx).font = Font(color="FFFFFF")
+                
+                cell_ind = ws.cell(row=r_idx, column=7, value=all_indicators[r_offset])
+                cell_ind.border = border_style
+                cell_ind.alignment = alignment_style
 
             for date_idx, d in enumerate(dates_list):
                 col = date_idx + 8
                 if d not in emp_data:
-                    for i in range(num_rows): ws.cell(row=current_row+i, column=col, value="-")
+                    for i in range(num_rows): 
+                        cell = ws.cell(row=current_row+i, column=col, value="-")
+                        cell.border = border_style
+                        cell.alignment = alignment_style
                 else:
-                    day_stat = emp_data[d]
-                    first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
-                    if day_stat["count"] >= 1: first_val = day_stat["first_tap"].strftime("%H:%M")
-                    if day_stat["count"] >= 2:
-                        last_val = day_stat["last_tap"].strftime("%H:%M")
-                        _, std, ot, late, early = compute_day_stats(day_stat["first_tap"], day_stat["last_tap"], d, emp_m.department if emp_m else None, day_stat["shift"])
-                    
+                    ds = emp_data[d]
                     def fmt_ot(v):
                         return v if (isinstance(v, (int, float)) and v > 0) else "-"
 
                     if view_mode=="time":
-                        vals = [first_val, last_val, late, early]
+                        vals = [ds["first"], ds["last"], ds["late"], ds["early"]]
                     elif view_mode=="hours":
-                        vals = [std, fmt_ot(ot), late, early]
+                        vals = [ds["std"], fmt_ot(ds["ot"]), ds["late"], ds["early"]]
                     else:
-                        vals = [first_val, last_val, std, fmt_ot(ot), late, early]
+                        vals = [ds["first"], ds["last"], ds["std"], fmt_ot(ds["ot"]), ds["late"], ds["early"]]
                     
-                    for i, v in enumerate(vals): ws.cell(row=current_row+i, column=col, value=v)
+                    for i, v in enumerate(vals): 
+                        cell = ws.cell(row=current_row+i, column=col, value=v)
+                        cell.border = border_style
+                        cell.alignment = alignment_style
             current_row += num_rows
 
-        # Sheet 2
+        # Sheet 2 - Information Detail
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
         ws2 = wb.create_sheet(title="Thông tin chi tiết")
         ws2.append(["Mã NV", "Tên nhân viên", "Phòng ban", "Nhóm", "Ca", "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)"])
         
         for cell in ws2[1]:
-            cell.font = Font(bold=True)
-            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.font = bold_font
+            cell.alignment = alignment_style
             cell.border = border_style
             cell.fill = header_fill
         
+        ws2_row = 2
         for idx, emp_id in enumerate(sorted_emp_ids):
             if export_status["cancel_requested"]: 
                 with export_lock: export_status["is_running"] = False
                 return
-            with export_lock: export_status["progress"] = 50 + int((idx / len(sorted_emp_ids)) * 50)
             
-            emp_info = data[emp_id]
+            if idx % 10 == 0:
+                with export_lock: export_status["progress"] = 50 + int((idx / len(sorted_emp_ids)) * 50)
+            
+            emp_info = processed_data[emp_id]
             emp_m = emp_meta.get(emp_id)
             for d in dates_list:
                 if d not in emp_info["days"]: continue
                 ds = emp_info["days"][d]
-                first = ds["first_tap"].strftime("%H:%M") if ds["count"]>=1 else "-"
-                last, std, ot, late, early = "-", "-", 0, "-", "-"
-                if ds["count"] >= 2:
-                    last = ds["last_tap"].strftime("%H:%M")
-                    _, std, ot, late, early = compute_day_stats(ds["first_tap"], ds["last_tap"], d, emp_m.department if emp_m else None, ds["shift"])
                 
+                ot = ds["ot"]
                 display_ot = ot if (isinstance(ot, (int, float)) and ot > 0) else 0
-                ws2.append([emp_id, emp_m.emp_name if emp_m else emp_id, emp_m.department if emp_m else "-", emp_m.group if emp_m else "-", ds["shift"] or "N", d.strftime("%d/%m/%Y"), first, last, std, display_ot, late, early])
-
-        # Final Formatting
-        for sheet in [ws, ws2]:
-            for row in sheet.iter_rows():
-                for cell in row:
-                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+                row_data = [
+                    emp_id, emp_m.emp_name if emp_m else emp_id, emp_m.department if emp_m else "-", 
+                    emp_m.group if emp_m else "-", ds["shift"] or "N", d.strftime("%d/%m/%Y"), 
+                    ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"]
+                ]
+                
+                for c_idx, val in enumerate(row_data, 1):
+                    cell = ws2.cell(row=ws2_row, column=c_idx, value=val)
                     cell.border = border_style
+                    cell.alignment = alignment_style
+                
+                ws2_row += 1
 
-            for column_cells in sheet.columns:
+        # Optimized Auto-width (only once per column)
+        for sheet in [ws, ws2]:
+            for col_idx in range(1, sheet.max_column + 1):
+                column_letter = get_column_letter(col_idx)
+                # Sample a few rows for width to avoid full iteration if possible, 
+                # but for accuracy we still check header and first 5 data rows
                 max_length = 0
-                column_letter = get_column_letter(column_cells[0].column)
-                for cell in column_cells:
-                    try:
-                        if cell.value:
-                            lines = str(cell.value).split('\n')
-                            length = max(len(line) for line in lines)
-                            if length > max_length:
-                                max_length = length
-                    except:
-                        pass
+                for row_idx in range(1, min(sheet.max_row, 20) + 1):
+                    val = sheet.cell(row=row_idx, column=col_idx).value
+                    if val:
+                        length = max(len(str(line)) for line in str(val).split('\n'))
+                        if length > max_length: max_length = length
+                
                 adjusted_width = (max_length + 4) * 1.1 
                 sheet.column_dimensions[column_letter].width = min(adjusted_width, 60)
 

@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 from .shift_utils import get_shift_rules
 
-def compute_day_stats(first, last, w_date, department, shift):
+def compute_day_stats(first, last, w_date, department, shift, rules_pool=None):
     """Return (work_hours, hours_standard, hours_ot, minutes_late, minutes_early)."""
-    rules = get_shift_rules(department, shift)
+    rules = get_shift_rules(department, shift, rules_pool=rules_pool)
     official_start_dt = datetime.combine(w_date, rules['official_start'])
     official_end_dt   = (datetime.combine(w_date + timedelta(days=1), rules['official_end'])
                          if rules['end_next_day']

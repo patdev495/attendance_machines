@@ -3,7 +3,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 
 from .config import config
 from .routers import attendance, machines, export
@@ -31,11 +31,18 @@ def create_app() -> FastAPI:
     # Serve Vue 3 SPA
     app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")
 
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        index = config.STATIC_DIR / "index.html"
+        if index.exists():
+            return FileResponse(index)
+        return HTMLResponse("<h1>Frontend not built yet. Run: npm run build</h1>", status_code=404)
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
         index = config.STATIC_DIR / "index.html"
         if index.exists():
-            return HTMLResponse(index.read_text(encoding="utf-8"))
+            return FileResponse(index)
         return HTMLResponse("<h1>Frontend not built yet. Run: npm run build</h1>", status_code=404)
 
     return app
