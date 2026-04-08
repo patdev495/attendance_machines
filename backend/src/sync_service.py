@@ -1,8 +1,8 @@
 from zk import ZK
-from .database import SessionLocal, AttendanceLog, EmployeeMetadata, EmployeeFingerprint
-from .config import config
+from database import SessionLocal, AttendanceLog, EmployeeMetadata, EmployeeFingerprint
+from config import config
 from sqlalchemy import exists, and_
-from .utils.encoding import sanitize_machine_name
+from utils.encoding import sanitize_machine_name
 import logging
 import datetime
 import pandas as pd

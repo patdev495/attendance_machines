@@ -4,8 +4,8 @@ from sqlalchemy import func, desc, or_
 from typing import List, Optional
 from datetime import date
 
-from ..database import get_db, AttendanceLog, EmployeeMetadata
-from ..services.attendance_service import AttendanceService
+from database import get_db, AttendanceLog, EmployeeMetadata
+from services.attendance_service import AttendanceService
 
 router = APIRouter(prefix="/api/attendance", tags=["Attendance"])
 

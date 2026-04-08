@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from .shift_utils import get_shift_rules
+from utils.shift_utils import get_shift_rules
 
 def compute_day_stats(first, last, w_date, department, shift, rules_pool=None):
     """Return (work_hours, hours_standard, hours_ot, minutes_late, minutes_early)."""

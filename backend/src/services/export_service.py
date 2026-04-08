@@ -7,8 +7,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
-from ..database import AttendanceLog, EmployeeMetadata, ShiftRule, SessionLocal
-from ..utils.stats_utils import compute_day_stats
+from database import AttendanceLog, EmployeeMetadata, ShiftRule, SessionLocal
+from utils.stats_utils import compute_day_stats
 
 export_status = {
     "is_running": False,

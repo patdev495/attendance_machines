@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import date
 from sqlalchemy.orm import Session
-from ..utils.stats_utils import compute_day_stats
+from utils.stats_utils import compute_day_stats
 
 class AttendanceService:
     @staticmethod

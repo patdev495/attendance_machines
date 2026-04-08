@@ -6,7 +6,15 @@ from dotenv import load_dotenv
 # .parent -> d:/Workspace/Time_Attendance_Machine/backend/src
 # .parent.parent -> d:/Workspace/Time_Attendance_Machine/backend
 # .parent.parent.parent -> d:/Workspace/Time_Attendance_Machine
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+import sys
+if getattr(sys, 'frozen', False):
+    # The application is running as a frozen executable
+    # sys.executable is the path to the .exe file
+    # We want BASE_DIR to be the folder containing the .exe
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    # The application is running as a script
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Load .env from the backend directory
 load_dotenv(BASE_DIR / "backend" / ".env")

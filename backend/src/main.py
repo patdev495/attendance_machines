@@ -5,10 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 
-from .config import config
-from .routers import attendance, machines, export
+import sys
+from pathlib import Path
 
-from .database import init_db
+# Add current directory to sys.path to support both script and frozen execution
+current_dir = Path(__file__).resolve().parent
+if str(current_dir) not in sys.path:
+    sys.path.append(str(current_dir))
+
+from config import config
+from routers import attendance, machines, export
+from database import init_db
 
 def create_app() -> FastAPI:
     init_db()

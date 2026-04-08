@@ -1,5 +1,5 @@
 from datetime import time
-from ..database import SessionLocal, ShiftRule
+from database import SessionLocal, ShiftRule
 
 def get_shift_rules(department, shift, rules_pool=None):
     """

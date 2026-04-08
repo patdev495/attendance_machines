@@ -3,8 +3,8 @@ from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
-from ..database import get_db, EmployeeMetadata
-from ..sync_service import (
+from database import get_db, EmployeeMetadata
+from sync_service import (
     sync_all_machines, get_machine_list, sync_status, 
     sync_employees_from_excel, delete_user_from_all_machines, 
     get_users_from_machine, delete_user_from_machine, bulk_delete_users_from_machine,
@@ -12,7 +12,7 @@ from ..sync_service import (
     update_user_name_all_machines, download_fingerprints_from_machine,
     bulk_download_fingerprints_from_machine, get_biometric_coverage
 )
-from ..services.biometric_export import BiometricExportService
+from services.biometric_export import BiometricExportService
 from pydantic import BaseModel
 
 class NameUpdate(BaseModel):

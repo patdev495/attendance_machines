@@ -1,7 +1,7 @@
 import pandas as pd
 import io
 from sqlalchemy.orm import Session
-from ..database import EmployeeMetadata, EmployeeFingerprint
+from database import EmployeeMetadata, EmployeeFingerprint
 from datetime import datetime
 
 class BiometricExportService:
@@ -33,7 +33,7 @@ class BiometricExportService:
                 query = query.filter(EmployeeFingerprint.source_ip == ip)
             else:
                 # Fallback: Connect to machine to get the IDs (for older data or cross-synced data)
-                from ..sync_service import get_users_from_machine
+                from sync_service import get_users_from_machine
                 machine_users = get_users_from_machine(ip)
                 if isinstance(machine_users, list) and len(machine_users) > 0:
                     allowed_ids = [str(u['user_id']) for u in machine_users]

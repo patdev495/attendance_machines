@@ -3,7 +3,7 @@ from fastapi import APIRouter, Query, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from datetime import date, datetime
-from ..services.export_service import export_status, export_lock, run_export_task
+from services.export_service import export_status, export_lock, run_export_task
 
 router = APIRouter(prefix="/api/export-attendance", tags=["Export"])
 
