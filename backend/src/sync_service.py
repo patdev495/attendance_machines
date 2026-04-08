@@ -1,7 +1,8 @@
 from zk import ZK
-from .database import SessionLocal, AttendanceLog, EmployeeMetadata
+from .database import SessionLocal, AttendanceLog, EmployeeMetadata, EmployeeFingerprint
 from .config import config
 from sqlalchemy import exists, and_
+from .utils.encoding import sanitize_machine_name
 import logging
 import datetime
 import pandas as pd
@@ -355,6 +356,215 @@ def sync_employees_from_excel(file_path=config.EXCEL_FILE, file_bytes=None):
     finally:
         with status_lock:
             excel_sync_status["is_running"] = False
+
+def update_user_name_on_machine(ip: str, employee_id: str, new_name: str):
+    """Updates the user's name on a specific machine with safe encoding."""
+    # Experiment with windows-1258 which better supports Vietnamese for many ZK models
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False, encoding='windows-1258')
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        
+        # Must find the user first to get their full current record (uid, privilege, etc.)
+        users = conn.get_users()
+        target = next((u for u in users if u.user_id == str(employee_id)), None)
+        
+        if not target:
+            return f"User {employee_id} not found on machine {ip}"
+        
+        # Sanitize name: remove accents and trim to limit
+        safe_name = sanitize_machine_name(new_name)
+        
+        conn.set_user(
+            uid=target.uid, 
+            name=safe_name, 
+            privilege=target.privilege, 
+            password=target.password, 
+            group_id=target.group_id, 
+            user_id=target.user_id,
+            card=target.card
+        )
+        
+        conn.enable_device()
+        return "Success"
+    except Exception as e:
+        logger.error(f"Error updating name on machine {ip}: {e}")
+        return str(e)
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def update_user_name_all_machines(employee_id: str, new_name: str):
+    """Updates the employee name across all machines and in the database."""
+    # 1. Update machine IPs
+    machine_ips = get_machine_list()
+    results = {}
+    for ip in machine_ips:
+        res = update_user_name_on_machine(ip, employee_id, new_name)
+        results[ip] = res
+        
+    # 2. Update local DB
+    db = SessionLocal()
+    try:
+        emp = db.query(EmployeeMetadata).filter(EmployeeMetadata.employee_id == employee_id).first()
+        if emp:
+            emp.emp_name = new_name
+            db.commit()
+    except Exception as e:
+        logger.error(f"Error updating name in DB: {e}")
+        db.rollback()
+    finally:
+        db.close()
+        
+    return results
+
+def download_fingerprints_from_machine(ip: str, employee_id: str):
+    """Downloads all fingerprint templates for a user from a machine and saves to DB."""
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        
+        # Get machine UID first
+        users = conn.get_users()
+        target = next((u for u in users if u.user_id == str(employee_id)), None)
+        
+        if not target:
+            return 0, f"User {employee_id} not found on machine {ip}"
+        
+        # Method 1: Try bulk retrieval (fastest if supported)
+        logger.info(f"Attempting bulk fingerprint retrieval for {employee_id} on {ip}")
+        templates = conn.get_templates()
+        
+        # Aggressive matching: Check both UID and UserID safely
+        user_templates = [
+            t for t in templates 
+            if str(t.uid) == str(target.uid) or str(getattr(t, 'user_id', '')) == str(employee_id)
+        ]
+        
+        # Method 2: If bulk found nothing, try slot-by-slot retrieval (0-9)
+        if not user_templates:
+            logger.info(f"Bulk retrieval failed for {employee_id}, falling back to slot-by-slot scan (0-9)")
+            for fid in range(10):
+                try:
+                    # Provide both UID and UserID for maximum compatibility
+                    tmp = conn.get_user_template(uid=target.uid, temp_id=fid, user_id=target.user_id)
+                    if tmp and tmp.template:
+                        user_templates.append(tmp)
+                except Exception as e:
+                    continue
+        
+        if not user_templates:
+            return 0, f"No fingerprints found for employee {employee_id} (Internal UID: {target.uid}) on this machine."
+
+        db = SessionLocal()
+        import base64
+        count = 0
+        try:
+            # Clear existing to avoid duplicates
+            db.query(EmployeeFingerprint).filter(EmployeeFingerprint.employee_id == employee_id).delete()
+            
+            for t in user_templates:
+                template_data = getattr(t, 'template', None)
+                if not template_data:
+                    continue
+                # template is usually bytes
+                template_str = base64.b64encode(template_data).decode('utf-8')
+                new_f = EmployeeFingerprint(
+                    employee_id=employee_id,
+                    template_id=getattr(t, 'fid', getattr(t, 'temp_id', 0)),
+                    template_data=template_str,
+                    source_ip=ip
+                )
+                db.add(new_f)
+                count += 1
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error saving fingerprints to DB for {employee_id}: {e}")
+            db.rollback()
+            return 0, str(e)
+        finally:
+            db.close()
+            
+        conn.enable_device()
+        return count, "Success"
+    except Exception as e:
+        logger.error(f"Error downloading fingerprints from machine {ip}: {e}")
+        return 0, str(e)
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def bulk_download_fingerprints_from_machine(ip: str):
+    """Downloads all fingerprint templates from a machine and saves them to the DB, mapping to local employees."""
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        
+        # 1. Get all users to map UID -> UserID (Employee ID)
+        logger.info(f"Bulk sync: Getting user list from {ip}")
+        users = conn.get_users()
+        uid_map = {str(u.uid): u.user_id for u in users}
+        
+        # 2. Get all templates
+        logger.info(f"Bulk sync: Getting template list from {ip}")
+        templates = conn.get_templates()
+        
+        db = SessionLocal()
+        import base64
+        count = 0
+        try:
+            # We'll use a transaction for all updates
+            # Note: We only update fingerprints for users we found on this machine
+            found_uids = set(uid_map.keys())
+            
+            # Clear existing fingerprints for THESE found users to avoid duplicates
+            target_emp_ids = list(uid_map.values())
+            db.query(EmployeeFingerprint).filter(EmployeeFingerprint.employee_id.in_(target_emp_ids)).delete(synchronize_session=False)
+            
+            for t in templates:
+                emp_id = uid_map.get(str(t.uid))
+                if not emp_id:
+                    continue
+                
+                template_data = getattr(t, 'template', None)
+                if not template_data:
+                    continue
+                
+                template_str = base64.b64encode(template_data).decode('utf-8')
+                new_f = EmployeeFingerprint(
+                    employee_id=emp_id,
+                    template_id=getattr(t, 'fid', getattr(t, 'temp_id', 0)),
+                    template_data=template_str,
+                    source_ip=ip
+                )
+                db.add(new_f)
+                count += 1
+            
+            db.commit()
+            logger.info(f"Bulk sync: Successfully saved {count} fingerprints from {ip}")
+        except Exception as e:
+            logger.error(f"Error during bulk fingerprint save: {e}")
+            db.rollback()
+            return 0, str(e)
+        finally:
+            db.close()
+            
+        conn.enable_device()
+        return count, "Success"
+    except Exception as e:
+        logger.error(f"Error in bulk_download_fingerprints: {e}")
+        return 0, str(e)
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
 
 if __name__ == "__main__":
     count = sync_all_machines()

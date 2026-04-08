@@ -20,3 +20,25 @@ export function getDeviceEmployees(ip, page = 1, size = 5000) {
 export function deleteDeviceEmployee(ip, employeeId) {
   return apiFetch(`/devices/${encodeURIComponent(ip)}/employees/${employeeId}`, { method: 'DELETE' })
 }
+
+export function updateEmployeeName(employeeId, newName) {
+  return apiFetch('/devices/update_name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_id: employeeId, new_name: newName })
+  })
+}
+
+export function syncFingerprints(ip, employee_id) {
+  return apiFetch('/devices/sync_fingerprints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ip, employee_id })
+  })
+}
+
+export function syncAllFingerprints(ip) {
+  return apiFetch(`/devices/${encodeURIComponent(ip)}/sync_all_fingerprints`, { method: 'POST' })
+}
+
+export const EXPORT_FINGERPRINTS_URL = BASE + '/devices/export-fingerprints'

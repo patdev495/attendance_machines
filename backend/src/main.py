@@ -8,7 +8,10 @@ from fastapi.responses import HTMLResponse
 from .config import config
 from .routers import attendance, machines, export
 
+from .database import init_db
+
 def create_app() -> FastAPI:
+    init_db()
     app = FastAPI(title="Time Attendance System")
 
     # CORS middleware

@@ -11,7 +11,7 @@ export const useNotificationStore = defineStore('notification', () => {
   })
 
   function add(message, type = 'info', duration = 5000) {
-    const id = Date.now() + Math.random()
+    const id = Math.random().toString(36).substring(2, 11) + Date.now().toString(36)
     notifications.value.push({
       id,
       message,
@@ -33,6 +33,10 @@ export const useNotificationStore = defineStore('notification', () => {
     if (index !== -1) {
       notifications.value.splice(index, 1)
     }
+  }
+
+  function clearByType(type) {
+    notifications.value = notifications.value.filter(n => n.type !== type)
   }
 
   // Helper methods
@@ -60,7 +64,7 @@ export const useNotificationStore = defineStore('notification', () => {
   }
 
   return { 
-    notifications, add, remove, success, error, info, warn,
+    notifications, add, remove, success, error, info, warn, clearByType,
     confirmState, confirm, resolveConfirm
   }
 })

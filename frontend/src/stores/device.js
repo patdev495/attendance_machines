@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { getDevicesCapacity, getDeviceEmployees, deleteDeviceEmployee } from '@/api/devices.js'
+import { 
+  getDevicesCapacity, getDeviceEmployees, deleteDeviceEmployee,
+  updateEmployeeName, syncFingerprints, syncAllFingerprints,
+  EXPORT_FINGERPRINTS_URL
+} from '@/api/devices.js'
 
 export const useDeviceStore = defineStore('device', () => {
-  // Device list
   const devices = ref([])
   const devicesLoading = ref(false)
 
@@ -21,6 +24,11 @@ export const useDeviceStore = defineStore('device', () => {
   // Pagination (client-side)
   const empPage = ref(1)
   const empPageSize = 15
+
+  const exportUrl = EXPORT_FINGERPRINTS_URL
+  const filteredExportUrl = computed(() => {
+    return currentIp.value ? `${exportUrl}?ip=${encodeURIComponent(currentIp.value)}` : exportUrl
+  })
 
   const empTotalPages = computed(() => Math.ceil(filteredEmployees.value.length / empPageSize))
   const pagedEmployees = computed(() => {
@@ -78,11 +86,25 @@ export const useDeviceStore = defineStore('device', () => {
     await loadDeviceEmployees(currentIp.value)
   }
 
+  async function renameEmployee(employeeId, newName) {
+    await updateEmployeeName(employeeId, newName)
+    await loadDeviceEmployees(currentIp.value)
+  }
+
+  async function syncEmployeeFingerprints(employeeId) {
+    return await syncFingerprints(currentIp.value, employeeId)
+  }
+
+  async function bulkSyncFingerprints() {
+    return await syncAllFingerprints(currentIp.value)
+  }
+
   return {
     devices, devicesLoading,
     currentIp, allEmployees, filteredEmployees, employeesLoading, employeeError,
-    searchTerm, statusFilter,
+    searchTerm, statusFilter, exportUrl,
     empPage, empPageSize, empTotalPages, pagedEmployees,
-    fetchDevices, loadDeviceEmployees, applyFilter, deleteEmployee
+    fetchDevices, loadDeviceEmployees, applyFilter, deleteEmployee,
+    renameEmployee, syncEmployeeFingerprints, bulkSyncFingerprints, filteredExportUrl
   }
 })

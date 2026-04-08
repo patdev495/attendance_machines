@@ -14,7 +14,7 @@ export function triggerSync() {
 }
 
 export function getSyncStatus() {
-  return apiFetch('/sync-status')
+  return apiFetch('/sync/status')
 }
 
 export function syncEmployeesExcel(file) {
@@ -24,7 +24,7 @@ export function syncEmployeesExcel(file) {
 }
 
 export function deleteEmployeeFromAllMachines(employeeId) {
-  return apiFetch(`/employees/${employeeId}/machine-data`, { method: 'DELETE' })
+  return apiFetch(`/devices/delete_global/${employeeId}`, { method: 'DELETE' })
 }
 
 export function getDeleteStatus() {

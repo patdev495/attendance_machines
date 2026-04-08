@@ -9,10 +9,20 @@
         </router-link>
         <h2>{{ $t('device.machine') }} <span class="ip-label">{{ ip }}</span></h2>
       </div>
-      <button class="btn btn-primary" @click="device.loadDeviceEmployees(ip)">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.08-7.49"/></svg>
-        {{ $t('device.refresh') }}
-      </button>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-ghost" @click="handleBulkSyncFinger" style="border-color:#fbbf24; color:#fbbf24;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Sync All Fingerprints
+        </button>
+        <a :href="device.filteredExportUrl" class="btn btn-ghost" style="border-color:#2dd4bf; color:#2dd4bf; text-decoration:none;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Excel
+        </a>
+        <button class="btn btn-primary" @click="device.loadDeviceEmployees(ip)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.08-7.49"/></svg>
+          {{ $t('device.refresh') }}
+        </button>
+      </div>
     </div>
 
     <!-- Filters -->
@@ -40,7 +50,12 @@
     <LoadingSpinner v-if="device.employeesLoading" :message="$t('device.connecting')" />
     <div v-else-if="device.employeeError" class="empty-state card" style="color:#f87171;">{{ device.employeeError }}</div>
     <template v-else>
-      <DeviceEmployeeTable :employees="device.pagedEmployees" @delete="handleDelete" />
+      <DeviceEmployeeTable 
+        :employees="device.pagedEmployees" 
+        @delete="handleDelete" 
+        @rename="handleRename"
+        @sync-finger="handleSyncFinger"
+      />
       <PaginationBar
         :currentPage="device.empPage"
         :totalPages="device.empTotalPages"
@@ -71,7 +86,7 @@ onMounted(() => {
 
 async function handleDelete(employeeId) {
   const confirmed = await notification.confirm(
-    t('actions.delete_confirm', { id: employeeId, ip: props.ip }),
+    `Bạn có chắc chắn muốn xóa nhân viên ${employeeId} khỏi máy ${props.ip} KHÔNG?\n(Lưu ý: Hành động này CHỈ xóa dữ liệu trên máy này, không ảnh hưởng đến các máy khác).`,
     t('actions.confirm')
   )
   if (!confirmed) return
@@ -80,6 +95,59 @@ async function handleDelete(employeeId) {
     notification.success(`Successfully deleted employee ${employeeId}`)
   } catch (e) {
     notification.error('Error: ' + e.message)
+  }
+}
+
+async function handleRename(user) {
+  const newName = prompt(`Enter new name for employee ${user.user_id}:`, user.name || '')
+  if (newName === null || newName === user.name) return
+  
+  const notifyId = notification.info(`Updating name to "${newName}" on all machines...`, 0)
+  try {
+    await device.renameEmployee(user.user_id, newName)
+    notification.success(`Name updated successfully for ${user.user_id}`)
+  } catch (e) {
+    notification.error('Rename failed: ' + e.message)
+  } finally {
+    notification.remove(notifyId)
+    // Extra safety: make sure all info types are clear after success/error
+    setTimeout(() => notification.clearByType('info'), 500)
+  }
+}
+
+async function handleSyncFinger(employeeId) {
+  const notifyId = notification.info(`Retrieving fingerprints from machine ${props.ip}...`, 0)
+  try {
+    const res = await device.syncEmployeeFingerprints(employeeId)
+    if (res.count > 0) {
+      notification.success(`Successfully downloaded ${res.count} fingerprint(s) for ${employeeId}`)
+    } else {
+      notification.warn(`No fingerprint found on machine ${props.ip} for ${employeeId}`)
+    }
+  } catch (e) {
+    notification.error('Sync failed: ' + e.message)
+  } finally {
+    notification.remove(notifyId)
+    setTimeout(() => notification.clearByType('info'), 500)
+  }
+}
+
+async function handleBulkSyncFinger() {
+  const confirmed = await notification.confirm(
+    `Are you sure you want to download ALL fingerprints from machine ${props.ip}? This may take a while.`,
+    t('actions.confirm')
+  )
+  if (!confirmed) return
+
+  const notifyId = notification.info(`Bulk retrieving ALL fingerprints from machine ${props.ip}...`, 0)
+  try {
+    const res = await device.bulkSyncFingerprints()
+    notification.success(`Successfully downloaded ${res.count} fingerprint(s) from machine ${props.ip}`)
+  } catch (e) {
+    notification.error('Bulk sync failed: ' + e.message)
+  } finally {
+    notification.remove(notifyId)
+    setTimeout(() => notification.clearByType('info'), 500)
   }
 }
 </script>

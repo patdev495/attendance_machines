@@ -51,8 +51,8 @@ def get_date_range(db: Session = Depends(get_db)):
         sqlfunc.max(AttendanceLog.attendance_time).label("max_dt")
     ).first()
     return {
-        "min": result.min_dt.date() if result.min_dt else None,
-        "max": result.max_dt.date() if result.max_dt else None
+        "min_date": result.min_dt.date() if result.min_dt else None,
+        "max_date": result.max_dt.date() if result.max_dt else None
     }
 
 @router.get("/summary")
@@ -60,8 +60,9 @@ def get_attendance_summary(
     start_date: date = Query(...),
     end_date: date = Query(...),
     employee_id: Optional[str] = Query(None),
+    machine_ip: Optional[str] = Query(None), # Explicitly accept machine_ip filter if needed
     department: Optional[str] = Query(None),
-    status: Optional[str] = Query("Active"),
+    status: Optional[str] = Query(None), # Default to None (All) instead of "Active"
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -112,10 +113,11 @@ def get_attendance_summary(
                    .all()
     
     summary_items = AttendanceService.process_summary_rows(results)
-        
+         
     return {
         "items": summary_items,
-        "total": total,
+        "total_count": total,
+        "total_pages": (total + size - 1) // size,
         "page": page,
         "size": size
     }

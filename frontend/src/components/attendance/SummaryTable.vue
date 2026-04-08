@@ -65,6 +65,7 @@
 <script setup>
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useSyncStore } from '@/stores/sync.js'
+import { useNotificationStore } from '@/stores/notification.js'
 import { useI18n } from 'vue-i18n'
 import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
@@ -81,7 +82,7 @@ function formatTime(dt) {
 
 async function confirmDelete(employeeId) {
   const confirmed = await notification.confirm(
-    t('actions.delete_confirm', { id: employeeId }),
+    `CẢNH BÁO: Bạn đang thực hiện xóa nhân viên ${employeeId} trên TOÀN BỘ 8 MÁY chấm công.\nHành động này không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục không?`,
     t('actions.confirm')
   )
   if (!confirmed) return

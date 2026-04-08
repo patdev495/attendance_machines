@@ -42,6 +42,16 @@ class EmployeeMetadata(Base):
     status = Column(String(20), nullable=True) # 'Active' or 'TV'
     updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
+class EmployeeFingerprint(Base):
+    __tablename__ = "EmployeeFingerprints"
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(String(50), nullable=False, index=True)
+    template_id = Column(Integer, nullable=False) # 0-9
+    template_data = Column(String, nullable=False) # Store as base64 string
+    source_ip = Column(String(50), nullable=True)
+    created_at = Column(DateTime, server_default=func.current_timestamp())
+    updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
