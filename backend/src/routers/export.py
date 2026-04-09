@@ -41,9 +41,17 @@ def download_export():
         filepath = export_status["filename"]
         # Reset status for next use
         export_status["filename"] = None 
+
+    # Manually define filename and headers for maximum compatibility
+    download_name = f"Attendance_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    headers = {
+        "Content-Disposition": f'inline; filename="{download_name}"',
+        "Access-Control-Expose-Headers": "Content-Disposition"
+    }
         
     return FileResponse(
         filepath, 
-        filename=f"Attendance_Export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
         background=BackgroundTask(lambda: os.remove(filepath))
     )

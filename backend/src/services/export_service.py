@@ -264,7 +264,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 adjusted_width = (max_length + 4) * 1.1 
                 sheet.column_dimensions[column_letter].width = min(adjusted_width, 60)
 
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx", prefix="Attendance_Export_Temp_")
         wb.save(tmp.name)
         with export_lock:
             export_status.update({"is_running": False, "progress": 100, "filename": tmp.name, "current_step": "Ready for download"})
