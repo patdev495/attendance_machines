@@ -1,28 +1,48 @@
 # Project State: Time Attendance Machine
 
 ## Current Milestone
-- **Name**: Milestone 1: Refactor & Localize (v1.1)
-- **Status**: Initializing
+- **Name**: v2.0 — Feature-Based Architecture Refactor
+- **Status**: Defining requirements
 - **Progress**: 0%
 
 ## Active Phase
 - **Phase**: None (Initialization in progress)
-- **Goal**: Finish project setup and requirements baseline.
+- **Goal**: Define requirements and roadmap for v2.0
 
 ## Accumulated Context
 
 ### Project Vision
-Establishing a professional, localized attendance system for ZKTeco machines with high-quality, testable code.
+Refactor backend and frontend into vertical feature slices (logs, daily_summary, employees, machines). Add EmployeeLocalRegistry to unify all employee sources. Preserve all existing business logic.
 
-### Roadmap Evolution
-- Project initialized on 2026-04-07.
-- Added Multi-language Support (EN, VI, ZH) as Phase 3.
-- Priority given to Backend Modularization (Phase 1) and Testing (Phase 2).
+### Architecture Target
+```
+backend/src/
+  features/
+    logs/          ← sync_service (log pulling) + raw log endpoints
+    daily_summary/ ← attendance summary + export
+    employees/     ← unified employee registry (EmployeeLocalRegistry)
+    machines/      ← machine management + fingerprints
+  shared/          ← database.py, config.py, utils/
+  main.py          ← thin orchestrator
+
+frontend/src/
+  features/
+    logs/          ← LogsView + components
+    daily_summary/ ← DailySummaryView + components
+    employees/     ← EmployeesView + components
+    machines/      ← DeviceListView + DeviceDetailView
+  shared/          ← layout, i18n, stores, router
+```
 
 ### Key Constraints
 - Windows OS deployment.
-- MSSQL 2008 compatibility.
-- Hardware dependency on ZKTeco (ZK Protocol).
+- MSSQL 2008 compatibility (no modern SQL features).
+- Hardware dependency on ZKTeco (PyZK protocol).
+- `uv pip` for all Python package installs.
+
+### Roadmap Evolution
+- v1.x: Routers/services split completed.
+- v2.0 started 2026-04-09: Full feature-based refactor.
 
 ---
-*Last updated: 2026-04-07*
+*Last updated: 2026-04-09*
