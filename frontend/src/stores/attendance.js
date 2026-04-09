@@ -42,6 +42,7 @@ export const useAttendanceStore = defineStore('attendance', () => {
   const loading = ref(false)
   const error = ref(null)
   const dateRangeLoaded = ref(false)
+  let lastRequestId = 0
 
   async function initDateRange() {
     if (dateRangeLoaded.value) return
@@ -62,10 +63,10 @@ export const useAttendanceStore = defineStore('attendance', () => {
   }
 
   async function loadData(page = 1) {
+    const requestId = ++lastRequestId
     currentPage.value = page
     loading.value = true
     error.value = null
-    items.value = []
 
     const params = {
       page,
@@ -88,13 +89,22 @@ export const useAttendanceStore = defineStore('attendance', () => {
         if (summaryFilters.onlyMissing) params.only_missing = 'true'
         data = await getAttendanceSummary(params)
       }
-      items.value = data.items
-      totalCount.value = data.total_count
-      totalPages.value = data.total_pages
+      
+      // Only apply if this is still the most recent request
+      if (requestId === lastRequestId) {
+        items.value = data.items
+        totalCount.value = data.total_count
+        totalPages.value = data.total_pages
+      }
     } catch (e) {
-      error.value = e.message
+      if (requestId === lastRequestId) {
+        error.value = e.message
+        items.value = []
+      }
     } finally {
-      loading.value = false
+      if (requestId === lastRequestId) {
+        loading.value = false
+      }
     }
   }
 
@@ -104,9 +114,13 @@ export const useAttendanceStore = defineStore('attendance', () => {
     loadData(1)
   }
 
-  function setView(view) {
+  function setView(view, load = true) {
+    if (currentView.value !== view) {
+      items.value = [] // Clear incompatible data immediately
+      totalCount.value = 0
+    }
     currentView.value = view
-    loadData(1)
+    if (load) loadData(1)
   }
 
   return {

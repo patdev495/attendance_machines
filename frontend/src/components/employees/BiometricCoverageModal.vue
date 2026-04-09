@@ -1,70 +1,78 @@
 <template>
-  <Transition name="fade">
-    <div v-if="isOpen" class="modal-overlay" @click.self="close">
-      <Transition name="scale">
-        <div v-if="isOpen" class="modal-content glass shadow-2xl">
-          <div class="modal-header">
-            <div class="header-left">
-              <div class="icon-pulse bg-indigo-500/20">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"/><circle cx="7" cy="12" r=".5"/><path d="M12 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"/><circle cx="17" cy="12" r=".5"/><path d="M22 12c0-2.8-2.2-5-5-5s-5 2.2-5 5 2.2 5 5 5 5-2.2 5-5Z"/></svg>
-              </div>
-              <div class="title-stack">
-                <span class="eyebrow">{{ $t('biometric.realtime_scan') }}</span>
-                <h3>{{ $t('biometric.coverage_title', { id: employeeId }) }}</h3>
-              </div>
-            </div>
-            <button class="btn-close-circle" :title="$t('export.cancel')" @click="close">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-
-          <div class="modal-body custom-scrollbar">
-            <div v-if="loading" class="loading-container">
-              <div class="dna-spinner"></div>
-              <p class="loading-text">{{ $t('biometric.scanning') }}</p>
-            </div>
-            
-            <div v-else class="status-list">
-              <div v-for="m in sortedResults" :key="m.ip" class="status-card" :class="m.status.toLowerCase()">
-                <div class="card-glow"></div>
-                <div class="machine-meta">
-                  <span class="machine-label">Machine Terminal</span>
-                  <span class="machine-ip">{{ m.ip }}</span>
+  <Teleport to="body">
+    <Transition name="fade">
+      <div v-if="isOpen" class="modal-overlay" @click.self="close">
+        <Transition name="scale">
+          <div v-if="isOpen" class="modal-content glass shadow-2xl">
+            <div class="modal-header">
+              <div class="header-left">
+                <div class="icon-pulse bg-indigo-500/20">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"/><circle cx="7" cy="12" r=".5"/><path d="M12 12c0-2.8 2.2-5 5-5s5 2.2 5 5-2.2 5-5 5-5-2.2-5-5Z"/><circle cx="17" cy="12" r=".5"/><path d="M22 12c0-2.8-2.2-5-5-5s-5 2.2-5 5 2.2 5 5 5 5-2.2 5-5Z"/></svg>
                 </div>
-                
-                <div class="badges-area">
-                  <template v-if="m.status === 'Offline'">
-                    <div class="badge-pill error">
-                      <div class="dot red-pulse"></div>
-                      {{ $t('biometric.terminal_offline') }}
-                    </div>
-                  </template>
-                  <template v-else>
-                    <div class="badge-pill" :class="m.has_finger ? 'success' : (m.has_user ? 'warning' : 'info')">
-                      <div class="dot" :class="{ 'green-glow': m.has_finger }"></div>
-                      {{ m.has_finger ? $t('biometric.template_ok') : (m.has_user ? $t('biometric.no_template') : $t('biometric.not_registered')) }}
-                    </div>
-                  </template>
+                <div class="title-stack">
+                  <span class="eyebrow">{{ $t('biometric.realtime_scan') }}</span>
+                  <h3>{{ $t('biometric.coverage_title', { id: employeeId }) }}</h3>
                 </div>
               </div>
+              <button class="btn-close-circle" :title="$t('export.cancel')" @click="close">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
+
+            <div class="modal-body custom-scrollbar">
+              <div v-if="loading" class="loading-container">
+                <div class="dna-spinner"></div>
+                <p class="loading-text">{{ $t('biometric.scanning') }}</p>
+              </div>
+              
+              <div v-else class="status-list">
+                <div v-for="m in sortedResults" :key="m.ip" class="status-card" :class="m.status.toLowerCase()">
+                  <div class="card-glow"></div>
+                  <div class="machine-meta">
+                    <span class="machine-label">Machine Terminal</span>
+                    <a :href="router.resolve({ name: 'device-detail', params: { ip: m.ip } }).href" target="_blank" class="machine-ip machine-link" title="Quản lý thiết bị này">
+                      {{ m.ip }}
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left: 4px; opacity: 0.6;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    </a>
+                  </div>
+                  
+                  <div class="badges-area">
+                    <template v-if="m.status === 'Offline'">
+                      <div class="badge-pill error">
+                        <div class="dot red-pulse"></div>
+                        {{ $t('biometric.terminal_offline') }}
+                      </div>
+                    </template>
+                    <template v-else>
+                      <div class="badge-pill" :class="m.has_finger ? 'success' : (m.has_user ? 'warning' : 'info')">
+                        <div class="dot" :class="{ 'green-glow': m.has_finger }"></div>
+                        {{ m.has_finger ? $t('biometric.template_ok') : (m.has_user ? $t('biometric.no_template') : $t('biometric.not_registered')) }}
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn-refresh" :disabled="loading" @click="fetchCoverage">
+                <svg :class="{ 'spin': loading }" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                {{ loading ? $t('device.checking') : $t('biometric.refresh') }}
+              </button>
             </div>
           </div>
-
-          <div class="modal-footer">
-            <button class="btn-refresh" :disabled="loading" @click="fetchCoverage">
-              <svg :class="{ 'spin': loading }" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              {{ loading ? $t('device.checking') : $t('biometric.refresh') }}
-            </button>
-          </div>
-        </div>
-      </Transition>
-    </div>
-  </Transition>
+        </Transition>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <script setup>
 import { ref, watch, computed } from 'vue'
 import { getBiometricCoverage } from '@/api/employees.js'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
 
 const props = defineProps({
   isOpen: Boolean,
@@ -239,6 +247,18 @@ function close() {
   font-weight: 600;
   color: #e2e8f0;
   font-size: 0.95rem;
+}
+
+.machine-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.machine-link:hover {
+  color: #818cf8;
 }
 
 .badge-pill {

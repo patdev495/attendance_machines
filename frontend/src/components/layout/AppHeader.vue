@@ -1,56 +1,20 @@
 <template>
   <header class="site-header">
     <div class="header-left">
-      <router-link to="/" class="site-title">{{ $t('nav.title') }}</router-link>
+      <a href="#" class="site-title" @click.prevent="goHome">{{ $t('nav.title') }}</a>
       <p class="tagline">Time Attendance Management System</p>
     </div>
     <nav class="header-actions">
       <!-- Language Switcher -->
-      <select v-model="currentLang" @change="changeLanguage">
+      <select v-model="currentLang" @change="changeLanguage" id="langSwitcher" name="lang">
         <option value="vi">🇻🇳 Tiếng Việt</option>
         <option value="en">🇬🇧 English</option>
         <option value="zh">🇨🇳 中文</option>
       </select>
-
-      <!-- Export mode -->
-      <select id="exportMode" v-model="exportMode">
-        <option value="time">{{ $t('export.time') }}</option>
-        <option value="hours">{{ $t('export.hours') }}</option>
-        <option value="both">{{ $t('export.both') }}</option>
-      </select>
-
-      <!-- Export Excel -->
-      <button v-if="!exportStore.isRunning" class="btn btn-ghost" id="exportExcelBtn" @click="handleExport">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        {{ $t('export.btn') }}
-      </button>
-      <button v-else class="btn btn-ghost" @click="exportStore.cancel" style="border-color:#f87171; color:#f87171;">
-        <span class="spin-icon">⟳</span>
-        {{ $t('export.cancel') }}({{ exportStore.progress }}%)
-      </button>
-
-      <!-- Sync Excel -->
-      <button class="btn btn-ghost" id="excelSyncBtn" :disabled="syncStore.excelSyncRunning" @click="triggerExcelPicker" style="border-color:#2dd4bf; color:#2dd4bf;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        {{ syncStore.excelSyncRunning ? `${$t('sync.syncing')} (${syncStore.excelSyncProgress}%)` : $t('sync.excel') }}
-      </button>
-      <input ref="excelInput" type="file" accept=".xlsx,.xls" style="display:none" @change="onExcelSelected" />
-
-      <!-- Device Status → navigate to /devices -->
-      <router-link to="/devices" class="btn btn-ghost" style="border-color:#8b5cf6; color:#a78bfa;">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        {{ $t('device.status') }}
-      </router-link>
-
-      <!-- Sync Machines -->
-      <button class="btn btn-primary" id="syncBtn" :disabled="syncStore.syncRunning" @click="syncStore.startSync()">
-        <span v-if="syncStore.syncRunning" class="spin-icon">⟳</span>
-        {{ syncStore.syncRunning ? $t('sync.syncing') + '...' : $t('sync.machines') }}
-      </button>
     </nav>
   </header>
 
-  <!-- Status banners -->
+  <!-- Status banners (Intelligent slimmest version) -->
   <div v-if="syncStore.syncRunning" class="status-banner sync-banner">{{ syncStore.syncMessage }}</div>
   <div v-if="syncStore.deleteRunning" class="status-banner delete-banner">{{ syncStore.deleteMessage }}</div>
   
@@ -78,21 +42,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
 import { useSyncStore } from '@/stores/sync.js'
-import { useAttendanceStore } from '@/stores/attendance.js'
 import { useExportStore } from '@/stores/export.js'
-import { useNotificationStore } from '@/stores/notification.js'
+import { useAttendanceStore } from '@/stores/attendance.js'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from '@/i18n/index.js'
+import { useRouter } from 'vue-router'
 
 const syncStore = useSyncStore()
-const attendanceStore = useAttendanceStore()
 const exportStore = useExportStore()
-const notification = useNotificationStore()
-const exportMode = ref('time')
-const excelInput = ref(null)
-const syncingExcel = ref(false)
+const attendanceStore = useAttendanceStore()
+const router = useRouter()
 
 const { locale } = useI18n()
 const currentLang = ref(locale.value)
@@ -101,29 +62,9 @@ function changeLanguage() {
   setLanguage(currentLang.value)
 }
 
-function handleExport() {
-  const { startDate, endDate } = attendanceStore.filters
-  if (!startDate || !endDate) { 
-    notification.warn('Please select a date range first.')
-    return 
-  }
-  exportStore.start(startDate, endDate, exportMode.value)
-}
-
-function triggerExcelPicker() {
-  excelInput.value.value = ''
-  excelInput.value.click()
-}
-
-async function onExcelSelected(e) {
-  const file = e.target.files[0]
-  if (!file) return
-  try {
-    await syncStore.syncExcelFile(file)
-    attendanceStore.loadData(1)
-  } catch (err) {
-    console.error('Excel sync failed', err)
-  }
+function goHome() {
+  attendanceStore.setView('raw')
+  router.push('/')
 }
 </script>
 
@@ -132,32 +73,42 @@ async function onExcelSelected(e) {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 28px clamp(16px, 3vw, 40px) 20px;
+  padding: 16px clamp(16px, 3vw, 40px);
   border-bottom: 1px solid var(--border);
-  background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(12px);
-  position: sticky;
-  top: 0;
-  z-index: 100;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(10px);
 }
 .site-title {
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: white;
   text-decoration: none;
-  transition: color 0.2s;
   letter-spacing: -0.3px;
+  cursor: pointer;
+  transition: color 0.2s;
 }
-.site-title:hover { color: var(--accent); }
-.tagline { font-size: 0.83rem; color: var(--text-muted); margin-top: 2px; }
-.header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-select { width: auto; padding: 10px 14px; }
+.site-title:hover { color: var(--primary); }
+
+.tagline { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+.header-actions { display: flex; gap: 10px; align-items: center; }
+
+select { 
+  padding: 6px 10px; 
+  font-size: 0.85rem; 
+  background: #1e293b; 
+  color: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+option {
+  background: #1e293b;
+  color: white;
+}
 
 .status-banner {
-  padding: 10px 24px;
-  font-size: 0.9rem;
+  padding: 8px 24px;
+  font-size: 0.85rem;
   text-align: center;
 }
 .sync-banner {
@@ -170,10 +121,8 @@ select { width: auto; padding: 10px 14px; }
   border-bottom: 1px solid var(--danger);
   color: #f87171;
 }
-.spin-icon { display: inline-block; animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 
 .export-banner-content { display: flex; align-items: center; justify-content: center; gap: 12px; max-width: 600px; margin: 0 auto; }
-.progress-container { flex: 1; height: 8px; background: rgba(0,0,0,0.2); border-radius: 4px; overflow: hidden; }
+.progress-container { flex: 1; height: 6px; background: rgba(0,0,0,0.2); border-radius: 3px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--primary); transition: width 0.3s ease; }
 </style>

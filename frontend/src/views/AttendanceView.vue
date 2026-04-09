@@ -1,15 +1,11 @@
 <template>
   <div class="anim-up">
-    <!-- View Toggle -->
-    <div class="view-toggle">
-      <button :class="['toggle-btn', store.currentView === 'raw' ? 'active' : '']" @click="store.setView('raw')">{{ $t('attendance.raw_logs') }}</button>
-      <button :class="['toggle-btn', store.currentView === 'summary' ? 'active' : '']" @click="store.setView('summary')">{{ $t('attendance.daily_summary') }}</button>
-    </div>
-
     <AttendanceFilters />
 
-    <RawLogsTable v-if="store.currentView === 'raw'" />
-    <SummaryTable v-else />
+    <transition name="slide-up" mode="out-in">
+      <RawLogsTable v-if="store.currentView === 'raw'" :key="'raw'" />
+      <SummaryTable v-else :key="'summary'" />
+    </transition>
   </div>
 </template>
 
@@ -30,32 +26,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.view-toggle {
-  display: flex;
-  gap: 2px;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 4px;
-  width: fit-content;
-  margin-bottom: 16px;
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s ease-out;
 }
-.toggle-btn {
-  padding: 8px 24px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.9rem;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
+.slide-up-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
 }
-.toggle-btn.active {
-  background: var(--primary);
-  color: white;
-  box-shadow: 0 4px 15px rgba(99,102,241,0.3);
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
 }
-.toggle-btn:not(.active):hover { color: white; }
 </style>
