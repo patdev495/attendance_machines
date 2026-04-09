@@ -332,6 +332,9 @@ def sync_employees_from_excel(file_path=config.EXCEL_FILE, file_bytes=None):
             excel_sync_status["current_step"] = f"Processing {total_rows} employees..."
 
         db = SessionLocal()
+        # OPTIMIZATION: Fetch all existing employees once to avoid N+1 queries
+        existing_employees = {e.employee_id: e for e in db.query(EmployeeMetadata).all()}
+        
         count = 0
         for idx, row in df.iterrows():
             emp_id = str(row['EMP_ID'])
@@ -340,11 +343,13 @@ def sync_employees_from_excel(file_path=config.EXCEL_FILE, file_bytes=None):
             # Map TV to Resigned status
             status = 'TV' if shift_val == 'TV' else 'Active'
             
-            # Try to find existing employee
-            employee = db.query(EmployeeMetadata).filter(EmployeeMetadata.employee_id == emp_id).first()
+            # Use dictionary lookup instead of DB query
+            employee = existing_employees.get(emp_id)
             if not employee:
                 employee = EmployeeMetadata(employee_id=emp_id)
                 db.add(employee)
+                # Add to dictionary so we don't duplicate if same ID appears twice in Excel
+                existing_employees[emp_id] = employee
             
             # Update values
             if shift_val != 'TV':
