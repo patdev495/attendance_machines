@@ -1,13 +1,23 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import AttendanceView from '@/views/AttendanceView.vue'
+import RawLogsView from '@/views/RawLogsView.vue'
+import DailySummaryView from '@/views/DailySummaryView.vue'
 import DeviceListView from '@/views/DeviceListView.vue'
 import DeviceDetailView from '@/views/DeviceDetailView.vue'
 
 const routes = [
   {
     path: '/',
-    name: 'attendance',
-    component: AttendanceView
+    redirect: '/raw-logs'
+  },
+  {
+    path: '/raw-logs',
+    name: 'raw-logs',
+    component: RawLogsView
+  },
+  {
+    path: '/summary',
+    name: 'summary',
+    component: DailySummaryView
   },
   {
     path: '/devices',

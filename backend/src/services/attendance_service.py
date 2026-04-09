@@ -5,11 +5,20 @@ from utils.stats_utils import compute_day_stats
 
 class AttendanceService:
     @staticmethod
-    def process_summary_rows(results: List[Any]) -> List[Dict[str, Any]]:
+    def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
         """
         Transform raw grouped SQLAlchemy rows into a list of summary dictionaries.
         Each row is expected to have: first_tap, last_tap, tap_count, work_date, shift, department.
+        If rules_pool is not provided, it will be fetched once inside this function.
         """
+        if rules_pool is None:
+            from database import SessionLocal, ShiftRule
+            db = SessionLocal()
+            try:
+                rules_pool = db.query(ShiftRule).all()
+            finally:
+                db.close()
+
         summary_items = []
         for row in results:
             first      = row.first_tap
@@ -26,7 +35,7 @@ class AttendanceService:
 
             if count > 1 and first != last:
                 work_hours, _, _, minutes_late, minutes_early_lv = compute_day_stats(
-                    first, last, w_date, department, row_shift
+                    first, last, w_date, department, row_shift, rules_pool=rules_pool
                 )
             else:
                 note = "Missing Check-in/out (Only 1 tap)"

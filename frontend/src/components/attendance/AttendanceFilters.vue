@@ -23,7 +23,7 @@
         <label for="endDateInput">{{ $t('attendance.filters.date_to') }}</label>
         <input id="endDateInput" name="end_date" type="date" v-model="store.filters.endDate" @change="store.loadData(1)" />
       </div>
-      <div class="filter-group">
+      <div class="filter-group" v-if="store.currentView !== 'raw'">
         <label for="statusSelect">{{ $t('attendance.filters.status') }}</label>
         <select id="statusSelect" name="status" v-model="store.filters.status" @change="store.loadData(1)">
           <option value="">{{ $t('attendance.filters.all_status') }}</option>

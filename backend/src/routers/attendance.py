@@ -60,9 +60,13 @@ def get_attendance_summary(
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     employee_id: Optional[str] = Query(None),
-    machine_ip: Optional[str] = Query(None), # Explicitly accept machine_ip filter if needed
+    machine_ip: Optional[str] = Query(None),
+    shift: Optional[str] = Query(None),
+    min_hours: Optional[float] = Query(None),
+    max_hours: Optional[float] = Query(None),
+    only_missing: Optional[bool] = Query(False),
     department: Optional[str] = Query(None),
-    status: Optional[str] = Query(None), # Default to None (All) instead of "Active"
+    status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
@@ -74,6 +78,7 @@ def get_attendance_summary(
         AttendanceLog.id,
         AttendanceLog.attendance_time,
         AttendanceLog.employee_id,
+        AttendanceLog.machine_ip,
         EmployeeMetadata.shift,
         EmployeeMetadata.department,
         EmployeeMetadata.status,
@@ -98,23 +103,59 @@ def get_attendance_summary(
         query = query.filter(base_calc_sub.c.work_date >= start_date)
     if end_date:
         query = query.filter(base_calc_sub.c.work_date <= end_date)
-    
     if employee_id:
         query = query.filter(base_calc_sub.c.employee_id == employee_id)
+    if machine_ip:
+        query = query.filter(base_calc_sub.c.machine_ip == machine_ip)
+    if shift:
+        query = query.filter(base_calc_sub.c.shift == shift)
     if department:
         query = query.filter(base_calc_sub.c.department == department)
     if status and status != 'All':
         query = query.filter(base_calc_sub.c.status == status)
 
-    total = query.group_by(base_calc_sub.c.employee_id, base_calc_sub.c.work_date, base_calc_sub.c.shift, base_calc_sub.c.department, base_calc_sub.c.status).count()
-    
-    results = query.group_by(base_calc_sub.c.employee_id, base_calc_sub.c.work_date, base_calc_sub.c.shift, base_calc_sub.c.department, base_calc_sub.c.status) \
-                   .order_by(desc(base_calc_sub.c.work_date), base_calc_sub.c.employee_id) \
-                   .offset((page - 1) * size) \
-                   .limit(size) \
-                   .all()
-    
-    summary_items = AttendanceService.process_summary_rows(results)
+    # Initial grouping and sorting
+    query = query.group_by(
+        base_calc_sub.c.employee_id, 
+        base_calc_sub.c.work_date, 
+        base_calc_sub.c.shift, 
+        base_calc_sub.c.department, 
+        base_calc_sub.c.status
+    ).order_by(desc(base_calc_sub.c.work_date), base_calc_sub.c.employee_id)
+
+    # Performance optimization: Fetch rules pool once
+    from database import ShiftRule
+    rules_pool = db.query(ShiftRule).all()
+
+    # To handle min_hours and only_missing filters correctly with pagination, 
+    # we process the full filtered set if those filters are active, or slice directly if not.
+    if min_hours or max_hours or only_missing:
+        all_results = query.all()
+        processed_items = AttendanceService.process_summary_rows(all_results, rules_pool=rules_pool)
+        
+        filtered_items = []
+        for item in processed_items:
+            # Apply only_missing filter
+            if only_missing and not (item['tap_count'] < 2 or item['note']):
+                continue
+            
+            # Apply work hours filter
+            wh = item['work_hours'] or 0.0
+            if min_hours and wh < min_hours:
+                continue
+            if max_hours and wh > max_hours:
+                continue
+                
+            filtered_items.append(item)
+            
+        total = len(filtered_items)
+        start_idx = (page - 1) * size
+        end_idx = start_idx + size
+        summary_items = filtered_items[start_idx:end_idx]
+    else:
+        total = query.count()
+        results = query.offset((page - 1) * size).limit(size).all()
+        summary_items = AttendanceService.process_summary_rows(results, rules_pool=rules_pool)
          
     return {
         "items": summary_items,

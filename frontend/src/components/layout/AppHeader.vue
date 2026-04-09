@@ -63,8 +63,7 @@ function changeLanguage() {
 }
 
 function goHome() {
-  attendanceStore.setView('raw')
-  router.push('/')
+  router.push('/raw-logs')
 }
 </script>
 
