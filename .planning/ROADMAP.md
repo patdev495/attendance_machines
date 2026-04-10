@@ -79,11 +79,11 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 - **UI hint**: yes
 
 **Plans:**
-- [ ] **4-01** — Backend `features/employees/service.py`: Logic build `EmployeeLocalRegistry` từ 3 nguồn: (1) đọc `EmployeeMetadata` → upsert với `excel_synced`, (2) query machine users → upsert với `machine_only` nếu không có trong Excel, (3) query `AttendanceLogs` distinct employee_id → upsert với `log_only` nếu không có trong 2 nguồn trên. Extract `delete_user_from_all_machines()`, `update_user_name_all_machines()`, `get_biometric_coverage()` từ `sync_service.py`.
-- [ ] **4-02** — Backend `features/employees/router.py`: `GET /api/employees` (paginated, filter by source_status + search), `POST /api/employees/rebuild-registry` (rebuild EmployeeLocalRegistry từ 3 nguồn), `DELETE /api/employees/{id}` (xóa khỏi tất cả máy, background task), `GET /api/employees/{id}/delete-status`, `PUT /api/employees/{id}/name` (đổi tên), `GET /api/employees/{id}/biometric-coverage`. Schema Pydantic cho EmployeeLocalRegistry.
-- [ ] **4-03** — Frontend `features/employees/api.js`: `getEmployees(filters)`, `rebuildRegistry()`, `deleteEmployee(id)`, `getDeleteStatus(id)`, `updateName(id, name)`, `getBiometricCoverage(id)`.
-- [ ] **4-04** — Frontend `features/employees/EmployeesView.vue` + `EmployeesTable.vue`: Danh sách nhân viên có cột `source_status` badge (màu khác nhau: Excel=xanh, Machine=cam, Log-only=xám). Filter bar: search by ID/name, filter by source_status. Actions: Rename, Delete (với confirm modal), Biometric Coverage.
-- [ ] **4-05** — Frontend: Reuse `BiometricCoverageModal.vue` từ `components/employees/` → move vào `features/employees/components/`. Wiring vào EmployeesTable action.
+- [x] **4-01** — Backend `features/employees/service.py`: Logic build `EmployeeLocalRegistry` từ 3 nguồn: (1) đọc `EmployeeMetadata` & upsert với `excel_synced`, (2) query machine users & upsert với `machine_only` nếu không có trong Excel, (3) query `AttendanceLogs` distinct employee_id & upsert với `log_only` nếu không có trong 2 nguồn trên. Extract `delete_user_from_all_machines()`, `update_user_name_all_machines()`, `get_biometric_coverage()` từ `sync_service.py`.
+- [x] **4-02** — Backend `features/employees/router.py`: `GET /api/employees` (paginated, filter by source_status + search), `POST /api/employees/rebuild-registry` (rebuild EmployeeLocalRegistry từ 3 nguồn), `DELETE /api/employees/{id}` (xóa khỏi tất cả máy, background task), `GET /api/employees/{id}/delete-status`, `PUT /api/employees/{id}/name` (đổi tên), `GET /api/employees/{id}/biometric-coverage`. Schema Pydantic cho EmployeeLocalRegistry.
+- [x] **4-03** — Frontend `features/employees/api.js`: `getEmployees(filters)`, `rebuildRegistry()`, `deleteEmployee(id)`, `getDeleteStatus(id)`, `updateName(id, name)`, `getBiometricCoverage(id)`.
+- [x] **4-04** — Frontend `features/employees/EmployeesView.vue` + `EmployeesTable.vue`: Danh sách nhân viên có cột `source_status` badge (màu khác nhau: Excel=xanh, Machine=cam, Log-only=xám). Filter bar: search by ID/name, filter by source_status. Actions: Rename, Delete (với confirm modal), Biometric Coverage.
+- [x] **4-05** — Frontend: Reuse `BiometricCoverageModal.vue` từ `components/employees/` & move vào `features/employees/components/`. Wiring vào EmployeesTable action.
 
 **Success criteria:**
 1. Employee list hiển thị đủ 3 loại nhân viên với status badge phân biệt
@@ -142,7 +142,7 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 | 1 | Foundation & DB Schema | Scaffold structure + EmployeeLocalRegistry | ARCH-01–04 | Medium |
 | 2 | Log Management | 4/4 | Complete   | 2026-04-09 |
 | 3 | Daily Summary | 5/5 | Complete   | 2026-04-09 |
-| 4 | Employee Management | Unified registry + operations | EMP-01–08 | High |
+| 4 | Employee Management | 5/5 | Complete   | 2026-04-10 |
 | 5 | Machine Management | Feature-slice machine ops | MCH-01–08 | Medium |
 | 6 | Cleanup & Wiring | Remove old code, final integration | ARCH-04 | Low |
 

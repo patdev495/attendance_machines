@@ -3,11 +3,11 @@
 ## Current Milestone
 - **Name**: v2.0 — Feature-Based Architecture Refactor
 - **Status**: Active
-- **Progress**: 50% (3/6 phases complete)
+- **Progress**: 66% (4/6 phases complete)
 
 ## Active Phase
-- **Phase**: Phase 4: Employee Management Feature
-- **Goal**: Registry nhân viên thống nhất — Excel + Machine + Log-only. Status badge. Xóa/đổi tên/biometric.
+- **Phase**: Phase 5: Machine Management Feature
+- **Goal**: Refactor toàn bộ machine management vào feature slice & giữ nguyên 100% behavior hiện tại.
 
 ## Accumulated Context
 
@@ -45,4 +45,4 @@ frontend/src/
 - v2.0 started 2026-04-09: Full feature-based refactor.
 
 ---
-*Last updated: 2026-04-09*
+*Last updated: 2026-04-10*
