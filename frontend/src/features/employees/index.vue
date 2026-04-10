@@ -36,6 +36,11 @@
         <option value="machine_only">Machine Only</option>
         <option value="log_only">Log Only</option>
       </select>
+      <select v-model="shiftFilter" @change="fetchEmployees">
+        <option value="">All Shifts</option>
+        <option value="D">Day</option>
+        <option value="N">Night</option>
+      </select>
     </div>
 
     <EmployeesTable 
@@ -71,6 +76,7 @@ import { dailySummaryApi } from '@/features/daily_summary/api'
 const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
+const shiftFilter = ref('')
 
 const fileInput = ref(null)
 
@@ -129,6 +135,7 @@ const fetchEmployees = async () => {
     const filters = {}
     if (searchQuery.value) filters.search = searchQuery.value
     if (statusFilter.value) filters.source_status = statusFilter.value
+    if (shiftFilter.value) filters.shift = shiftFilter.value
     
     employees.value = await employeesApi.getEmployees(filters)
   } catch (err) {

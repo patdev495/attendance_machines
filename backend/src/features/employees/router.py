@@ -43,6 +43,7 @@ def list_employees(
     limit: int = 100, 
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
+    shift: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(EmployeeLocalRegistry)
@@ -52,6 +53,9 @@ def list_employees(
         
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
+        
+    if shift:
+        query = query.filter(EmployeeLocalRegistry.shift == shift)
         
     return query.order_by(EmployeeLocalRegistry.employee_id).offset(skip).limit(limit).all()
 
