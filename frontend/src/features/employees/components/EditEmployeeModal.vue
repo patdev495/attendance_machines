@@ -45,18 +45,9 @@
             <div class="modal-footer">
               <button class="btn-cancel" @click="close" :disabled="loading">Cancel</button>
               <button class="btn-save" @click="handleSave" :disabled="loading">
-                <span v-if="loading">Saving & Syncing...</span>
+                <span v-if="loading">Saving...</span>
                 <span v-else>Save Changes</span>
               </button>
-            </div>
-            
-            <div v-if="saveResult" class="save-result">
-              <h4>Sync Results</h4>
-              <ul>
-                <li v-for="(res, ip) in saveResult" :key="ip">
-                  {{ ip }}: {{ res }}
-                </li>
-              </ul>
             </div>
           </div>
         </Transition>
@@ -80,7 +71,6 @@ const props = defineProps({
 const emit = defineEmits(['close', 'saved'])
 
 const loading = ref(false)
-const saveResult = ref(null)
 
 const formData = ref({
   emp_name: '',
@@ -97,7 +87,6 @@ watch(() => props.isOpen, (newVal) => {
       group_name: props.employee.group_name || '',
       shift: props.employee.shift || ''
     }
-    saveResult.value = null
   }
 })
 
@@ -105,19 +94,15 @@ const handleSave = async () => {
   if (!props.employee.employee_id) return
   loading.value = true
   try {
-    const res = await employeesApi.updateEmployeeName(
+    await employeesApi.updateEmployeeName(
       props.employee.employee_id,
       formData.value.emp_name,
       formData.value.department,
       formData.value.group_name,
       formData.value.shift
     )
-    saveResult.value = res.results
-    // Delay closing to show results briefly
-    setTimeout(() => {
-      emit('saved')
-      close()
-    }, 2000)
+    emit('saved')
+    close()
   } catch (err) {
     console.error(err)
     alert('Failed to save changes')
@@ -254,21 +239,7 @@ button {
   cursor: not-allowed;
 }
 
-.save-result {
-  padding: 0 1.5rem 1.5rem;
-  font-size: 0.85rem;
-  color: #a7f3d0;
-}
 
-.save-result h4 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
-}
-
-.save-result ul {
-  margin: 0;
-  padding-left: 1.5rem;
-}
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }

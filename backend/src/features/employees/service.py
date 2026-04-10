@@ -111,11 +111,4 @@ def update_employee_info(employee_id: str, db_name: str, db: Session):
         
     db.commit()
     
-    # 3. Update machines
-    ips = get_machine_list()
-    results = {}
-    for ip in ips:
-        res = update_user_name_on_machine(ip, employee_id, db_name)
-        results[ip] = res
-        
-    return results
+    return {"status": "success", "message": "Updated in DB"}
