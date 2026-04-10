@@ -5,48 +5,48 @@
         <Transition name="scale">
           <div v-if="isOpen" class="modal-content glass shadow-2xl">
             <div class="modal-header">
-              <h3>Edit Employee</h3>
+              <h3>{{ $t('employees.edit_title') }}</h3>
               <button class="btn-close" @click="close">×</button>
             </div>
 
             <div class="modal-body">
               <form @submit.prevent="handleSave">
                 <div class="form-group">
-                  <label>ID</label>
+                  <label>{{ $t('employees.id_label') }}</label>
                   <input type="text" :value="employee.employee_id" disabled class="input-disabled" />
                 </div>
                 
                 <div class="form-group">
-                  <label>Name</label>
-                  <input type="text" v-model="formData.emp_name" placeholder="Leave empty if N/A" />
+                  <label>{{ $t('employees.name_label') }}</label>
+                  <input type="text" v-model="formData.emp_name" :placeholder="$t('employees.search_placeholder')" />
                 </div>
                 
                 <div class="form-group">
-                  <label>Department</label>
-                  <input type="text" v-model="formData.department" placeholder="Department" />
+                  <label>{{ $t('employees.dept_label') }}</label>
+                  <input type="text" v-model="formData.department" :placeholder="$t('employees.dept_label')" />
                 </div>
                 
                 <div class="form-group">
-                  <label>Group</label>
-                  <input type="text" v-model="formData.group_name" placeholder="Group" />
+                  <label>{{ $t('employees.group_label') }}</label>
+                  <input type="text" v-model="formData.group_name" :placeholder="$t('employees.group_label')" />
                 </div>
                 
                 <div class="form-group">
-                  <label>Shift</label>
+                  <label>{{ $t('employees.shift_label') }}</label>
                   <select v-model="formData.shift">
                     <option value="">N/A</option>
-                    <option value="D">Day</option>
-                    <option value="N">Night</option>
+                    <option value="D">{{ $t('attendance.filters.night_shift') }}</option>
+                    <option value="N">{{ $t('attendance.filters.day_shift') }}</option>
                   </select>
                 </div>
               </form>
             </div>
 
             <div class="modal-footer">
-              <button class="btn-cancel" @click="close" :disabled="loading">Cancel</button>
+              <button class="btn-cancel" @click="close" :disabled="loading">{{ $t('common.cancel') }}</button>
               <button class="btn-save" @click="handleSave" :disabled="loading">
-                <span v-if="loading">Saving...</span>
-                <span v-else>Save Changes</span>
+                <span v-if="loading">{{ $t('common.loading') }}</span>
+                <span v-else>{{ $t('employees.save_changes') }}</span>
               </button>
             </div>
           </div>
@@ -59,6 +59,11 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { employeesApi } from '../api.js'
+import { useNotificationStore } from '@/stores/notification'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+const notify = useNotificationStore()
 
 const props = defineProps({
   isOpen: Boolean,
@@ -101,13 +106,14 @@ const handleSave = async () => {
       formData.value.group_name,
       formData.value.shift
     )
+    notify.success(t('employees.updated_success'))
+    loading.value = false
     emit('saved')
     close()
   } catch (err) {
     console.error(err)
-    alert('Failed to save changes')
-  } finally {
     loading.value = false
+    notify.error(t('common.error') + ': ' + (err.response?.data?.detail || err.message))
   }
 }
 

@@ -14,7 +14,7 @@ from .schema import (
     BiometricCoverageOut
 )
 from .service import update_registry, delete_user_from_hardware, update_employee_info
-from sync_service import get_biometric_coverage
+from features.machines.service import get_biometric_coverage
 
 router = APIRouter(prefix="/api/employees", tags=["Employees"])
 
@@ -38,6 +38,8 @@ def run_update_registry(db: Session):
     finally:
         registry_update_state["is_running"] = False
 
+from sqlalchemy import cast, Integer
+
 @router.get("", response_model=EmployeeListOut)
 def list_employees(
     page: int = 1,
@@ -45,6 +47,7 @@ def list_employees(
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
     shift: Optional[str] = None,
+    order: str = 'asc',
     db: Session = Depends(get_db)
 ):
     query = db.query(EmployeeLocalRegistry)
@@ -63,10 +66,17 @@ def list_employees(
         else:
             query = query.filter(EmployeeLocalRegistry.shift == shift)
 
+    # Apply sorting - Cast to Integer for numeric ID sorting
+    order_col = cast(EmployeeLocalRegistry.employee_id, Integer)
+    if order.lower() == 'desc':
+        query = query.order_by(order_col.desc())
+    else:
+        query = query.order_by(order_col.asc())
+
     total_count = query.count()
     total_pages = max(1, -(-total_count // page_size))  # ceiling division
     skip = (page - 1) * page_size
-    items = query.order_by(EmployeeLocalRegistry.employee_id).offset(skip).limit(page_size).all()
+    items = query.offset(skip).limit(page_size).all()
 
     return EmployeeListOut(
         items=items,

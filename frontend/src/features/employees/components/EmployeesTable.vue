@@ -3,21 +3,31 @@
     <table class="employees-table">
       <thead>
         <tr>
-          <th>ID</th>
-          <th>Name</th>
-          <th>Machine Name</th>
-          <th>Department</th>
-          <th>Group</th>
-          <th>Shift</th>
-          <th>Source Status</th>
-          <th>Actions</th>
+          <th style="width:40px; text-align:center;">
+            <input type="checkbox" :checked="isAllSelected" @change="toggleAll" class="custom-chk" />
+          </th>
+          <th class="sortable" @click="$emit('sort', 'id')">
+            {{ $t('attendance.table.emp_id') }}
+            <span class="sort-icon">
+              <svg v-if="idSortOrder === 'asc'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </span>
+          </th>
+          <th>{{ $t('device.table.name_db') }}</th>
+          <th>{{ $t('device.table.department') }}</th>
+          <th>{{ $t('device.table.group') }}</th>
+          <th>{{ $t('attendance.table.shift') }}</th>
+          <th>{{ $t('device.table.status') }}</th>
+          <th>{{ $t('attendance.table.action') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="emp in employees" :key="emp.employee_id">
+          <td style="text-align:center;">
+            <input type="checkbox" v-model="selectedIds" :value="emp.employee_id" class="custom-chk" />
+          </td>
           <td>{{ emp.employee_id }}</td>
           <td>{{ emp.emp_name || '—' }}</td>
-          <td>{{ emp.machine_name || '—' }}</td>
           <td>{{ emp.department || '—' }}</td>
           <td>{{ emp.group_name || '—' }}</td>
           <td>{{ emp.shift || '—' }}</td>
@@ -27,13 +37,14 @@
             </span>
           </td>
           <td class="actions">
-            <button @click="$emit('edit', emp)" class="btn-edit" title="Rename and Update">Edit</button>
-            <button @click="$emit('delete', emp)" class="btn-delete" title="Hard Delete from Machine">Delete</button>
-            <button @click="$emit('coverage', emp)" class="btn-info" title="Check Biometric Coverage">Coverage</button>
+            <button @click="$emit('view', emp)" class="btn-view" :title="$t('common.info')">{{ $t('common.info') }}</button>
+            <button @click="$emit('edit', emp)" class="btn-edit" :title="$t('device.action.rename')">{{ $t('device.action.rename') }}</button>
+            <button @click="$emit('delete', emp)" class="btn-delete" :title="$t('device.action.delete')">{{ $t('device.action.delete') }}</button>
+            <button @click="$emit('coverage', emp)" class="btn-info" :title="$t('biometric.view_coverage')">{{ $t('biometric.view_coverage') }}</button>
           </td>
         </tr>
         <tr v-if="employees.length === 0">
-          <td colspan="8" class="empty-state">No employees found.</td>
+          <td colspan="7" class="empty-state">{{ $t('attendance.table.no_records') }}</td>
         </tr>
       </tbody>
     </table>
@@ -41,17 +52,41 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+const { t } = useI18n()
 
 const props = defineProps({
   employees: {
     type: Array,
     required: true,
     default: () => []
+  },
+  idSortOrder: {
+    type: String,
+    default: 'asc'
   }
 })
 
-const emit = defineEmits(['edit', 'delete', 'coverage'])
+const emit = defineEmits(['edit', 'delete', 'coverage', 'view', 'sort', 'selection-change'])
+
+const selectedIds = ref([])
+
+const isAllSelected = computed(() => {
+  return props.employees.length > 0 && selectedIds.value.length === props.employees.length
+})
+
+function toggleAll() {
+  if (isAllSelected.value) {
+    selectedIds.value = []
+  } else {
+    selectedIds.value = props.employees.map(e => e.employee_id)
+  }
+}
+
+watch(selectedIds, (newVal) => {
+  emit('selection-change', newVal)
+})
 
 const getStatusClass = (status) => {
   if (status === 'excel_synced') return 'badge-excel'
@@ -60,9 +95,9 @@ const getStatusClass = (status) => {
 }
 
 const formatStatus = (status) => {
-  if (status === 'excel_synced') return 'Excel'
-  if (status === 'machine_only') return 'Machine Only'
-  if (status === 'log_only') return 'Log Only'
+  if (status === 'excel_synced') return t('attendance.filters.status_excel')
+  if (status === 'machine_only') return t('attendance.filters.status_machine')
+  if (status === 'log_only') return t('attendance.filters.status_log')
   return status
 }
 </script>
@@ -91,6 +126,33 @@ const formatStatus = (status) => {
   background-color: #2d3748;
   font-weight: 600;
   color: #cbd5e1;
+}
+
+.employees-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+.employees-table th.sortable:hover {
+  background-color: #4a5568;
+  color: #fff;
+}
+
+.sort-icon {
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: middle;
+  color: #6366f1;
+}
+
+/* Custom Checkbox Styles */
+.custom-chk {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: #3b82f6;
+  border-radius: 4px;
 }
 
 .employees-table tbody tr:hover {
@@ -146,6 +208,11 @@ button:hover {
 
 .btn-edit {
   background-color: #3b82f6;
+  color: white;
+}
+
+.btn-view {
+  background-color: #10b981;
   color: white;
 }
 

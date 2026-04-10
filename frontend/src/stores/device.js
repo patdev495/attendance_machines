@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { 
-  getDevicesCapacity, getDeviceEmployees, deleteDeviceEmployee, bulkDeleteDeviceEmployees,
-  updateEmployeeName, syncFingerprints, syncAllFingerprints,
+  getMachinesCapacity, getMachineEmployees, deleteMachineEmployee, bulkDeleteMachineEmployees,
+  updateEmployeeName, syncFingerprints, syncAllMachineFingerprints as syncAllFingerprints,
   EXPORT_FINGERPRINTS_URL
-} from '@/api/devices.js'
+} from '@/features/machines/api.js'
 
 export const useDeviceStore = defineStore('device', () => {
   const devices = ref([])

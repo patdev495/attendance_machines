@@ -1,8 +1,18 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { triggerSync, getSyncStatus, syncEmployeesExcel, deleteEmployeeFromAllMachines, getDeleteStatus, getExcelSyncStatus } from '@/api/employees.js'
+import { logsApi } from '@/features/logs/api.js'
+import { dailySummaryApi } from '@/features/daily_summary/api.js'
+import { employeesApi } from '@/features/employees/api.js'
+import { getDeleteStatus as apiGetDeleteStatus } from '@/features/machines/api.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { i18n } from '@/i18n'
+
+const triggerSync = logsApi.startSync
+const getSyncStatus = logsApi.getSyncStatus
+const syncEmployeesExcel = dailySummaryApi.syncExcel
+const getExcelSyncStatus = dailySummaryApi.getSyncStatus
+const deleteEmployeeFromAllMachines = employeesApi.deleteEmployee
+const getDeleteStatus = apiGetDeleteStatus
 
 export const useSyncStore = defineStore('sync', () => {
   const notification = useNotificationStore()
@@ -30,7 +40,8 @@ export const useSyncStore = defineStore('sync', () => {
     // Start polling immediately so the UI reflects the first machine connection
     const poll = async () => {
       try {
-        const status = await getSyncStatus()
+        const res = await getSyncStatus()
+        const status = res.data
         if (!status.is_running) {
           syncMessage.value = i18n.global.t('sync.completed')
           clearInterval(syncPoller)
@@ -68,7 +79,7 @@ export const useSyncStore = defineStore('sync', () => {
     
     excelSyncError.value = null
     excelSyncProgress.value = 0
-    excelSyncStep.value = 'Uploading file...'
+    excelSyncStep.value = i18n.global.t('sync.uploading')
     excelSyncRunning.value = true
 
     try {
@@ -98,7 +109,7 @@ export const useSyncStore = defineStore('sync', () => {
         } else if (!status.is_running) {
           stopExcelPolling()
           if (status.progress === 100) {
-            const msg = status.current_step || 'Sync completed.'
+            const msg = status.current_step || i18n.global.t('sync.completed')
             excelSyncStep.value = msg
             notification.success(msg)
             // Hide banner after 5 seconds

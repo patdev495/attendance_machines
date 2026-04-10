@@ -72,7 +72,6 @@ class EmployeeLocalRegistry(Base):
     shift        = Column(String(10), nullable=True)     # 'D' or 'N'
     # source_status: 'excel_synced' | 'machine_only' | 'log_only'
     source_status = Column(String(20), nullable=False, default="log_only", index=True)
-    machine_name = Column(Unicode(255), nullable=True)
     updated_at   = Column(DateTime, server_default=func.current_timestamp(),
                           onupdate=func.current_timestamp())
 

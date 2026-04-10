@@ -1,12 +1,80 @@
 {
+  "common": {
+    "no_data": "Không có dữ liệu",
+    "loading": "Đang tải...",
+    "info": "Thông báo",
+    "confirm": "Xác nhận",
+    "confirm_title": "Xác nhận",
+    "showing": "Hiển thị {start} - {end} của {total}",
+    "or": "hoặc",
+    "actions": "Thao tác",
+    "close": "Đóng",
+    "cancel": "Hủy",
+    "error": "Lỗi",
+    "success": "Thành công",
+    "prev": "Trước",
+    "next": "Tiếp",
+    "goto": "Đến trang",
+    "records": "bản ghi",
+    "online": "Trực tuyến",
+    "offline": "Ngoại tuyến"
+  },
+  "layout": {
+    "tagline": "Hệ thống quản lý chấm công"
+  },
   "nav": {
     "title": "Chấm Công & Thời Gian",
     "dashboard": "Bảng Điều Khiển",
-    "machines": "Máy Chấm Công"
+    "machines": "Máy Chấm Công",
+    "employees": "Nhân Viên"
+  },
+  "employees": {
+    "title": "Quản Lý Nhân Viên",
+    "upload_sync": "Tải lên & Đồng bộ Registry",
+    "syncing": "Đang đồng bộ...",
+    "sync_complete": "Đồng bộ hoàn tất. Excel: {excel}, Chỉ trên máy: {machine}.",
+    "bulk_delete_all": "Xoá {count} khỏi tất cả thiết bị",
+    "bulk_delete_progress": "Xóa hàng loạt: Đang xử lý máy {current} / {total} (IP: {ip})",
+    "search_placeholder": "Tìm theo Mã hoặc Tên...",
+    "all_shifts": "Tất Cả Ca",
+    "none_shift": "Không có thông tin",
+    "delete_hardware_confirm": "Bạn có chắc muốn xóa {name} khỏi phần cứng?",
+    "delete_bulk_global_confirm": "Bạn có chắc muốn xóa {count} nhân viên khỏi TẤT CẢ các máy chấm công? Hành động này không thể hoàn tác.",
+    "edit_title": "Chỉnh Sửa Nhân Viên",
+    "details_title": "Chi Tiết Nhân Viên",
+    "id_label": "Mã Nhân Viên",
+    "name_label": "Họ và Tên",
+    "dept_label": "Phòng Ban",
+    "group_label": "Nhóm",
+    "shift_label": "Ca Làm Việc",
+    "start_date": "Ngày Bắt Đầu",
+    "last_updated": "Cập Nhật Lần Cuối",
+    "save_changes": "Lưu Thay Đổi",
+    "updated_success": "Cập nhật nhân viên thành công"
   },
   "attendance": {
     "raw_logs": "Log Thô",
-    "daily_summary": "Tóm Tắt Hàng Ngày",
+    "logs_subtitle": "Xem và đồng bộ dữ liệu chấm công thô từ các máy",
+    "daily_summary": "Báo Cáo Ngày",
+    "summary_title": "Báo Cáo Chấm Công Ngày",
+    "summary_subtitle": "Phân tích chấm công hàng ngày, quản lý ca và xuất báo cáo.",
+    "summary_table": "Bảng Tổng Hợp Chấm Công",
+    "detail_modal_title": "Chi tiết: {id} - {date}",
+    "export": {
+      "btn": "Xuất Excel",
+      "exporting": "Đang xuất...",
+      "status_banner": "Đang xuất Excel: {step} ({progress}%)",
+      "error_prefix": "Lỗi xuất file"
+    },
+    "notes": {
+      "missing_tap": "Thiếu Check-in/out"
+    },
+    "summary_subtitle": "Phân tích chấm công hàng ngày, quản lý ca và xuất báo cáo.",
+    "excel_sync": {
+      "title": "Đồng bộ Excel & Máy",
+      "drag_drop": "Kéo thả file Excel (.xlsx) vào đây",
+      "select_file": "Chọn file từ máy tính"
+    },
     "filters": {
       "emp_id": "Mã NV",
       "machine_ip": "IP Máy",
@@ -18,6 +86,9 @@
       "active": "Đang Làm Việc",
       "resigned": "Nghỉ Việc (TV)",
       "unknown": "Không Rõ (Không có trong DB)",
+      "status_excel": "Đồng bộ từ Excel",
+      "status_machine": "Chỉ có trên máy",
+      "status_log": "Chỉ có log thô",
       "search": "Tìm kiếm",
       "clear": "Xóa Lọc",
       "min_hours": "Giờ Tối Thiểu",
@@ -36,6 +107,8 @@
       "attendance_time": "Thời Gian Chấm Công",
       "machine_ip": "IP Máy",
       "date": "Ngày",
+      "first_tap": "Giờ Vào",
+      "last_tap": "Giờ Ra",
       "check_in": "Vào",
       "check_out": "Ra",
       "work_hours": "Giờ Làm",
@@ -44,9 +117,11 @@
       "note": "Ghi Chú",
       "action": "Thao Tác",
       "no_records": "Không tìm thấy dữ liệu.",
-      "loading": "Đang tải dữ liệu...",
+      "loading": "Đang tải...",
+      "total_records": "Tổng số bản ghi: {count}",
       "late": "⚠ +{m}p đi trễ",
-      "early": "⚠ -{m}p về sớm"
+      "early": "⚠ -{m}p về sớm",
+      "error_load_logs": "Không thể tải log. Vui lòng kiểm tra lại kết nối."
     }
   },
   "device": {
@@ -72,6 +147,8 @@
       "name_db": "Tên (DB)",
       "status": "Trạng Thái",
       "department": "Phòng Ban",
+      "group": "Nhóm",
+      "source": "Nguồn",
       "action": "Thao Tác",
       "no_records": "Không tìm thấy nhân viên.",
       "not_synced": "Chưa đồng bộ",
@@ -119,28 +196,43 @@
     "view_coverage": "Xem độ phủ vân tay",
     "coverage_title": "Độ phủ vân tay: {id}",
     "realtime_scan": "Quét thời gian thực",
-    "scanning": "Đang giao tiếp với các máy chấm công...",
+    "scanning": "Đang giao tiếp với tất cả máy...",
     "terminal_offline": "Máy ngoại tuyến",
-    "template_ok": "Đã có vân tay",
-    "no_template": "Chưa có vân tay",
-    "not_registered": "Chưa có ID trên máy",
-    "refresh": "Cập nhật lại",
+    "template_ok": "Đã có mẫu vân tay",
+    "no_template": "Không có vân tay",
+    "not_registered": "Chưa đăng ký trên máy",
+    "refresh": "Làm mới độ phủ",
     "export_fingerprints": "Xuất Excel vân tay",
-    "sync_all": "Đồng bộ tất cả vân tay"
+    "sync_all": "Đồng bộ tất cả vân tay",
+    "clone_title": "Sao chép vân tay",
+    "clone_desc": "ID: {id} - Tải vân tay thành công. Chọn máy đích để đẩy vân tay sang:",
+    "loading_machines": "Đang tải danh sách máy...",
+    "select_all": "Chọn tất cả",
+    "selected_count": "Đã chọn {count} / {total}",
+    "processing_machines": "Đang xử lý {current} / {total} máy...",
+    "cloning_action": "Đang sao chép...",
+    "push_action": "Đẩy sang {count} máy"
   },
   "export": {
+    "progress_label": "Xuất file",
     "time": "Xuất: Thời Gian",
     "hours": "Xuất: Giờ",
     "both": "Xuất: Tất Cả",
     "btn": "Xuất Excel",
-    "cancel": "Hủy "
+    "cancel": "Hủy ",
+    "starting": "Đang khởi tạo...",
+    "cancelled": "Đã hủy xuất file.",
+    "error_missing_dates": "Vui lòng chọn Từ ngày và Đến ngày trước khi xuất Excel.",
+    "error_failed": "Lỗi khi bắt đầu xuất Excel"
   },
   "sync": {
+    "progress_label": "Đồng bộ",
     "excel": "Đồng bộ Excel",
     "syncing": "Đang đồng bộ ",
     "initiating": "Đang khởi tạo đồng bộ...",
     "completed": "Đồng bộ hoàn tất.",
     "progress": "Đang đồng bộ: Máy {current}/{total} ({ip}) - Đã thêm: {added}",
-    "machines": "Đồng bộ Máy"
+    "machines": "Đồng bộ Máy",
+    "uploading": "Đang tải file lên..."
   }
 }

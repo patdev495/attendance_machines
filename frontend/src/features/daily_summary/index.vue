@@ -3,7 +3,7 @@
     <div class="page-header animate-in">
       <div class="header-content">
         <h1>{{ $t('attendance.summary_title') }}</h1>
-        <p class="subtitle">Analyze daily attendance, manage shifts, and export reports.</p>
+        <p class="subtitle">{{ $t('attendance.summary_subtitle') }}</p>
       </div>
       <div class="header-actions">
         <div class="export-group">
@@ -15,7 +15,7 @@
           <button class="btn btn-primary export-btn" :disabled="exporting" @click="triggerExport">
             <span class="icon" v-if="!exporting">📊</span>
             <div class="spinner-small" v-else></div>
-            {{ exporting ? 'Exporting...' : $t('attendance.export.btn') }}
+            {{ exporting ? $t('attendance.export.exporting') : $t('attendance.export.btn') }}
           </button>
         </div>
       </div>
@@ -25,7 +25,7 @@
     <div v-if="exporting" class="status-banner animate-in">
       <div class="banner-content">
         <div class="spinner-small"></div>
-        <span>Exporting Excel: <strong>{{ exportStatus.current_step }}</strong> ({{ exportStatus.progress }}%)</span>
+        <span>{{ $t('attendance.export.status_banner', { step: exportStatus.current_step, progress: exportStatus.progress }) }}</span>
       </div>
     </div>
 
@@ -43,7 +43,7 @@
     >
       <template #actions>
         <div class="table-counts" v-if="pagination.totalCount > 0">
-          <span class="count-item">Total records: <strong>{{ pagination.totalCount }}</strong></span>
+          <span class="count-item">{{ $t('attendance.table.total_records', { count: pagination.totalCount }) }}</span>
         </div>
       </template>
     </SummaryTable>
@@ -51,7 +51,7 @@
     <!-- Detail Modal -->
     <AppModal 
       :show="!!selectedDetail" 
-      :title="selectedDetail ? `Detail: ${selectedDetail.employee_id} - ${selectedDetail.attendance_date}` : ''"
+      :title="selectedDetail ? $t('attendance.detail_modal_title', { id: selectedDetail.employee_id, date: selectedDetail.attendance_date }) : ''"
       @close="selectedDetail = null"
       width="450px"
     >
@@ -180,7 +180,7 @@ const startExportPolling = () => {
             } else if (data.error) {
                 clearInterval(exportPoller)
                 exporting.value = false
-                alert('Export error: ' + data.error)
+                alert(t('attendance.export.error_prefix') + ': ' + data.error)
             }
         } catch (e) {
             console.error('Export poll error', e)

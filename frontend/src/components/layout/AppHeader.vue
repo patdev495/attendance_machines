@@ -2,7 +2,7 @@
   <header class="site-header">
     <div class="header-left">
       <a href="#" class="site-title" @click.prevent="goHome">{{ $t('nav.title') }}</a>
-      <p class="tagline">Time Attendance Management System</p>
+      <p class="tagline">{{ $t('layout.tagline') }}</p>
     </div>
     <nav class="header-actions">
       <!-- Language Switcher -->
@@ -25,7 +25,7 @@
       <div class="progress-container">
         <div class="progress-fill" :style="{ width: exportStore.progress + '%' }"></div>
       </div>
-      <span>Export: {{ exportStore.currentStep }} ({{ exportStore.progress }}%)</span>
+      <span>{{ $t('export.progress_label') || 'Export' }}: {{ exportStore.currentStep }} ({{ exportStore.progress }}%)</span>
     </div>
   </div>
 
@@ -36,7 +36,7 @@
       <div class="progress-container">
         <div class="progress-fill" :style="{ width: syncStore.excelSyncProgress + '%', backgroundColor: '#2dd4bf' }"></div>
       </div>
-      <span style="color: #2dd4bf;">Sync: {{ syncStore.excelSyncStep }} ({{ syncStore.excelSyncProgress }}%)</span>
+      <span style="color: #2dd4bf;">{{ $t('sync.progress_label') || 'Sync' }}: {{ syncStore.excelSyncStep }} ({{ syncStore.excelSyncProgress }}%)</span>
     </div>
   </div>
 </template>
@@ -63,7 +63,7 @@ function changeLanguage() {
 }
 
 function goHome() {
-  router.push('/raw-logs')
+  router.push('/logs')
 }
 </script>
 

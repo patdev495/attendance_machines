@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { i18n } from '@/i18n'
 
 export const useNotificationStore = defineStore('notification', () => {
   const notifications = ref([])
@@ -45,11 +46,12 @@ export const useNotificationStore = defineStore('notification', () => {
   const info = (msg, dur) => add(msg, 'info', dur)
   const warn = (msg, dur) => add(msg, 'warning', dur)
 
-  function confirm(message, title = 'Confirm Action') {
+  function confirm(message, title) {
+    const defaultTitle = i18n.global.t('common.confirm')
     return new Promise((resolve) => {
       confirmState.value = {
         isOpen: true,
-        title,
+        title: title || defaultTitle,
         message,
         resolve
       }

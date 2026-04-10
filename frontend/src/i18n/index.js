@@ -3,13 +3,13 @@ import en from './locales/en.json'
 import vi from './locales/vi.json'
 import zh from './locales/zh.json'
 
-// Get saved language from localStorage, or default to Vietnamese ('vi')
-const savedLocale = localStorage.getItem('app_lang') || 'vi'
+// Get saved language from localStorage, or default to English ('en')
+const savedLocale = localStorage.getItem('app_lang') || 'en'
 
 export const i18n = createI18n({
   legacy: false, // Use Composition API
   locale: savedLocale,
-  fallbackLocale: 'vi', // Fallback to Vietnamese if string is missing
+  fallbackLocale: 'en', // Fallback to English if string is missing
   messages: {
     en,
     vi,

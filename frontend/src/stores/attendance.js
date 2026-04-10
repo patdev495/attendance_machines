@@ -1,10 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, reactive } from 'vue'
-import { getAttendance, getAttendanceSummary, getMachines } from '@/api/attendance.js'
+import { logsApi } from '@/features/logs/api.js'
+import { dailySummaryApi } from '@/features/daily_summary/api.js'
+import { getMachines } from '@/features/machines/api.js'
+
+const getAttendance = logsApi.getLogs
+const getAttendanceSummary = dailySummaryApi.getSummary
 
 async function fetchDateRange() {
   try {
-    const res = await fetch('/api/attendance/date-range')
+    const res = await fetch('/api/logs/date-range')
     return await res.json()
   } catch { return null }
 }

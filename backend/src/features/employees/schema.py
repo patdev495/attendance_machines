@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List, Dict
-from datetime import date
+from datetime import date, datetime
 
 class EmployeeBase(BaseModel):
     employee_id: str
@@ -12,6 +12,7 @@ class EmployeeOut(EmployeeBase):
     start_date: Optional[date] = None
     shift: Optional[str] = None
     source_status: str
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

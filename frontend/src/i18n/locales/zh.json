@@ -1,12 +1,74 @@
 {
+  "common": {
+    "no_data": "暂无数据",
+    "loading": "加载中...",
+    "info": "信息",
+    "confirm": "确认",
+    "confirm_title": "确认",
+    "showing": "显示 {start} - {end} / 共 {total}",
+    "or": "或",
+    "actions": "操作",
+    "close": "关闭",
+    "cancel": "取消",
+    "error": "错误",
+    "success": "成功",
+    "prev": "上一页",
+    "next": "下一页",
+    "goto": "跳转至",
+    "records": "条记录",
+    "online": "在线",
+    "offline": "离线"
+  },
+  "layout": {
+    "tagline": "考勤管理系统"
+  },
   "nav": {
     "title": "考勤与时间管理员",
     "dashboard": "仪表板",
-    "machines": "考勤机管理"
+    "machines": "考勤机管理",
+    "employees": "员工管理"
+  },
+  "employees": {
+    "title": "员工管理",
+    "upload_sync": "上传并同步注册表",
+    "syncing": "正在同步...",
+    "sync_complete": "同步完成。Excel: {excel}, 仅考勤机: {machine}。",
+    "bulk_delete_all": "从所有设备中删除 {count} 名员工",
+    "bulk_delete_progress": "批量全局删除：正在处理第 {current} / {total} 台考勤机 (当前: {ip})",
+    "search_placeholder": "按 ID 或姓名搜素...",
+    "all_shifts": "所有班次",
+    "none_shift": "无信息",
+    "delete_hardware_confirm": "您确定要从硬件中删除 {name} 吗？",
+    "delete_bulk_global_confirm": "您确定要从所有考勤机中删除这 {count} 名员工吗？此操作无法撤销。",
+    "edit_title": "编辑员工信息",
+    "details_title": "员工详情",
+    "id_label": "员工编号",
+    "name_label": "姓名",
+    "dept_label": "部门",
+    "group_label": "小组",
+    "shift_label": "班次",
+    "start_date": "入职日期",
+    "last_updated": "最后更新日期",
+    "save_changes": "保存修改",
+    "updated_success": "员工信息更新成功"
   },
   "attendance": {
     "raw_logs": "原始记录",
-    "daily_summary": "每日摘要",
+    "logs_subtitle": "查看并同步来自考勤机的原始打卡记录",
+    "summary_title": "每日出勤报告",
+    "summary_subtitle": "分析每日出勤情况、管理班次并导出报告。",
+    "summary_table": "出勤统计表",
+    "detail_modal_title": "详情：{id} - {date}",
+    "export": {
+      "btn": "导出 Excel",
+      "exporting": "正在导出...",
+      "status_banner": "正在导出 Excel：{step} ({progress}%)",
+      "error_prefix": "导出错误"
+    },
+    "notes": {
+      "missing_tap": "缺卡"
+    },
+    "summary_subtitle": "分析每日出勤情况、管理班次并导出报告。",
     "filters": {
       "emp_id": "员工编号",
       "machine_ip": "考勤机IP",
@@ -17,6 +79,9 @@
       "all_status": "所有状态",
       "active": "在职",
       "resigned": "离职 (TV)",
+      "status_excel": "Excel 同步",
+      "status_machine": "仅机器",
+      "status_log": "仅原始日志",
       "unknown": "未知",
       "search": "搜索",
       "clear": "清除筛选项",
@@ -45,8 +110,10 @@
       "action": "操作",
       "no_records": "未找到记录。",
       "loading": "正在加载...",
+      "total_records": "总记录数：{count}",
       "late": "⚠ 迟到 +{m}分钟",
-      "early": "⚠ 早退 -{m}分钟"
+      "early": "⚠ 早退 -{m}分钟",
+      "error_load_logs": "加载日志失败。请检查您的连接。"
     }
   },
   "device": {
@@ -126,21 +193,36 @@
     "not_registered": "未在设备注册",
     "refresh": "刷新覆盖情况",
     "export_fingerprints": "导出指纹 Excel",
-    "sync_all": "同步所有指纹"
+    "sync_all": "同步所有指纹",
+    "clone_title": "克隆指纹",
+    "clone_desc": "ID: {id} - 指纹下载成功。选择目标机器以推送指纹：",
+    "loading_machines": "正在加载机器列表...",
+    "select_all": "全选",
+    "selected_count": "已选择 {count} / {total}",
+    "processing_machines": "正在处理 {current} / {total} 台机器...",
+    "cloning_action": "正在克隆...",
+    "push_action": "推送到 {count} 台机器"
   },
   "export": {
+    "progress_label": "导出",
     "time": "导出：时间",
     "hours": "导出：工时",
     "both": "导出：所有",
     "btn": "导出Excel",
-    "cancel": "取消 "
+    "cancel": "取消 ",
+    "starting": "正在开始...",
+    "cancelled": "已取消导出。",
+    "error_missing_dates": "请在导出 Excel 之前选择开始日期和结束日期。",
+    "error_failed": "开始导出 Excel 失败"
   },
   "sync": {
+    "progress_label": "同步",
     "excel": "同步Excel",
     "syncing": "同步中 ",
     "initiating": "正在初始化同步...",
     "completed": "同步完成。",
     "progress": "同步中：第 {current}/{total} 台机器 ({ip}) - 已添加：{added}",
-    "machines": "同步机器"
+    "machines": "同步机器",
+    "uploading": "上传文件中..."
   }
 }

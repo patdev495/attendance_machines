@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { startExport as apiStart, getExportStatus as apiStatus, cancelExport as apiCancel, downloadExport as apiDownload } from '@/api/export.js'
+import { dailySummaryApi } from '@/features/daily_summary/api.js'
+import { i18n } from '@/i18n'
+
+const apiStart = dailySummaryApi.startExport
+const apiStatus = dailySummaryApi.getExportStatus
+const apiCancel = dailySummaryApi.cancelExport
+const apiDownload = dailySummaryApi.downloadExport
 
 export const useExportStore = defineStore('export', () => {
   const isRunning = ref(false)
@@ -17,7 +23,7 @@ export const useExportStore = defineStore('export', () => {
     error.value = null
     filename.value = null
     progress.value = 0
-    currentStep.value = 'Starting...'
+    currentStep.value = i18n.global.t('export.starting')
     isRunning.value = true
 
     try {
@@ -61,7 +67,7 @@ export const useExportStore = defineStore('export', () => {
       await apiCancel()
       isRunning.value = false
       stopPolling()
-      currentStep.value = 'Export cancelled.'
+      currentStep.value = i18n.global.t('export.cancelled')
     } catch (e) {
       console.error('Cancel failed', e)
     }

@@ -1,35 +1,51 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import RawLogsView from '@/views/RawLogsView.vue'
-import DailySummaryView from '@/views/DailySummaryView.vue'
-import DeviceListView from '@/views/DeviceListView.vue'
-import DeviceDetailView from '@/views/DeviceDetailView.vue'
+
+// v2.0 Feature Views
+import LogsFeature from '@/features/logs/index.vue'
+import SummaryFeature from '@/features/daily_summary/index.vue'
+import EmployeesFeature from '@/features/employees/index.vue'
+import MachinesFeature from '@/features/machines/index.vue'
+import MachineListView from '@/features/machines/views/MachineListView.vue'
+import MachineDetailView from '@/features/machines/views/MachineDetailView.vue'
 
 const routes = [
   {
     path: '/',
-    redirect: '/raw-logs'
+    redirect: '/logs'
   },
   {
-    path: '/raw-logs',
-    name: 'raw-logs',
-    component: RawLogsView
+    path: '/logs',
+    name: 'logs',
+    component: LogsFeature
   },
   {
     path: '/summary',
     name: 'summary',
-    component: DailySummaryView
+    component: SummaryFeature
   },
   {
-    path: '/devices',
-    name: 'devices',
-    component: DeviceListView
+    path: '/employees',
+    name: 'employees',
+    component: EmployeesFeature
   },
   {
-    path: '/devices/:ip',
-    name: 'device-detail',
-    component: DeviceDetailView,
-    props: true
-  }
+    path: '/machines',
+    component: MachinesFeature,
+    children: [
+      {
+        path: '',
+        name: 'machines-list',
+        component: MachineListView
+      },
+      {
+        path: ':ip',
+        name: 'machines-detail',
+        component: MachineDetailView,
+        props: true
+      }
+    ]
+  },
+  // Legacy Routes Disabled
 ]
 
 const router = createRouter({

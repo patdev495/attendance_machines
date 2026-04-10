@@ -1,15 +1,31 @@
 <template>
   <div class="employees-view">
     <div class="header">
-      <h1>Employee Management</h1>
+      <h1>{{ $t('employees.title') }}</h1>
       
       <div class="header-actions">
         <!-- Hidden file input for Excel -->
         <input type="file" accept=".xlsx,.xls" hidden ref="fileInput" @change="handleFileSelect" />
         
         <button class="btn-primary" @click="$refs.fileInput.click()" :disabled="syncStatus.is_running">
-          <span class="icon">📥</span> {{ syncStatus.is_running ? 'Syncing...' : 'Upload & Sync Registry' }}
+          <span class="icon">📥</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.upload_sync') }}
         </button>
+
+        <transition name="fade">
+          <button v-if="selectedIds.length > 0" class="btn-danger" @click="handleBulkDeleteGlobal" :disabled="bulkActionStatus.is_running">
+            <span class="icon">🗑️</span> {{ $t('employees.bulk_delete_all', { count: selectedIds.length }) }}
+          </button>
+        </transition>
+      </div>
+    </div>
+    
+    <!-- Bulk Global Action Progress -->
+    <div v-if="bulkActionStatus.is_running" class="status-banner animate-in bulk-banner">
+      <div class="banner-content">
+        <div class="spinner-small"></div>
+        <span>
+          {{ $t('employees.bulk_delete_progress', { current: bulkActionStatus.processed_count + 1, total: bulkActionStatus.total_machines, ip: bulkActionStatus.current_ip }) }}
+        </span>
       </div>
     </div>
     
@@ -18,35 +34,39 @@
       <div class="banner-content">
         <div class="spinner-small" v-if="syncStatus.is_running"></div>
         <span v-if="syncStatus.is_running">
-          Syncing: <strong>{{ syncStatus.current_step }}</strong> ({{ syncStatus.progress }}%)
+          {{ $t('sync.syncing') }}: <strong>{{ syncStatus.current_step }}</strong> ({{ syncStatus.progress }}%)
         </span>
         <span v-else-if="syncStatus.error" class="text-danger">
-          Error: {{ syncStatus.error }}
+          {{ $t('common.error') }}: {{ syncStatus.error }}
         </span>
         <span v-else>
-          Sync Complete. Excel Synced: <strong>{{ syncStatus.excel_count }}</strong>, Machine Only: <strong>{{ syncStatus.machine_only_count }}</strong>.
+          {{ $t('employees.sync_complete', { excel: syncStatus.excel_count, machine: syncStatus.machine_only_count }) }}
         </span>
       </div>
     </div>
     <div class="filter-bar">
-      <input type="text" v-model="searchQuery" placeholder="Search by ID or Name..." @input="resetAndFetch" />
+      <input type="text" v-model="searchQuery" :placeholder="$t('employees.search_placeholder')" @input="resetAndFetch" />
       <select v-model="statusFilter" @change="resetAndFetch">
-        <option value="">All Statuses</option>
-        <option value="excel_synced">Excel Synced</option>
-        <option value="machine_only">Machine Only</option>
-        <option value="log_only">Log Only</option>
+        <option value="">{{ $t('attendance.filters.all_status') }}</option>
+        <option value="excel_synced">{{ $t('attendance.filters.status_excel') }}</option>
+        <option value="machine_only">{{ $t('attendance.filters.status_machine') }}</option>
+        <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
       </select>
       <select v-model="shiftFilter" @change="resetAndFetch">
-        <option value="">All Shifts</option>
-        <option value="N">Ngày (N)</option>
-        <option value="D">Đêm (D)</option>
-        <option value="TV">Nghỉ việc (TV)</option>
-        <option value="__none__">Không có thông tin</option>
+        <option value="">{{ $t('employees.all_shifts') }}</option>
+        <option value="N">{{ $t('attendance.filters.day_shift') }}</option>
+        <option value="D">{{ $t('attendance.filters.night_shift') }}</option>
+        <option value="TV">{{ $t('attendance.filters.resigned') }}</option>
+        <option value="__none__">{{ $t('employees.none_shift') }}</option>
       </select>
     </div>
 
     <EmployeesTable 
       :employees="employees" 
+      :idSortOrder="idSortOrder"
+      @sort="handleSort"
+      @selection-change="handleSelectionChange"
+      @view="onView"
       @edit="onEdit" 
       @delete="onDelete" 
       @coverage="onCoverage" 
@@ -71,6 +91,12 @@
       :employeeId="selectedEmployee?.employee_id"
       @close="isCoverageModalOpen = false"
     />
+
+    <EmployeeDetailsModal
+      :isOpen="isDetailsModalOpen"
+      :employee="selectedEmployee"
+      @close="isDetailsModalOpen = false"
+    />
   </div>
 </template>
 
@@ -79,9 +105,15 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { employeesApi } from './api'
 import EmployeesTable from './components/EmployeesTable.vue'
 import EditEmployeeModal from './components/EditEmployeeModal.vue'
+import EmployeeDetailsModal from './components/EmployeeDetailsModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
+import { useI18n } from 'vue-i18n'
+import { useNotificationStore } from '@/stores/notification.js'
+
+const { t } = useI18n()
+const notification = useNotificationStore()
 
 const employees = ref([])
 const searchQuery = ref('')
@@ -89,11 +121,73 @@ const statusFilter = ref('')
 const shiftFilter = ref('')
 
 const currentPage = ref(1)
-const totalPages = ref(1)
 const totalCount = ref(0)
+const totalPages = ref(0)
+const idSortOrder = ref('asc')
 const PAGE_SIZE = 50
 
+const selectedIds = ref([])
+const bulkActionStatus = ref({
+  is_running: false,
+  total_machines: 0,
+  processed_count: 0,
+  current_ip: '',
+  error: null
+})
+
+
 const fileInput = ref(null)
+
+import { bulkDeleteGlobal, getBulkDeleteStatus } from '@/features/machines/api'
+
+const handleSelectionChange = (ids) => {
+  selectedIds.value = ids
+}
+
+let bulkPollInterval = null
+
+const handleBulkDeleteGlobal = async () => {
+  if (selectedIds.value.length === 0) return
+  
+  const confirmed = await notification.confirm(
+    t('employees.delete_bulk_global_confirm', { count: selectedIds.value.length }),
+    t('actions.confirm')
+  )
+  if (!confirmed) return
+
+  try {
+    const res = await bulkDeleteGlobal(selectedIds.value)
+    bulkActionStatus.value.is_running = true
+    bulkActionStatus.value.error = null
+    startBulkPolling()
+  } catch (err) {
+    notification.error(t('common.error') + ': ' + err.message)
+  }
+}
+
+const startBulkPolling = () => {
+  if (bulkPollInterval) clearInterval(bulkPollInterval)
+  bulkPollInterval = setInterval(async () => {
+    try {
+      const data = await getBulkDeleteStatus()
+      bulkActionStatus.value = {
+        is_running: data.is_running,
+        total_machines: data.total_machines,
+        processed_count: data.processed_count,
+        current_ip: data.current_ip,
+        error: data.results?.[data.current_ip]?.status === 'Error' ? data.results[data.current_ip].message : null
+      }
+      
+      if (!data.is_running) {
+        clearInterval(bulkPollInterval)
+        selectedIds.value = []
+        fetchEmployees()
+      }
+    } catch (e) {
+      console.error('Bulk polling error', e)
+    }
+  }, 1000)
+}
 
 const syncStatus = ref({
   is_running: false,
@@ -113,14 +207,14 @@ const handleFileSelect = async (e) => {
   try {
     syncStatus.value.is_running = true
     syncStatus.value.progress = 0
-    syncStatus.value.current_step = 'Starting upload...'
+    syncStatus.value.current_step = t('sync.uploading')
     syncStatus.value.error = null
     
     await dailySummaryApi.syncExcel(file)
     startSyncPolling()
   } catch (err) {
     syncStatus.value.is_running = false
-    syncStatus.value.error = err.response?.data?.detail || 'Upload failed'
+    syncStatus.value.error = err.response?.data?.detail || t('common.error')
   } finally {
     e.target.value = '' // reset
   }
@@ -151,6 +245,7 @@ const fetchEmployees = async () => {
     if (searchQuery.value) filters.search = searchQuery.value
     if (statusFilter.value) filters.source_status = statusFilter.value
     if (shiftFilter.value) filters.shift = shiftFilter.value
+    filters.order = idSortOrder.value
     
     const result = await employeesApi.getEmployees(filters, currentPage.value, PAGE_SIZE)
     employees.value = result.items
@@ -171,11 +266,24 @@ const resetAndFetch = () => {
   fetchEmployees()
 }
 
+const handleSort = (key) => {
+  if (key === 'id') {
+    idSortOrder.value = idSortOrder.value === 'asc' ? 'desc' : 'asc'
+    resetAndFetch()
+  }
+}
+
 
 
 const isEditModalOpen = ref(false)
+const isDetailsModalOpen = ref(false)
 const isCoverageModalOpen = ref(false)
 const selectedEmployee = ref(null)
+
+const onView = (emp) => {
+  selectedEmployee.value = emp
+  isDetailsModalOpen.value = true
+}
 
 const onEdit = (emp) => {
   selectedEmployee.value = emp
@@ -183,14 +291,18 @@ const onEdit = (emp) => {
 }
 
 const onDelete = async (emp) => {
-  if (confirm(`Are you sure you want to delete ${emp.emp_name || emp.employee_id} from hardware?`)) {
+  const name = emp.emp_name || emp.employee_id
+  const confirmed = await notification.confirm(
+    t('employees.delete_hardware_confirm', { name }),
+    t('actions.confirm')
+  )
+  if (confirmed) {
     try {
-      const res = await employeesApi.deleteEmployee(emp.employee_id)
-      alert("Delete response:\n" + JSON.stringify(res.results, null, 2))
-      // It does not delete from DB according to spec, but we might want to refresh anyway
+      await employeesApi.deleteEmployee(emp.employee_id)
+      notification.success(t('device.delete_success', { id: emp.employee_id }))
       fetchEmployees()
     } catch (err) {
-      alert("Failed to delete from hardware")
+      notification.error(t('common.error'))
     }
   }
 }
@@ -257,12 +369,42 @@ onUnmounted(() => {
   cursor: not-allowed;
 }
 
+.btn-danger {
+  background-color: #dc2626;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-danger:hover {
+  background-color: #b91c1c;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.btn-danger:disabled {
+  background-color: #7f1d1d;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .status-banner {
   background-color: #334155;
   padding: 12px 20px;
   border-radius: 6px;
   margin-bottom: 24px;
   border-left: 4px solid #3b82f6;
+}
+
+.bulk-banner {
+  border-left-color: #f87171;
+  background-color: rgba(239, 68, 68, 0.05);
 }
 
 .status-success {

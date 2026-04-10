@@ -13,8 +13,8 @@
             <p>{{ store.confirmState.message }}</p>
           </div>
           <div class="modal-actions">
-            <button class="btn btn-ghost" @click="store.resolveConfirm(false)">Cancel</button>
-            <button class="btn btn-danger" @click="store.resolveConfirm(true)">Confirm</button>
+            <button class="btn btn-ghost" @click="store.resolveConfirm(false)">{{ $t('common.cancel') }}</button>
+            <button class="btn btn-danger" @click="store.resolveConfirm(true)">{{ $t('common.confirm') }}</button>
           </div>
         </div>
       </Transition>

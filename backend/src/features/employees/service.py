@@ -1,9 +1,8 @@
 from sqlalchemy.orm import Session
 from database import EmployeeLocalRegistry, EmployeeMetadata, AttendanceLog, SessionLocal
 from config import config
-from utils.encoding import sanitize_machine_name
-from features.logs.service import get_machine_list
-from sync_service import get_users_from_machine, delete_user_from_machine, update_user_name_on_machine
+from shared.hardware import get_machine_list
+from features.machines.service import get_users_from_machine, delete_user_from_machine, update_user_name_on_machine
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import logging
@@ -45,18 +44,14 @@ def update_registry(db: Session):
                     if not registry_entry:
                         registry_entry = EmployeeLocalRegistry(
                             employee_id=emp_id,
-                            machine_name=u.get('name'),
                             source_status='machine_only'
                         )
                         db.add(registry_entry)
                     else:
-                        # Existing user, maybe update machine_name but don't overwrite excel_synced status
+                        # Existing user, don't overwrite excel_synced status
                         if registry_entry.source_status != 'excel_synced':
                             if registry_entry.source_status == 'log_only':
                                 registry_entry.source_status = 'machine_only'
-                            registry_entry.machine_name = u.get('name')
-                        else:
-                            registry_entry.machine_name = u.get('name')
         db.commit()
 
         # 3. Update from Logs
@@ -96,8 +91,7 @@ def delete_user_from_hardware(employee_id: str):
 
 def update_employee_info(employee_id: str, db_name: str, db: Session):
     """
-    Updates user info in EmployeeLocalRegistry, EmployeeMetadata, and propagates
-    the updated name to all connected machines.
+    Updates user info in EmployeeLocalRegistry and EmployeeMetadata.
     """
     # 1. Update EmployeeLocalRegistry
     registry_entry = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == employee_id).first()

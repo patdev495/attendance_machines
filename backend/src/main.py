@@ -14,8 +14,13 @@ if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
 from config import config
-from routers import attendance, machines, export
 from database import init_db
+
+# v2.0 Feature routers (registered when implemented, phases 2-5)
+from features.logs.router import router as logs_router
+from features.daily_summary.router import router as daily_summary_router
+from features.employees.router import router as employees_router
+from features.machines.router import router as machines_router
 
 def create_app() -> FastAPI:
     init_db()
@@ -31,10 +36,11 @@ def create_app() -> FastAPI:
         expose_headers=["Content-Disposition"],
     )
 
-    # Register Modular Routers
-    app.include_router(attendance.router)
-    app.include_router(machines.router)
-    app.include_router(export.router)
+    # ── API Routers ──
+    app.include_router(logs_router)       # v2.0
+    app.include_router(daily_summary_router) # v2.0
+    app.include_router(employees_router)    # v2.0
+    app.include_router(machines_router)    # v2.0
 
     # Serve Vue 3 SPA
     app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")
@@ -48,6 +54,7 @@ def create_app() -> FastAPI:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
+        # Trình tự fallback: nếu không khớp bất kỳ API nào ở trên, nó sẽ trả về index.html
         index = config.STATIC_DIR / "index.html"
         if index.exists():
             return FileResponse(index)

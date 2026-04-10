@@ -1,7 +1,7 @@
 <template>
   <div class="pagination" v-if="totalPages > 1">
     <!-- Prev -->
-    <button class="btn-page" :disabled="currentPage <= 1" @click="go(currentPage - 1)">‹ Prev</button>
+    <button class="btn-page" :disabled="currentPage <= 1" @click="go(currentPage - 1)">‹ {{ $t('common.prev') }}</button>
 
     <!-- Always show page 1 -->
     <button class="btn-page" :class="{ active: currentPage === 1 }" @click="go(1)">1</button>
@@ -25,11 +25,11 @@
     <button v-if="totalPages > 1" class="btn-page" :class="{ active: currentPage === totalPages }" @click="go(totalPages)">{{ totalPages }}</button>
 
     <!-- Next -->
-    <button class="btn-page" :disabled="currentPage >= totalPages" @click="go(currentPage + 1)">Next ›</button>
+    <button class="btn-page" :disabled="currentPage >= totalPages" @click="go(currentPage + 1)">{{ $t('common.next') }} ›</button>
 
     <!-- Go to page input -->
     <span class="goto-wrap">
-      Go to
+      {{ $t('common.goto') }}
       <input
         type="number"
         class="goto-input"
@@ -42,7 +42,7 @@
       />
     </span>
 
-    <span class="page-info">{{ totalCount.toLocaleString() }} records</span>
+    <span class="page-info">{{ totalCount.toLocaleString() }} {{ $t('common.records') }}</span>
   </div>
 </template>
 

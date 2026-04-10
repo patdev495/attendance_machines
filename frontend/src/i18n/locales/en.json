@@ -1,12 +1,80 @@
 {
+  "common": {
+    "no_data": "No Data",
+    "loading": "Loading...",
+    "info": "Information",
+    "confirm": "Confirm",
+    "confirm_title": "Confirmation",
+    "showing": "Showing {start} - {end} of {total}",
+    "or": "or",
+    "actions": "Actions",
+    "close": "Close",
+    "cancel": "Cancel",
+    "error": "Error",
+    "success": "Success",
+    "prev": "Prev",
+    "next": "Next",
+    "goto": "Go to",
+    "records": "records",
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "layout": {
+    "tagline": "Time Attendance management system"
+  },
   "nav": {
     "title": "Time & Attendance",
     "dashboard": "Dashboard",
-    "machines": "Machines"
+    "machines": "Machines",
+    "employees": "Employees"
+  },
+  "employees": {
+    "title": "Employee Management",
+    "upload_sync": "Upload & Sync Registry",
+    "syncing": "Syncing...",
+    "sync_complete": "Sync Complete. Excel: {excel}, Machine Only: {machine}.",
+    "bulk_delete_all": "Delete {count} from all devices",
+    "bulk_delete_progress": "Bulk Global Delete: Processing machine {current} / {total} (Current: {ip})",
+    "search_placeholder": "Search by ID or Name...",
+    "all_shifts": "All Shifts",
+    "none_shift": "No information",
+    "delete_hardware_confirm": "Are you sure you want to delete {name} from hardware?",
+    "delete_bulk_global_confirm": "Are you sure you want to delete {count} employees from ALL hardware terminals? This cannot be undone.",
+    "edit_title": "Edit Employee",
+    "details_title": "Employee Details",
+    "id_label": "Employee ID",
+    "name_label": "Full Name",
+    "dept_label": "Department",
+    "group_label": "Group",
+    "shift_label": "Shift",
+    "start_date": "Start Date",
+    "last_updated": "Last Updated",
+    "save_changes": "Save Changes",
+    "updated_success": "Employee updated successfully"
   },
   "attendance": {
     "raw_logs": "Raw Logs",
-    "daily_summary": "Daily Summary",
+    "logs_subtitle": "View and synchronize raw attendance records from machines",
+    "daily_summary": "Daily Report",
+    "summary_title": "Daily Attendance Report",
+    "summary_subtitle": "Analyze daily attendance, manage shifts, and export reports.",
+    "summary_table": "Attendance Summary Table",
+    "detail_modal_title": "Detail: {id} - {date}",
+    "export": {
+      "btn": "Export Excel",
+      "exporting": "Exporting...",
+      "status_banner": "Exporting Excel: {step} ({progress}%)",
+      "error_prefix": "Export error"
+    },
+    "notes": {
+      "missing_tap": "Missing Check-in/out"
+    },
+    "summary_subtitle": "Analyze daily attendance, manage shifts, and export reports.",
+    "excel_sync": {
+      "title": "Excel & Machine Sync",
+      "drag_drop": "Drag & Drop Excel file (.xlsx) here",
+      "select_file": "Select file from computer"
+    },
     "filters": {
       "emp_id": "Employee ID",
       "machine_ip": "Machine IP",
@@ -17,6 +85,9 @@
       "all_status": "All Status",
       "active": "Active",
       "resigned": "Resigned (TV)",
+      "status_excel": "Excel Synced",
+      "status_machine": "Machine Only",
+      "status_log": "Log Only",
       "unknown": "Unknown (Not in DB)",
       "search": "Search",
       "clear": "Clear Filters",
@@ -36,6 +107,8 @@
       "attendance_time": "Time",
       "machine_ip": "Machine IP",
       "date": "Date",
+      "first_tap": "Clock In",
+      "last_tap": "Clock Out",
       "check_in": "Check In",
       "check_out": "Check Out",
       "work_hours": "Work Hours",
@@ -45,8 +118,10 @@
       "action": "Action",
       "no_records": "No records.",
       "loading": "Loading...",
+      "total_records": "Total records: {count}",
       "late": "⚠ +{m}m late",
-      "early": "⚠ -{m}m early"
+      "early": "⚠ -{m}m early",
+      "error_load_logs": "Failed to load logs. Please check your connection."
     }
   },
   "device": {
@@ -72,6 +147,8 @@
       "name_db": "Name (DB)",
       "status": "Status",
       "department": "Dept",
+      "group": "Group",
+      "source": "Source",
       "action": "Action",
       "no_records": "No matching records.",
       "not_synced": "Not Synced",
@@ -116,31 +193,46 @@
     "confirm": "Confirm"
   },
   "biometric": {
-    "view_coverage": "View Biometric Coverage",
-    "coverage_title": "Biometric Coverage: {id}",
+    "view_coverage": "View Fingerprint Coverage",
+    "coverage_title": "Fingerprint Coverage: {id}",
     "realtime_scan": "Real-time Scan",
     "scanning": "Communicating with all machines...",
     "terminal_offline": "Terminal Offline",
-    "template_ok": "Template Present",
-    "no_template": "No Biometrics",
+    "template_ok": "Template Exists",
+    "no_template": "No Template",
     "not_registered": "Not Registered",
     "refresh": "Refresh Coverage",
-    "export_fingerprints": "Export Excel Fingerprints",
-    "sync_all": "Sync All Fingerprints"
+    "export_fingerprints": "Export Fingerprints",
+    "sync_all": "Sync All Fingerprints",
+    "clone_title": "Clone Fingerprints",
+    "clone_desc": "ID: {id} - Fingerprints downloaded successfully. Select target machines to push to:",
+    "loading_machines": "Loading machines...",
+    "select_all": "Select All",
+    "selected_count": "{count} / {total} selected",
+    "processing_machines": "Processing {current} / {total} machines...",
+    "cloning_action": "Cloning...",
+    "push_action": "Push to {count} Machines"
   },
-  "export": {
+    "export": {
+    "progress_label": "Export",
     "time": "Export: Time",
     "hours": "Export: Hours",
     "both": "Export: All",
     "btn": "Export Excel",
-    "cancel": "Cancel "
+    "cancel": "Cancel ",
+    "starting": "Starting...",
+    "cancelled": "Export cancelled.",
+    "error_missing_dates": "Please select Start Date and End Date before exporting Excel.",
+    "error_failed": "Failed to start Excel export"
   },
   "sync": {
+    "progress_label": "Sync",
     "excel": "Sync Excel",
     "syncing": "Syncing ",
     "initiating": "Initiating sync...",
     "completed": "Sync completed.",
     "progress": "Syncing: Machine {current}/{total} ({ip}) - Added: {added}",
-    "machines": "Sync Machines"
+    "machines": "Sync Machines",
+    "uploading": "Uploading file..."
   }
 }
