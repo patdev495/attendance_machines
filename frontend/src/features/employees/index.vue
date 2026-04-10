@@ -38,8 +38,11 @@
       </select>
       <select v-model="shiftFilter" @change="fetchEmployees">
         <option value="">All Shifts</option>
-        <option value="D">Day</option>
-        <option value="N">Night</option>
+        <option value="D">Day (D)</option>
+        <option value="N">Night (N)</option>
+        <option value="TV">Resigned (TV)</option>
+        <option value="-">No Info (—)</option>
+        <option value="__null__">Not Set</option>
       </select>
     </div>
 
