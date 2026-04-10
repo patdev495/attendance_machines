@@ -12,10 +12,16 @@ class EmployeeOut(EmployeeBase):
     start_date: Optional[date] = None
     shift: Optional[str] = None
     source_status: str
-    machine_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+class EmployeeListOut(BaseModel):
+    items: List[EmployeeOut]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int
 
 class EmployeeUpdate(BaseModel):
     emp_name: Optional[str] = None

@@ -3,8 +3,8 @@ import axios from 'axios'
 const BASE = '/api/employees'
 
 export const employeesApi = {
-  getEmployees: async (filters = {}) => {
-    const response = await axios.get(BASE, { params: filters })
+  getEmployees: async (filters = {}, page = 1, pageSize = 50) => {
+    const response = await axios.get(BASE, { params: { ...filters, page, page_size: pageSize } })
     return response.data
   },
   

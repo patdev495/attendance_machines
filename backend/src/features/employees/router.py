@@ -6,6 +6,7 @@ import threading
 
 from .schema import (
     EmployeeOut, 
+    EmployeeListOut,
     EmployeeUpdate, 
     UpdateStatusOut, 
     DeleteHardwareOut, 
@@ -37,10 +38,10 @@ def run_update_registry(db: Session):
     finally:
         registry_update_state["is_running"] = False
 
-@router.get("", response_model=List[EmployeeOut])
+@router.get("", response_model=EmployeeListOut)
 def list_employees(
-    skip: int = 0, 
-    limit: int = 100, 
+    page: int = 1,
+    page_size: int = 50,
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
     shift: Optional[str] = None,
@@ -61,8 +62,19 @@ def list_employees(
             )
         else:
             query = query.filter(EmployeeLocalRegistry.shift == shift)
-        
-    return query.order_by(EmployeeLocalRegistry.employee_id).offset(skip).limit(limit).all()
+
+    total_count = query.count()
+    total_pages = max(1, -(-total_count // page_size))  # ceiling division
+    skip = (page - 1) * page_size
+    items = query.order_by(EmployeeLocalRegistry.employee_id).offset(skip).limit(page_size).all()
+
+    return EmployeeListOut(
+        items=items,
+        total_count=total_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages
+    )
 
 @router.post("/update-registry", response_model=UpdateStatusOut)
 def trigger_update_registry(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):

@@ -29,14 +29,14 @@
       </div>
     </div>
     <div class="filter-bar">
-      <input type="text" v-model="searchQuery" placeholder="Search by ID or Name..." @input="fetchEmployees" />
-      <select v-model="statusFilter" @change="fetchEmployees">
+      <input type="text" v-model="searchQuery" placeholder="Search by ID or Name..." @input="resetAndFetch" />
+      <select v-model="statusFilter" @change="resetAndFetch">
         <option value="">All Statuses</option>
         <option value="excel_synced">Excel Synced</option>
         <option value="machine_only">Machine Only</option>
         <option value="log_only">Log Only</option>
       </select>
-      <select v-model="shiftFilter" @change="fetchEmployees">
+      <select v-model="shiftFilter" @change="resetAndFetch">
         <option value="">All Shifts</option>
         <option value="N">Ngày (N)</option>
         <option value="D">Đêm (D)</option>
@@ -50,6 +50,13 @@
       @edit="onEdit" 
       @delete="onDelete" 
       @coverage="onCoverage" 
+    />
+
+    <PaginationBar
+      :currentPage="currentPage"
+      :totalPages="totalPages"
+      :totalCount="totalCount"
+      @change="onPageChange"
     />
 
     <EditEmployeeModal 
@@ -73,12 +80,18 @@ import { employeesApi } from './api'
 import EmployeesTable from './components/EmployeesTable.vue'
 import EditEmployeeModal from './components/EditEmployeeModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
+import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
 
 const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
 const shiftFilter = ref('')
+
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalCount = ref(0)
+const PAGE_SIZE = 50
 
 const fileInput = ref(null)
 
@@ -139,10 +152,23 @@ const fetchEmployees = async () => {
     if (statusFilter.value) filters.source_status = statusFilter.value
     if (shiftFilter.value) filters.shift = shiftFilter.value
     
-    employees.value = await employeesApi.getEmployees(filters)
+    const result = await employeesApi.getEmployees(filters, currentPage.value, PAGE_SIZE)
+    employees.value = result.items
+    totalCount.value = result.total_count
+    totalPages.value = result.total_pages
   } catch (err) {
     console.error('Failed to fetch employees:', err)
   }
+}
+
+const onPageChange = (page) => {
+  currentPage.value = page
+  fetchEmployees()
+}
+
+const resetAndFetch = () => {
+  currentPage.value = 1
+  fetchEmployees()
 }
 
 
