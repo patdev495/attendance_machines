@@ -1,89 +1,64 @@
-# Requirements: Time Attendance Machine — v2.0
+# Requirements: Time Attendance Machine — v3.0
 
-## Architecture
+> 🌍 **Multi-language Goal**: Đảm bảo 100% giao diện hỗ trợ English (mặc định), Tiếng Việt, và Tiếng Trung. Không còn chuỗi ký tự text cứng (hardcoded) trong code frontend.
 
-- **ARCH-01**: Backend organized as feature modules under `backend/src/features/{logs,daily_summary,employees,machines}/` — each with `router.py`, `service.py`, `schema.py`
-- **ARCH-02**: Frontend organized as feature modules under `frontend/src/features/{logs,daily_summary,employees,machines}/` — each with its View + components + api module
-- **ARCH-03**: `EmployeeLocalRegistry` DB table tracks all known employees with `source_status` enum: `excel_synced`, `machine_only`, `log_only`
-- **ARCH-04**: Old `routers/` and `sync_service.py` removed after migration. `services/export_service.py` preserved under `features/daily_summary/`
+## Foundation & Setup
 
----
+- **I18N-01**: English (en) là ngôn ngữ mặc định và là fallback nếu thiếu bản dịch ở các ngôn ngữ khác.
+- **I18N-02**: Hệ thống lưu trữ lựa chọn ngôn ngữ của người dùng qua `localStorage` và tự động áp dụng khi load trang.
+- **I18N-03**: Nút chuyển đổi ngôn ngữ (Lựa chọn giữa EN, VI, ZH) được tích hợp vào `AppHeader`.
 
-## Feature 1: Log Management
+## Layout & Shared Components
 
-> Cào log từ tất cả máy chấm công về DB, hiển thị và filter như tab Raw Log hiện tại.
+- **I18N-04**: Đa ngôn ngữ cho `AppSidebar` (Nav items: Dashboard, Logs, Summary, Employees, Machines).
+- **I18N-05**: Đa ngôn ngữ cho các Shared components:
+  - `PaginationBar`: "Showing X-Y of Z", labels.
+  - `ToastNotification`: Success/Error/Info types.
+  - `ConfirmModal`: "Confirm", "Cancel", generic titles.
+  - `AppModal`: Close buttons.
 
-- **LOG-01**: User can trigger a full sync from all configured machines; system pulls new attendance records into `AttendanceLogs` table with deduplication
-- **LOG-02**: User can view paginated raw attendance logs with filters: employee_id, machine_ip, date range (start/end)
-- **LOG-03**: User can see live sync progress (is_running, current machine, total machines, processed count, last sync time)
-- **LOG-04**: System deduplicates by (employee_id, attendance_time, machine_ip) — no duplicate entries on re-sync
+## Feature: Employee Management (Priority)
 
----
+- **I18N-06**: Chuyển đổi toàn diện `EmployeesView`: Header, Search placeholder, Sync/Bulk Delete buttons.
+- **I18N-07**: Chuyển đổi `EmployeesTable`: Table headers, Action tooltips (View, Edit, Delete, Coverage).
+- **I18N-08**: Chuyển đổi Source Status badges: "Excel Synced", "Machine Only", "Log Only".
+- **I18N-09**: Chuyển đổi các Modals:
+  - `EditEmployeeModal`: Field labels (Name), Rename button.
+  - `EmployeeDetailsModal`: Toàn bộ các field từ DB (Id, Name, Department, Group, Start Date, Shift, Source Status, Updated At).
+  - `BiometricCoverageModal`: Machine list, Status messages ("Template Present", "No Biometrics", etc.).
 
-## Feature 2: Daily Summary
+## Feature: Daily Summary
 
-> Tổng hợp báo cáo ngày từ logs. Filter đầy đủ. Export Excel + Sync Excel nâng cấp.
+- **I18N-10**: Chuyển đổi `SummaryView`: Title, Filter group labels.
+- **I18N-11**: Chuyển đổi `SummaryFilters`: Placeholders cho Employee ID, Min/Max hours, Checkboxes (Only Missing).
+- **I18N-12**: Chuyển đổi `SummaryTable`: Table headers (Date, Employee ID, Name, Dept, Shift, Check In, Check Out, Work Hours, Status, Note).
+- **I18N-13**: Chuyển đổi Attendance Status & Notes: "Late", "Early", "Missing", "Day Shift", "Night Shift".
 
-- **SUM-01**: User can view daily attendance summary grouped by employee/day with shift-aware work-hours calculation (existing `compute_day_stats` logic preserved)
-- **SUM-02**: User can filter summary by: date range, employee_id, machine_ip, shift (D/N), department, employee status, work hours (min/max), only_missing flag
-- **SUM-03**: User can click a row to see attendance detail (individual taps for that employee/day)
-- **SUM-04**: User can export summary to Excel for a date range — preserving all existing export logic (two-sheet format, styling, etc.)
-- **SUM-05**: User can sync employee metadata from an uploaded Excel file (existing column mapping: EMP_ID, SHIFT, EMP_NAME, DEPARTMENT, GROUP, START_DATE)
-- **SUM-06**: Excel sync also fetches all employees from all machines and upserts them into `EmployeeLocalRegistry` — employees present in machine but not in Excel get `source_status = machine_only`
-- **SUM-07**: Sync Excel UI shows a results summary distinguishing: Excel-synced count vs Machine-only (ghost) count
-- **SUM-08**: Feature does NOT include biometric coverage view or "Delete user from machine" operations (those are in Employee Management)
+## Feature: Log Management
 
----
+- **I18N-14**: Chuyển đổi `LogsView`: Page title, Sync button.
+- **I18N-15**: Chuyển đổi `LogsFilters`: Date From/To, Machine IP filters.
+- **I18N-16**: Chuyển đổi `LogsTable`: Table headers (Employee ID, Time, Machine IP).
+- **I18N-17**: Chuyển đổi Sync status banners: "Syncing...", "Sync Complete", process messages.
 
-## Feature 3: Employee Management
+## Feature: Machine Management
 
-> Registry thống nhất gồm: nhân viên từ Excel, từ máy chấm công, từ log cũ. Status phân biệt. CRUD cơ bản.
-
-- **EMP-01**: `EmployeeLocalRegistry` table stores all known employees with fields: `employee_id`, `emp_name`, `department`, `group`, `start_date`, `shift`, `source_status` (`excel_synced` | `machine_only` | `log_only`), `updated_at`
-- **EMP-02**: Employee list is populated from 3 sources:
-  - Excel sync → `excel_synced`
-  - Machine users not in Excel → `machine_only`
-  - Employees found only in `AttendanceLogs` (not in Excel or any machine) → `log_only`
-- **EMP-03**: Employee list UI shows all employees with a visible `source_status` badge/column for differentiation
-- **EMP-04**: Missing employee info fields (name, dept, shift) for `machine_only` / `log_only` are displayed as `—` or blank
-- **EMP-05**: User can delete an employee from all machines (background task, shows progress status)
-- **EMP-06**: User can rename an employee (updates all machines + DB)
-- **EMP-07**: User can view biometric coverage for any employee (same modal as current system — checks each machine for user + fingerprint presence)
-- **EMP-08**: Employee list supports filtering by `source_status` and basic search by name/ID
-
----
-
-## Feature 4: Machine Management
-
-> Quản lý máy chấm công — giữ nguyên toàn bộ chức năng hiện tại, chỉ refactor vào feature slice.
-
-- **MCH-01**: User can view list of configured machines with online/offline status
-- **MCH-02**: User can view all employees registered on a specific machine, enriched with DB metadata (name, dept, shift, status)
-- **MCH-03**: User can delete a single employee from a specific machine
-- **MCH-04**: User can bulk-delete multiple employees from a specific machine
-- **MCH-05**: User can view machine capacity (users/cap, fingerprints/cap, records/cap)
-- **MCH-06**: User can sync fingerprints for a single employee from a specific machine
-- **MCH-07**: User can bulk-sync all fingerprints from a specific machine to DB
-- **MCH-08**: User can export fingerprint data to Excel (from DB)
-
----
+- **I18N-18**: Chuyển đổi `MachineListView`: Card labels (Users, Fingers, Records, Sync Status).
+- **I18N-19**: Chuyển đổi `MachineDetailView`: Header labels, Detailed capacity counts.
+- **I18N-20**: Chuyển đổi Control buttons: "Sync Fingerprint", "Rename", "Bulk Delete", "Capacity Info".
 
 ## Traceability
 
 | REQ-ID | Phase |
 |--------|-------|
-| ARCH-01 to ARCH-04 | Phase 1 |
-| LOG-01 to LOG-04 | Phase 2 |
-| SUM-01 to SUM-08 | Phase 3 |
-| EMP-01 to EMP-08 | Phase 4 |
-| MCH-01 to MCH-08 | Phase 5 |
+| I18N-01 to I18N-05 | Phase 1: Foundation & Layout |
+| I18N-06 to I18N-09 | Phase 2: Employee Management i18n |
+| I18N-10 to I18N-13 | Phase 3: Daily Summary i18n |
+| I18N-14 to I18N-17 | Phase 4: Log Management i18n |
+| I18N-18 to I18N-20 | Phase 5: Machine Management i18n |
 
----
+## Out of Scope (v3.0)
 
-## Out of Scope (v2.0)
-
-- Automated unit/integration tests — future milestone
-- Multi-language (i18n) — future milestone
-- Configurable shift rules UI — future milestone
-- Mobile app — not planned
-- Cloud hosting — on-premise only
+- Backend error message translation (FastAPI responses remain English/Technical).
+- Translation of database data (Employee names, Departments - những dữ liệu từ input của người dùng).
+- Support for additional languages beyond EN, VI, ZH.

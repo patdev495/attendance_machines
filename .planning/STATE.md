@@ -1,48 +1,35 @@
 # Project State: Time Attendance Machine
 
 ## Current Milestone
-- **Name**: v2.0 — Feature-Based Architecture Refactor
-- **Status**: Active
-- **Progress**: 66% (4/6 phases complete)
+- **Name**: v3.0 — Comprehensive Multi-language Support (i18n)
+- **Status**: Starting
+- **Progress**: 0% (Requirements defined)
 
 ## Active Phase
-- **Phase**: Phase 5: Machine Management Feature
-- **Goal**: Refactor toàn bộ machine management vào feature slice & giữ nguyên 100% behavior hiện tại.
+- **Phase**: None
+- **Goal**: Initialize milestone v3.0.
 
 ## Accumulated Context
 
 ### Project Vision
-Refactor backend and frontend into vertical feature slices (logs, daily_summary, employees, machines). Add EmployeeLocalRegistry to unify all employee sources. Preserve all existing business logic.
+Refactor completed (v2.0). Now focusing on professionalizing the application with full internationalization (i18n) support for English, Vietnamese, and Chinese.
 
-### Architecture Target
-```
-backend/src/
-  features/
-    logs/          ← sync_service (log pulling) + raw log endpoints
-    daily_summary/ ← attendance summary + export
-    employees/     ← unified employee registry (EmployeeLocalRegistry)
-    machines/      ← machine management + fingerprints
-  shared/          ← database.py, config.py, utils/
-  main.py          ← thin orchestrator
-
-frontend/src/
-  features/
-    logs/          ← LogsView + components
-    daily_summary/ ← DailySummaryView + components
-    employees/     ← EmployeesView + components
-    machines/      ← DeviceListView + DeviceDetailView
-  shared/          ← layout, i18n, stores, router
-```
+### Architecture
+- Feature-based vertical slices in both backend and frontend.
+- `EmployeeLocalRegistry` unifies Excel, Machine, and Log-only sources.
+- `i18n` setup exists in `frontend/src/i18n`.
 
 ### Key Constraints
 - Windows OS deployment.
-- MSSQL 2008 compatibility (no modern SQL features).
-- Hardware dependency on ZKTeco (PyZK protocol).
-- `uv pip` for all Python package installs.
+- MSSQL 2008 compatibility.
+- Hardware dependency on ZKTeco (PyZK).
+- `uv pip` for Python packages.
+- **i18n**: English is the default and fallback.
 
 ### Roadmap Evolution
-- v1.x: Routers/services split completed.
-- v2.0 started 2026-04-09: Full feature-based refactor.
+- v1.x: Backend modernization.
+- v2.0: Feature-based architecture refactor (Completed 2026-04-10).
+- v3.0: Comprehensive Multi-language Support (Started 2026-04-10).
 
 ---
 *Last updated: 2026-04-10*

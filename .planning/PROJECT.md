@@ -11,15 +11,16 @@ To provide accurate, reliable, and user-friendly attendance tracking for diverse
 
 ---
 
-## Current Milestone: v2.0 — Feature-Based Architecture Refactor
+## Current Milestone: v3.0 — Comprehensive Multi-language Support (i18n)
 
-**Goal:** Refactor toàn bộ backend và frontend sang kiến trúc vertical feature slices, nâng cấp Employee registry để hỗ trợ "ghost employees" từ máy chấm công và log cũ.
+**Goal:** Chuyển đổi toàn bộ 100% giao diện sang đa ngôn ngữ (English, Vietnamese, Chinese), đảm bảo đồng nhất và không còn text cứng.
 
 **Target features:**
-- **Log Management** — Sync log từ máy → DB, hiển thị/filter raw logs
-- **Daily Summary** — Báo cáo ngày, filter đầy đủ, Export Excel, Sync Excel nâng cấp (merge machine users)
-- **Employee Management** — Registry thống nhất: Excel + Machine + Log-only. Status phân biệt. Xóa/đổi tên/biometric
-- **Machine Management** — Quản lý máy chấm công giống hiện tại
+- **Layout & Shared** — Đa ngôn ngữ cho Header, Sidebar, Pagination, Toasts, Modals.
+- **Log Management** — Đa ngôn ngữ cho LogsView, Table, Filters và status messages.
+- **Daily Summary** — Đa ngôn ngữ cho SummaryView, Table, Filters, Export/Sync dialogs.
+- **Employee Management** — Đa ngôn ngữ cho EmployeesView, Table, Edit/Details/Biometric modals.
+- **Machine Management** — Đa ngôn ngữ cho Machine Views, Cards, terminal actions.
 
 **Tooling note:** Python packages → `uv pip install`
 
@@ -35,15 +36,15 @@ To provide accurate, reliable, and user-friendly attendance tracking for diverse
 - ✓ [Frontend] Vue 3 / Vite dashboard with real-time status updates.
 - ✓ [Export] Asynchronous Excel export system with progress tracking.
 - ✓ [Backend] Routers/Services split from main.py completed.
+- ✓ [Architecture] Feature-layered backend and frontend (Vertical Slices) (v2.0).
+- ✓ [Employee] Unified EmployeeLocalRegistry with source_status differentiation (v2.0).
+- ✓ [Feature] Full Log, Summary, Employee, and Machine feature implementations (v2.0).
 
-### Active (v2.0)
-- [ ] [Architecture] Feature-based backend: `features/{logs,daily_summary,employees,machines}/`
-- [ ] [Architecture] Feature-based frontend: `src/features/{logs,daily_summary,employees,machines}/`
-- [ ] [DB] EmployeeLocalRegistry table: unified employee source tracking
-- [ ] [Log] Log sync + raw log view with full filters
-- [ ] [Summary] Daily summary with upgraded Excel sync (machine users merged)
-- [ ] [Employee] Unified employee list with source_status differentiation
-- [ ] [Machine] Machine management (feature-sliced, same behavior)
+### Active (v3.0)
+- [ ] [i18n] 100% UI hardcoded strings removed and replaced with `$t()`.
+- [ ] [Local] Complete English (en.json), Vietnamese (vi.json), and Chinese (zh.json) dictionaries.
+- [ ] [Feature] Multi-language support for Layout, Shared Components, and all 4 main features.
+- [ ] [UI] Language selector in AppHeader with persistence.
 
 ### Out of Scope
 - [Mobile App] — Native mobile application not planned; focus on responsive web.
@@ -57,11 +58,12 @@ To provide accurate, reliable, and user-friendly attendance tracking for diverse
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Multi-language Support | Necessary for international operation | Deferred to v3.0 |
+| Multi-language Support | Necessary for international operation | v3.0 priority |
 | Service Refactoring | Monolithic main.py was a maintenance risk | Completed in v1.x |
 | Feature-Based Architecture | sync_service.py (647 lines) unscalable, frontend needs clear boundaries | v2.0 priority |
 | EmployeeLocalRegistry | Need to unify Excel/Machine/Log-only employees in one registry | New DB table in v2.0 |
 | uv pip for Python deps | Faster, reproducible installs | Project convention |
+| **DB Immutability** | Existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata, EmployeeFingerprints) must NOT be altered — only new tables may be added | Hard constraint — enforced throughout v2.0 |
 
 ---
 
@@ -83,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 — Milestone v2.0 started*
+*Last updated: 2026-04-10 — Milestone v3.0 started*
