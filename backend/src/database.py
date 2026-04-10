@@ -52,7 +52,34 @@ class EmployeeFingerprint(Base):
     created_at = Column(DateTime, server_default=func.current_timestamp())
     updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
+# ──────────────────────────────────────────────────────────────────────────────
+# v2.0 NEW TABLE — EmployeeLocalRegistry
+# Unified employee registry that tracks employees from 3 sources:
+#   excel_synced  → imported via Excel sync
+#   machine_only  → found on a ZKTeco machine but not in Excel
+#   log_only      → found only in AttendanceLogs (old logs, no machine/Excel match)
+#
+# IMPORTANT: existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata,
+# EmployeeFingerprints) are NOT modified. This is an additive-only change.
+# ──────────────────────────────────────────────────────────────────────────────
+class EmployeeLocalRegistry(Base):
+    __tablename__ = "EmployeeLocalRegistry"
+    employee_id  = Column(String(50), primary_key=True)
+    emp_name     = Column(Unicode(255), nullable=True)
+    department   = Column(Unicode(255), nullable=True)
+    group_name   = Column(Unicode(255), nullable=True)   # "group" is a Python keyword
+    start_date   = Column(Date, nullable=True)
+    shift        = Column(String(10), nullable=True)     # 'D' or 'N'
+    # source_status: 'excel_synced' | 'machine_only' | 'log_only'
+    source_status = Column(String(20), nullable=False, default="log_only", index=True)
+    machine_name = Column(Unicode(255), nullable=True)
+    updated_at   = Column(DateTime, server_default=func.current_timestamp(),
+                          onupdate=func.current_timestamp())
+
 def init_db():
+    # create_all is additive — it only creates tables that do not yet exist.
+    # Existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata,
+    # EmployeeFingerprints) are never altered.
     Base.metadata.create_all(bind=engine)
 
 def get_db():
