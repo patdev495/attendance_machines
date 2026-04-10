@@ -28,6 +28,19 @@
       @delete="onDelete" 
       @coverage="onCoverage" 
     />
+
+    <EditEmployeeModal 
+      :isOpen="isEditModalOpen"
+      :employee="selectedEmployee"
+      @close="isEditModalOpen = false"
+      @saved="fetchEmployees"
+    />
+
+    <BiometricCoverageModal 
+      :isOpen="isCoverageModalOpen"
+      :employeeId="selectedEmployee?.employee_id"
+      @close="isCoverageModalOpen = false"
+    />
   </div>
 </template>
 
@@ -35,6 +48,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { employeesApi } from './api'
 import EmployeesTable from './components/EmployeesTable.vue'
+import EditEmployeeModal from './components/EditEmployeeModal.vue'
+import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
 
 const employees = ref([])
 const searchQuery = ref('')
@@ -93,9 +108,13 @@ const handleRebuild = async () => {
   }
 }
 
+const isEditModalOpen = ref(false)
+const isCoverageModalOpen = ref(false)
+const selectedEmployee = ref(null)
+
 const onEdit = (emp) => {
-  // Placeholder for the next task (Modal integration)
-  alert(`Edit clicked for ${emp.emp_name || emp.employee_id}`)
+  selectedEmployee.value = emp
+  isEditModalOpen.value = true
 }
 
 const onDelete = async (emp) => {
@@ -112,12 +131,8 @@ const onDelete = async (emp) => {
 }
 
 const onCoverage = async (emp) => {
-  try {
-    const res = await employeesApi.getBiometricCoverage(emp.employee_id)
-    alert("Coverage details:\n" + JSON.stringify(res, null, 2))
-  } catch (err) {
-    alert("Failed to fetch biometric coverage")
-  }
+  selectedEmployee.value = emp
+  isCoverageModalOpen.value = true
 }
 
 onMounted(() => {
