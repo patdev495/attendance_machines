@@ -55,8 +55,10 @@ def list_employees(
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
         
     if shift:
-        if shift == "__null__":
-            query = query.filter(EmployeeLocalRegistry.shift == None)
+        if shift == "__none__":
+            query = query.filter(
+                (EmployeeLocalRegistry.shift == None) | (EmployeeLocalRegistry.shift == "-")
+            )
         else:
             query = query.filter(EmployeeLocalRegistry.shift == shift)
         
