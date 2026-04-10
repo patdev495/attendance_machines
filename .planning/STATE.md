@@ -2,12 +2,12 @@
 
 ## Current Milestone
 - **Name**: v2.0 — Feature-Based Architecture Refactor
-- **Status**: Defining requirements
-- **Progress**: 0%
+- **Status**: Active
+- **Progress**: 50% (3/6 phases complete)
 
 ## Active Phase
-- **Phase**: None (Initialization in progress)
-- **Goal**: Define requirements and roadmap for v2.0
+- **Phase**: Phase 4: Employee Management Feature
+- **Goal**: Registry nhân viên thống nhất — Excel + Machine + Log-only. Status badge. Xóa/đổi tên/biometric.
 
 ## Accumulated Context
 

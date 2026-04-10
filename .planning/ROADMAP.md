@@ -6,6 +6,8 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 **Numbering:** Phases 1–6 (fresh start for v2.0)
 **Strategy:** Mỗi phase = 1 feature hoàn chỉnh (backend + frontend). User test sau mỗi phase.
 
+> ⚠️ **DB Hard Constraint**: Chỉ được THÊM bảng mới. Không được ALTER/DROP bất kỳ bảng hiện có nào (`ShiftRules`, `AttendanceLogs`, `EmployeeMetadata`, `EmployeeFingerprints`).
+
 ---
 
 ### Phase 1: Foundation & DB Schema
@@ -15,10 +17,10 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 - **UI hint**: no
 
 **Plans:**
-- [ ] **1-01** — Create backend feature scaffold: `features/{logs,daily_summary,employees,machines}/` với `__init__.py`, `router.py`, `service.py`, `schema.py` placeholder. Khởi tạo `shared/` (move database.py, config.py, utils/). Cập nhật import paths.
-- [ ] **1-02** — Add `EmployeeLocalRegistry` model vào database.py: fields `employee_id`, `emp_name`, `department`, `group`, `start_date`, `shift`, `source_status` (enum: excel_synced/machine_only/log_only), `updated_at`. Run `init_db()` để tạo table.
-- [ ] **1-03** — Create frontend feature scaffold: `src/features/{logs,daily_summary,employees,machines}/` với `index.vue`, `api.js`, `components/` placeholder. Move shared code vào `src/shared/`.
-- [ ] **1-04** — Update `main.py` để đăng ký feature routers. Update Vue `router/index.js` để point tới feature views. Verify app khởi động không lỗi.
+- [x] **1-01** — Create backend feature scaffold: `features/{logs,daily_summary,employees,machines}/` với `__init__.py`, `router.py`, `service.py`, `schema.py` placeholder. Khởi tạo `shared/` (move database.py, config.py, utils/). Cập nhật import paths.
+- [x] **1-02** — Add `EmployeeLocalRegistry` model vào database.py: fields `employee_id`, `emp_name`, `department`, `group`, `start_date`, `shift`, `source_status` (enum: excel_synced/machine_only/log_only), `updated_at`. Run `init_db()` để tạo table. **KHÔNG sửa bất kỳ model hiện có nào.** Chỉ dùng `Base.metadata.create_all()` — SQLAlchemy sẽ chỉ tạo bảng nếu chưa tồn tại.
+- [x] **1-03** — Create frontend feature scaffold: `src/features/{logs,daily_summary,employees,machines}/` với `index.vue`, `api.js`, `components/` placeholder. Move shared code vào `src/shared/`.
+- [x] **1-04** — Update `main.py` để đăng ký feature routers. Update Vue `router/index.js` để point tới feature views. Verify app khởi động không lỗi.
 
 **Success criteria:**
 1. `python main.py` chạy không có import errors
@@ -35,7 +37,7 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 - **UI hint**: yes
 
 **Plans:**
-- [ ] **2-01** — Backend `features/logs/service.py`: Extract `sync_all_machines()`, `get_machine_list()`, `sync_status` tracking từ `sync_service.py`. Giữ nguyên toàn bộ logic dedup + batch commit.
+4/4 plans complete
 - [ ] **2-02** — Backend `features/logs/router.py`: Endpoints `POST /api/logs/sync`, `GET /api/logs/sync/status`, `GET /api/logs` (paginated + filtered: employee_id, machine_ip, start_date, end_date), `GET /api/logs/date-range`. Schema Pydantic cho response.
 - [ ] **2-03** — Frontend `features/logs/api.js`: Functions `startSync()`, `getSyncStatus()`, `getLogs(filters)`, `getDateRange()`. Migrate từ `api/attendance.js` (phần raw log).
 - [ ] **2-04** — Frontend `features/logs/LogsView.vue` + components `LogsFilters.vue`, `LogsTable.vue`, `SyncStatusBar.vue`: Giống Raw Log tab hiện tại — filter panel, paginated table, sync button với progress. Register route `/logs`.
@@ -55,11 +57,11 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 - **UI hint**: yes
 
 **Plans:**
-- [ ] **3-01** — Backend `features/daily_summary/service.py`: Extract `AttendanceService.process_summary_rows()`, shift calculation logic từ `services/attendance_service.py`. Extract `sync_employees_from_excel()` và nâng cấp để sau khi sync Excel, fetch all machine users và upsert vào `EmployeeLocalRegistry` với `source_status=machine_only` (nếu chưa có trong Excel). Trả về kết quả phân biệt: excel_count, machine_only_count.
-- [ ] **3-02** — Backend `features/daily_summary/router.py`: Endpoints `GET /api/summary` (filter đầy đủ + pagination), `GET /api/summary/detail` (individual taps), `POST /api/summary/export` (trigger async export), `GET /api/summary/export/status`, `POST /api/summary/sync-excel` (upload + background task), `GET /api/summary/sync-excel/status`. Move `export_service.py` → `features/daily_summary/export_service.py`, giữ nguyên logic.
-- [ ] **3-03** — Frontend `features/daily_summary/api.js`: Functions `getSummary(filters)`, `getSummaryDetail(empId, date)`, `exportExcel(params)`, `getExportStatus()`, `syncExcel(file)`, `getSyncExcelStatus()`.
-- [ ] **3-04** — Frontend `features/daily_summary/DailySummaryView.vue` + `SummaryTable.vue`, `SummaryFilters.vue`: Giống Daily Summary hiện tại nhưng BỎ biometric coverage panel và nút Delete user from machine. Giữ filter đầy đủ, export Excel button, sync Excel button.
-- [ ] **3-05** — Frontend `features/daily_summary/components/ExcelSyncModal.vue`: Upload dialog + progress bar. Sau khi sync xong, hiển thị kết quả: "Synced from Excel: X employees | Found on machines (not in Excel): Y employees".
+- [x] **3-01** — Backend `features/daily_summary/service.py`: Extract `AttendanceService.process_summary_rows`, shift calculation logic. Upgrade `sync_employees_from_excel` to upsert into `EmployeeLocalRegistry` and merge machine users.
+- [x] **3-02** — Backend `features/daily_summary/router.py`: Endpoints `GET /api/summary`, `GET /api/summary/detail`, `POST /api/summary/export`, `GET /api/summary/export/status`, `POST /api/summary/sync-excel`.
+- [x] **3-03** — Frontend `features/daily_summary/api.js`: Functions for fetching summary, detail, triggering export and sync.
+- [x] **3-04** — Frontend `features/daily_summary/DailySummaryView.vue` + `SummaryTable.vue`, `SummaryFilters.vue`.
+- [x] **3-05** — Frontend `features/daily_summary/components/ExcelSyncModal.vue`: Upload dialog + progress bar with detailed results.
 
 **Success criteria:**
 1. Daily summary table load đúng dữ liệu với shift-aware work hours
@@ -138,8 +140,8 @@ Goal: Refactor toàn bộ backend và frontend thành vertical feature slices, n
 | # | Phase | Goal | Requirements | Effort |
 |---|-------|------|--------------|--------|
 | 1 | Foundation & DB Schema | Scaffold structure + EmployeeLocalRegistry | ARCH-01–04 | Medium |
-| 2 | Log Management | Sync + raw log view | LOG-01–04 | Medium |
-| 3 | Daily Summary | Summary + Export + Sync Excel nâng cấp | SUM-01–08 | High |
+| 2 | Log Management | 4/4 | Complete   | 2026-04-09 |
+| 3 | Daily Summary | 5/5 | Complete   | 2026-04-09 |
 | 4 | Employee Management | Unified registry + operations | EMP-01–08 | High |
 | 5 | Machine Management | Feature-slice machine ops | MCH-01–08 | Medium |
 | 6 | Cleanup & Wiring | Remove old code, final integration | ARCH-04 | Low |
