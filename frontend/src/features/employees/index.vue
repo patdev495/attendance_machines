@@ -2,15 +2,12 @@
   <div class="employees-view">
     <div class="header">
       <h1>Employee Management</h1>
-      <button class="btn-primary" @click="handleRebuild" :disabled="isRebuilding">
-        {{ isRebuilding ? 'Updating Registry...' : 'Update Registry' }}
+      <button class="btn-primary" @click="showSyncModal = true">
+        Update Registry
       </button>
     </div>
     
-    <div v-if="rebuildStatus" class="status-banner" :class="{ 'status-success': rebuildProgress === 100 }">
-      Status: {{ rebuildStatus }} 
-      <span v-if="rebuildProgress > 0">({{ rebuildProgress }}%)</span>
-    </div>
+
 
     <div class="filter-bar">
       <input type="text" v-model="searchQuery" placeholder="Search by ID or Name..." @input="fetchEmployees" />
@@ -41,6 +38,12 @@
       :employeeId="selectedEmployee?.employee_id"
       @close="isCoverageModalOpen = false"
     />
+
+    <SyncRegistryModal 
+      v-if="showSyncModal"
+      @close="showSyncModal = false"
+      @synced="onRegistrySynced"
+    />
   </div>
 </template>
 
@@ -50,15 +53,18 @@ import { employeesApi } from './api'
 import EmployeesTable from './components/EmployeesTable.vue'
 import EditEmployeeModal from './components/EditEmployeeModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
+import SyncRegistryModal from './components/SyncRegistryModal.vue'
 
 const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
 
-const isRebuilding = ref(false)
-const rebuildStatus = ref('')
-const rebuildProgress = ref(0)
-let pollInterval = null
+const showSyncModal = ref(false)
+
+const onRegistrySynced = () => {
+  showSyncModal.value = false
+  fetchEmployees()
+}
 
 const fetchEmployees = async () => {
   try {
@@ -72,41 +78,7 @@ const fetchEmployees = async () => {
   }
 }
 
-const pollStatus = async () => {
-  try {
-    const res = await employeesApi.getRebuildStatus()
-    isRebuilding.value = res.is_running
-    rebuildStatus.value = res.status
-    rebuildProgress.value = res.progress
-    
-    if (!res.is_running && pollInterval) {
-      clearInterval(pollInterval)
-      pollInterval = null
-      fetchEmployees() // Refresh data after update
-    }
-  } catch (err) {
-    console.error('Error polling status:', err)
-    if (pollInterval) {
-      clearInterval(pollInterval)
-      pollInterval = null
-    }
-  }
-}
 
-const handleRebuild = async () => {
-  try {
-    const res = await employeesApi.rebuildRegistry()
-    isRebuilding.value = res.is_running
-    rebuildStatus.value = res.status
-    rebuildProgress.value = res.progress
-    
-    if (isRebuilding.value && !pollInterval) {
-      pollInterval = setInterval(pollStatus, 1000)
-    }
-  } catch (err) {
-    alert("Failed to start rebuild")
-  }
-}
 
 const isEditModalOpen = ref(false)
 const isCoverageModalOpen = ref(false)
@@ -137,16 +109,9 @@ const onCoverage = async (emp) => {
 
 onMounted(() => {
   fetchEmployees()
-  // Check if rebuild was already running
-  pollStatus().then(() => {
-    if (isRebuilding.value && !pollInterval) {
-      pollInterval = setInterval(pollStatus, 1000)
-    }
-  })
 })
 
 onUnmounted(() => {
-  if (pollInterval) clearInterval(pollInterval)
 })
 </script>
 

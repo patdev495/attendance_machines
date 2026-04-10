@@ -53,7 +53,7 @@ def list_employees(
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
         
-    return query.offset(skip).limit(limit).all()
+    return query.order_by(EmployeeLocalRegistry.employee_id).offset(skip).limit(limit).all()
 
 @router.post("/update-registry", response_model=UpdateStatusOut)
 def trigger_update_registry(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
