@@ -1,5 +1,6 @@
 import threading
 import time
+import requests
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from zk import ZK
@@ -15,6 +16,7 @@ class LiveMonitorManager:
     def __init__(self):
         self.executor = ThreadPoolExecutor(max_workers=20)
         self.active_monitors = {} # ip -> thread/future
+        self.meal_configs = {}    # ip -> meal_url
         self.is_running = False
         self._loop = None
 
@@ -33,10 +35,12 @@ class LiveMonitorManager:
         while self.is_running:
             try:
                 # Use the new filtered list for Live Mode
-                live_ips = get_live_machine_list()
-                live_ips_set = set(live_ips)
+                live_configs = get_live_machine_list()
+                live_ips_set = set(cfg['ip'] for cfg in live_configs)
 
-                for ip in live_ips:
+                for cfg in live_configs:
+                    ip = cfg['ip']
+                    self.meal_configs[ip] = cfg['meal_url']
                     # Start monitor if it's new or the previous thread died
                     if ip not in self.active_monitors or not self.active_monitors[ip].is_alive():
                         self._start_monitor(ip)
@@ -51,6 +55,8 @@ class LiveMonitorManager:
                         if self.active_monitors[ip].is_alive():
                            logger.info(f"Stopping live monitor for {ip} (config changed)")
                         del self.active_monitors[ip]
+                        if ip in self.meal_configs:
+                            del self.meal_configs[ip]
                            
             except Exception as e:
                 logger.error(f"Error in Live Monitor management loop: {e}")
@@ -141,7 +147,6 @@ class LiveMonitorManager:
             emp_name = emp.emp_name if emp else f"ID: {user_id}"
 
             # 3. Broadcast to WebSockets
-            # Since this is in a thread, we use a helper to bridge to the async manager
             payload = {
                 "type": "new_log",
                 "data": {
@@ -152,12 +157,32 @@ class LiveMonitorManager:
                     "is_live": True
                 }
             }
-            
-            # Use asyncio.run_coroutine_threadsafe if we have a loop, 
-            # but for simplicity since we don't have easy access to the main loop here 
-            # without more plumbing, we can use a simpler broadcast pattern 
-            # OR register the loop on startup.
             self._broadcast_async(payload)
+
+            # 4. Meal Ticket Webhook (Target API)
+            meal_url = self.meal_configs.get(ip)
+            if meal_url:
+                def send_meal_hook():
+                    try:
+                        # Fetch extra info if possible (department)
+                        dept = emp.department if emp else "-"
+                        hook_data = {
+                            "employee_id": user_id,
+                            "emp_name": emp_name,
+                            "department": dept,
+                            "timestamp": timestamp.isoformat(),
+                            "machine_ip": ip
+                        }
+                        logger.info(f"Sending meal ticket hook to {meal_url} for {user_id}")
+                        resp = requests.post(meal_url, json=hook_data, timeout=5)
+                        if resp.status_code >= 400:
+                            logger.error(f"Meal hook error {resp.status_code}: {resp.text}")
+                    except Exception as ex:
+                        logger.error(f"Failed to send meal hook: {ex}")
+                
+                # Run in a separate thread to avoid blocking the monitor loop
+                threading.Thread(target=send_meal_hook, daemon=True).start()
+
 
         except Exception as e:
             logger.error(f"Error processing live event: {e}")
