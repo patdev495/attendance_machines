@@ -18,6 +18,7 @@
             <th>{{ $t('attendance.table.first_tap') }}</th>
             <th>{{ $t('attendance.table.last_tap') }}</th>
             <th>{{ $t('attendance.table.work_hours') }}</th>
+            <th>{{ $t('attendance.table.hours_ot') }}</th>
             <th>{{ $t('attendance.table.status') }}</th>
             <th>{{ $t('attendance.table.note') }}</th>
             <th class="actions-col">{{ $t('common.actions') }}</th>
@@ -25,13 +26,13 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="10" class="empty-state">
+            <td colspan="11" class="empty-state">
               <div class="loader"></div>
               {{ $t('common.loading') }}
             </td>
           </tr>
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="10" class="empty-state">
+            <td colspan="11" class="empty-state">
               {{ $t('common.no_data') }}
             </td>
           </tr>
@@ -48,6 +49,9 @@
             <td class="time">{{ item.last_tap ? formatTime(item.last_tap) : '-' }}</td>
             <td class="hours" :class="{ 'warning': item.work_hours < 8 && item.work_hours > 0 }">
               {{ item.work_hours ? item.work_hours.toFixed(2) : '0.00' }}
+            </td>
+            <td class="hours ot">
+              {{ item.hours_ot ? item.hours_ot.toFixed(2) : '0.00' }}
             </td>
             <td>
               <span class="status-indicator" :class="getStatusClass(item.status)"></span>
@@ -185,6 +189,7 @@ tr:hover td {
 .bold { font-weight: 600; }
 .time { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
 .hours { font-weight: 700; color: var(--primary); }
+.hours.ot { color: #f59e0b; } /* Amber-500 for OT */
 .hours.warning { color: var(--warning); }
 .error-text { color: var(--danger); font-size: 0.85rem; font-weight: 500; }
 

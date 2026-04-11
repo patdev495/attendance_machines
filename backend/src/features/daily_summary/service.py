@@ -59,10 +59,12 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         is_valid_day = (count > 1 and first != last and not is_double_checkin)
 
         if is_valid_day:
-            work_hours, _, _, minutes_late, minutes_early_lv = compute_day_stats(
+            work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv = compute_day_stats(
                 first, last, w_date, department, row_shift, rules_pool=rules_pool
             )
         else:
+            hours_standard = 0.0
+            hours_ot = 0.0
             note = "Missing Check-in/out"
 
         emp_name = getattr(row, "emp_name", None)
@@ -77,6 +79,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "last_tap": last,
             "tap_count": count,
             "work_hours": work_hours,
+            "hours_standard": hours_standard,
+            "hours_ot": hours_ot,
             "shift": row_shift or "N/A",
             "status": (row.status if hasattr(row, "status") and row.status else "Active"),
             "note": note,

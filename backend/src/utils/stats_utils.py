@@ -9,26 +9,40 @@ def compute_day_stats(first, last, w_date, department, shift, rules_pool=None):
                          if rules['end_next_day']
                          else datetime.combine(w_date, rules['official_end']))
 
+    # 1. Basic Stats: Late Arrival and Early Leave (relative to official window)
     minutes_late  = max(0, int((first - official_start_dt).total_seconds() / 60))
     minutes_early = max(0, int((official_end_dt - last).total_seconds() / 60))
 
+    # 2. Total Work Hours Calculation (including 1h break deduction)
+    # Total Duration = from actual in (clamped to start) to actual out
     effective_in  = max(first, official_start_dt)
-    effective_out = min(last, official_end_dt) if not rules['has_overtime'] else last
+    effective_out = last
     total_secs    = max(0.0, (effective_out - effective_in).total_seconds())
 
-    if rules['deduct_break']:
-        work_hours = round((total_secs - 3600) / 3600, 2) if total_secs > 3600 else round(total_secs / 3600, 2)
+    if rules['deduct_break'] and total_secs > 3600:
+        work_hours = round((total_secs - 3600) / 3600, 2)
     else:
         work_hours = round(total_secs / 3600, 2)
 
+    # Apply cap if max_hours is set
     if rules['max_hours'] is not None:
         work_hours = min(work_hours, rules['max_hours'])
 
-    if rules['has_overtime'] and work_hours >= rules['standard_hours']:
-        hours_standard = rules['standard_hours']
-        hours_ot       = round(work_hours - rules['standard_hours'], 2)
+    # 3. Overtime (OT) Logic
+    # New Rule: 12h shifts (Std=12) have 0 OT.
+    # 8h shifts (Std=8) calculation OT = duration after official_end.
+    is_12h = rules['standard_hours'] >= 12.0
+    
+    if rules['has_overtime'] and not is_12h:
+        # OT is only counted if leaving AFTER the official end
+        ot_secs = max(0, (last - official_end_dt).total_seconds())
+        hours_ot = round(ot_secs / 3600, 2)
+        
+        # Standard hours is the remainder (capped by work_hours)
+        hours_standard = max(0, round(work_hours - hours_ot, 2))
     else:
+        # 12-hour shifts or shifts without OT
         hours_standard = work_hours
-        hours_ot       = 0.0
+        hours_ot = 0.0
 
     return work_hours, hours_standard, hours_ot, minutes_late, minutes_early

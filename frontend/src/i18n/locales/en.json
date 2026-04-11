@@ -113,6 +113,7 @@
       "check_in": "Check In",
       "check_out": "Check Out",
       "work_hours": "Work Hours",
+      "hours_ot": "Overtime",
       "shift": "Shift",
       "status": "Status",
       "note": "Note",

@@ -28,3 +28,4 @@ temp_*
 backend/logs/
 backend/static/
 backend/__pycache__/
+scratch/
