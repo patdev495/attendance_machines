@@ -51,9 +51,15 @@ def list_employees(
     db: Session = Depends(get_db)
 ):
     query = db.query(EmployeeLocalRegistry)
-    
     if search:
-        query = query.filter(EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") | EmployeeLocalRegistry.emp_name.ilike(f"%{search}%"))
+        # Pre-filter: Find matching IDs first using Vietnamese collation (Accent Sensitive)
+        found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
+            EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
+            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AS').ilike(f"%{search}%")
+        ).all()
+        
+        target_ids = {r[0] for r in found_ids} | {search}
+        query = query.filter(EmployeeLocalRegistry.employee_id.in_(list(target_ids)))
         
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)

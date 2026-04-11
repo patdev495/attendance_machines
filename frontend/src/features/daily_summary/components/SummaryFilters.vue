@@ -8,7 +8,7 @@
             id="empIdInput" 
             v-model="filters.employee_id" 
             :placeholder="$t('attendance.filters.emp_placeholder')" 
-            @input="emitChange" 
+            @input="handleSearchInput" 
           />
         </div>
       </div>
@@ -64,7 +64,7 @@
           type="number" 
           v-model="filters.min_hours" 
           :placeholder="$t('attendance.filters.hours_placeholder', { h: 8 })" 
-          @input="emitChange" 
+          @input="handleSearchInput" 
         />
       </div>
       <div class="filter-group">
@@ -74,7 +74,7 @@
           type="number" 
           v-model="filters.max_hours" 
           :placeholder="$t('attendance.filters.hours_placeholder', { h: 12 })" 
-          @input="emitChange" 
+          @input="handleSearchInput" 
         />
       </div>
       <div class="filter-group checkbox-group">
@@ -112,15 +112,26 @@ const filters = reactive({
   ...props.initialFilters
 })
 
+// Custom debounce timer
+let debounceTimer = null
+
+const emitChange = () => {
+  emit('change', { ...filters })
+}
+
+// Special wrapper for text/number input to avoid spamming the backend
+const handleSearchInput = () => {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    emitChange()
+  }, 500) // 500ms delay
+}
+
 watch(() => props.initialFilters, (newVal) => {
   if (newVal) {
     Object.assign(filters, newVal)
   }
 }, { deep: true })
-
-const emitChange = () => {
-  emit('change', { ...filters })
-}
 
 const resetFilters = () => {
   Object.assign(filters, {

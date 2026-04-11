@@ -76,7 +76,7 @@
       "select_file": "Chọn file từ máy tính"
     },
     "filters": {
-      "emp_id": "Mã NV",
+      "emp_id": "Mã NV hoặc Tên",
       "machine_ip": "IP Máy",
       "all_machines": "Tất Cả Máy",
       "date_from": "Từ Ngày",
@@ -99,7 +99,7 @@
       "night_shift": "Ca Đêm (D)",
       "na_shift": "NA",
       "only_missing": "Chỉ Thiếu Thông Tin",
-      "emp_placeholder": "VD: 101",
+      "emp_placeholder": "VD: 101 hoặc Tên",
       "hours_placeholder": "VD: {h}"
     },
     "table": {

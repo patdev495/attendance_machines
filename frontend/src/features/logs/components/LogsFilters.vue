@@ -7,7 +7,7 @@
           id="empIdInput" 
           v-model="filters.employeeId" 
           :placeholder="$t('attendance.filters.emp_placeholder')" 
-          @input="emitChange" 
+          @input="handleSearchInput" 
         />
       </div>
       <div class="filter-group">
@@ -60,6 +60,21 @@ const filters = reactive({
   ...props.initialFilters
 })
 
+// Custom debounce timer
+let debounceTimer = null
+
+function emitChange() {
+  emits('change', { ...filters })
+}
+
+// Special wrapper for text input to avoid spamming the backend
+function handleSearchInput() {
+  if (debounceTimer) clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    emitChange()
+  }, 500) // 500ms delay
+}
+
 watch(() => props.initialFilters, (newVal) => {
   if (newVal) {
     Object.assign(filters, {
@@ -70,10 +85,6 @@ watch(() => props.initialFilters, (newVal) => {
     })
   }
 }, { deep: true, immediate: true })
-
-function emitChange() {
-  emits('change', { ...filters })
-}
 
 function resetFilters() {
   filters.employeeId = ''

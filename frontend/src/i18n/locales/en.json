@@ -76,7 +76,7 @@
       "select_file": "Select file from computer"
     },
     "filters": {
-      "emp_id": "Employee ID",
+      "emp_id": "ID or Name",
       "machine_ip": "Machine IP",
       "all_machines": "All Machines",
       "date_from": "Date From",
@@ -99,7 +99,7 @@
       "night_shift": "Night Shift",
       "na_shift": "NA",
       "only_missing": "Only Missing",
-      "emp_placeholder": "e.g. 101",
+      "emp_placeholder": "e.g. 101 or Name",
       "hours_placeholder": "e.g. {h}"
     },
     "table": {

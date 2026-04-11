@@ -71,7 +71,7 @@
     },
     "summary_subtitle": "分析每日出勤情况、管理班次并导出报告。",
     "filters": {
-      "emp_id": "员工编号",
+      "emp_id": "员工编号或姓名",
       "machine_ip": "考勤机IP",
       "all_machines": "所有考勤机",
       "date_from": "开始日期",
@@ -94,7 +94,7 @@
       "night_shift": "夜班",
       "na_shift": "未知",
       "only_missing": "仅缺卡",
-      "emp_placeholder": "例如：101",
+      "emp_placeholder": "例如：101 或 姓名",
       "hours_placeholder": "例如：{h}"
     },
     "table": {
