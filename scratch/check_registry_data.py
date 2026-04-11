@@ -11,17 +11,18 @@ from sqlalchemy import text
 def check_registry():
     db = SessionLocal()
     try:
-        print("--- Contents of EmployeeLocalRegistry ---")
-        users = db.query(EmployeeLocalRegistry).all()
-        for u in users:
-            print(f"ID: {u.employee_id}, Name: {u.emp_name}, Source: {u.source_status}")
-        print(f"Total: {len(users)}")
-        
-        print("\n--- Check with raw SQL ---")
-        result = db.execute(text("SELECT employee_id, emp_name, source_status FROM EmployeeLocalRegistry")).all()
-        for r in result:
-            print(f"ID: {r[0]}, Name: {r[1]}, Source: {r[2]}")
+        print("Checking for IDs 1, 2, 3, 4, 5...")
+        target_ids = ['1', '2', '3', '4', '5']
+        found = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id.in_(target_ids)).all()
+        for u in found:
+            print(f"FOUND ID: {u.employee_id}, Source: {u.source_status}")
             
+        total_count = db.query(EmployeeLocalRegistry).count()
+        print(f"Total records in EmployeeLocalRegistry: {total_count}")
+        
+        machine_only_count = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.source_status == 'machine_only').count()
+        print(f"Total machine_only records: {machine_only_count}")
+        
     finally:
         db.close()
 

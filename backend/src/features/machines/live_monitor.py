@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from zk import ZK
 from sqlalchemy import func
 from database import SessionLocal, AttendanceLog, EmployeeLocalRegistry
-from shared.hardware import get_machine_list
+from shared.hardware import get_machine_list, get_live_machine_list
 from shared.socket_manager import manager
 import asyncio
 
@@ -29,25 +29,28 @@ class LiveMonitorManager:
         management_thread.start()
 
     def _management_loop(self):
-        """Periodically checks machine list and ensures all monitors are active."""
+        """Periodically checks machine list and ensures only permitted monitors are active."""
         while self.is_running:
             try:
-                ips = get_machine_list()
-                for ip in ips:
+                # Use the new filtered list for Live Mode
+                live_ips = get_live_machine_list()
+                live_ips_set = set(live_ips)
+
+                for ip in live_ips:
                     # Start monitor if it's new or the previous thread died
                     if ip not in self.active_monitors or not self.active_monitors[ip].is_alive():
                         self._start_monitor(ip)
                 
-                # Optional: Clean up monitors for IPs that are no longer in the list
-                current_ips = set(ips)
+                # Stop monitors for IPs that are no longer marked as live
+                # (either removed from file or marked with # nolive)
                 monitored_ips = list(self.active_monitors.keys())
                 for ip in monitored_ips:
-                    if ip not in current_ips:
-                        # Monitor for removed IP will stop eventually due to is_running being False 
-                        # or we can add a more specific stop flag if needed.
-                        # For now, just remove from tracking map.
-                        if not self.active_monitors[ip].is_alive():
-                           del self.active_monitors[ip]
+                    if ip not in live_ips_set:
+                        # By removing it from active_monitors, the thread will see 
+                        # ip not in self.active_monitors and exit its loop.
+                        if self.active_monitors[ip].is_alive():
+                           logger.info(f"Stopping live monitor for {ip} (config changed)")
+                        del self.active_monitors[ip]
                            
             except Exception as e:
                 logger.error(f"Error in Live Monitor management loop: {e}")
@@ -73,7 +76,8 @@ class LiveMonitorManager:
 
     def _monitor_loop(self, ip):
         """Background loop for a single machine."""
-        while self.is_running:
+        # Thread exits if manager stops OR if this IP is no longer in active_monitors
+        while self.is_running and ip in self.active_monitors:
             zk = ZK(ip, port=4370, timeout=10, force_udp=False)
             conn = None
             try:
@@ -82,7 +86,7 @@ class LiveMonitorManager:
                 
                 # live_capture is a generator that yields attendance records
                 for event in conn.live_capture():
-                    if not self.is_running:
+                    if not self.is_running or ip not in self.active_monitors:
                         break
                     if event is None:
                         continue
