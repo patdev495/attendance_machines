@@ -104,6 +104,7 @@
     },
     "table": {
       "emp_id": "Mã NV",
+      "emp_name": "Họ và Tên",
       "attendance_time": "Thời Gian Chấm Công",
       "machine_ip": "IP Máy",
       "date": "Ngày",

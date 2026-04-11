@@ -15,6 +15,8 @@ if str(current_dir) not in sys.path:
 
 from config import config
 from database import init_db
+from features.machines.live_monitor import live_monitor
+import asyncio
 
 # v2.0 Feature routers (registered when implemented, phases 2-5)
 from features.logs.router import router as logs_router
@@ -41,6 +43,16 @@ def create_app() -> FastAPI:
     app.include_router(daily_summary_router) # v2.0
     app.include_router(employees_router)    # v2.0
     app.include_router(machines_router)    # v2.0
+
+    @app.on_event("startup")
+    async def startup_event():
+        loop = asyncio.get_running_loop()
+        live_monitor.set_loop(loop)
+        live_monitor.start()
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        live_monitor.stop()
 
     # Serve Vue 3 SPA
     app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")
@@ -71,4 +83,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(app, host=args.host, port=args.port, ws="websockets")

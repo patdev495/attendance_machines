@@ -7,8 +7,16 @@
       </div>
       <div class="header-actions">
         <button 
+          class="btn live-toggle" 
+          :class="{ 'active': liveMode }"
+          @click="toggleLiveMode"
+        >
+          <span class="live-dot" :class="{ 'pulsing': liveMode }"></span>
+          {{ liveMode ? 'LIVE: ON' : 'LIVE MODE' }}
+        </button>
+        <button 
           class="btn btn-primary sync-btn" 
-          :disabled="syncStore.syncRunning" 
+          :disabled="syncStore.syncRunning || liveMode" 
           @click="syncStore.startSync()"
         >
           <span v-if="syncStore.syncRunning" class="spin-icon">⟳</span>
@@ -38,6 +46,7 @@
       :currentPage="currentPage"
       :totalPages="totalPages"
       :totalCount="totalCount"
+      :liveMode="liveMode"
       @page-change="loadData"
     />
   </div>
@@ -48,6 +57,7 @@ import { ref, onMounted, watch } from 'vue'
 import { logsApi } from './api'
 import { useSyncStore } from '@/stores/sync.js'
 import { useAttendanceStore } from '@/stores/attendance.js'
+import { useLiveLogs } from './composables/useLiveLogs'
 import LogsFilters from './components/LogsFilters.vue'
 import LogsTable from './components/LogsTable.vue'
 
@@ -61,12 +71,50 @@ const currentPage = ref(1)
 const totalPages = ref(1)
 const totalCount = ref(0)
 const activeFilters = ref({})
+const liveMode = ref(false)
+
+const { connect, disconnect } = useLiveLogs((payload) => {
+  if (payload.type === 'new_log' && liveMode.value) {
+    const newLog = payload.data
+    
+    // Apply client-side filtering for live events
+    if (activeFilters.value.employee_id && !newLog.employee_id.includes(activeFilters.value.employee_id)) {
+      return
+    }
+    if (activeFilters.value.machine_ip && newLog.machine_ip !== activeFilters.value.machine_ip) {
+      return
+    }
+
+    // Add to top of list
+    items.value.unshift({
+      ...newLog,
+      is_live: true,
+      id: Date.now() + Math.random() // Temp ID for list rendering
+    })
+
+    // Keep list manageable
+    if (items.value.length > 100) items.value.pop()
+  }
+})
+
+function toggleLiveMode() {
+  liveMode.value = !liveMode.value
+  if (liveMode.value) {
+    items.value = []
+    totalCount.value = 0
+    totalPages.value = 1
+    connect()
+  } else {
+    disconnect()
+    loadData(1)
+  }
+}
 
 async function loadData(page = 1) {
-  currentPage.value = page
-  loading.value = true
-  error.value = null
+  // Guard: Never load historical data if Live Mode is active
+  if (liveMode.value) return
   
+  currentPage.value = page
   try {
     const params = {
       page,
@@ -93,12 +141,22 @@ function handleFilterChange(filters) {
   if (filters.endDate) params.end_date = filters.endDate
   
   activeFilters.value = params
-  loadData(1)
+  
+  if (liveMode.value) {
+    // In live mode, just filter the current list and wait for new events
+    items.value = items.value.filter(item => {
+      if (params.employee_id && !item.employee_id.includes(params.employee_id)) return false
+      if (params.machine_ip && item.machine_ip !== params.machine_ip) return false
+      return true
+    })
+  } else {
+    loadData(1)
+  }
 }
 
 // Watch for sync completion to refresh data
 watch(() => syncStore.syncRunning, (newVal, oldVal) => {
-  if (oldVal === true && newVal === false) {
+  if (oldVal === true && newVal === false && !liveMode.value) {
     loadData(1)
   }
 })
@@ -133,7 +191,47 @@ onMounted(() => {
 .title { font-size: 1.85rem; font-weight: 700; color: white; margin: 0 0 4px 0; letter-spacing: -0.5px; }
 .subtitle { color: var(--text-muted); font-size: 0.95rem; margin: 0; }
 
-.header-actions { display: flex; gap: 12px; }
+.header-actions { display: flex; gap: 12px; align-items: center; }
+
+.live-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.live-toggle.active {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.15);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+.live-dot.pulsing {
+  opacity: 1;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
 .sync-btn { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 10px 20px; border-radius: 10px; transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
 .sync-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4); }
 .btn-icon { opacity: 0.9; }

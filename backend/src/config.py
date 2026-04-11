@@ -9,12 +9,14 @@ from dotenv import load_dotenv
 import sys
 if getattr(sys, 'frozen', False):
     # The application is running as a frozen executable
-    # sys.executable is the path to the .exe file
-    # We want BASE_DIR to be the folder containing the .exe
+    # sys._MEIPASS is the path to the internal bundled files
+    # Path(sys.executable).resolve().parent is the folder containing the .exe
+    INTERNAL_DIR = Path(sys._MEIPASS).resolve()
     BASE_DIR = Path(sys.executable).resolve().parent
 else:
     # The application is running as a script
-    BASE_DIR = Path(__file__).resolve().parent.parent.parent
+    INTERNAL_DIR = Path(__file__).resolve().parent.parent.parent
+    BASE_DIR = INTERNAL_DIR
 
 # Load .env from the backend directory
 load_dotenv(BASE_DIR / "backend" / ".env")
@@ -33,7 +35,7 @@ class Config:
         return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
 
     # Directory settings
-    BACKEND_DIR = BASE_DIR / "backend"
+    BACKEND_DIR = INTERNAL_DIR / "backend"
     STATIC_DIR = BACKEND_DIR / "static"
     LOGS_DIR = BACKEND_DIR / "logs"
     

@@ -40,9 +40,11 @@ def get_daily_summary(
         AttendanceLog.attendance_time,
         AttendanceLog.employee_id,
         AttendanceLog.machine_ip,
+        EmployeeLocalRegistry.emp_name.label("reg_name"),
         EmployeeLocalRegistry.shift,
         EmployeeLocalRegistry.department,
         EmployeeLocalRegistry.source_status,
+        EmployeeMetadata.emp_name.label("meta_name"),
         EmployeeMetadata.shift.label("meta_shift"),
         EmployeeMetadata.department.label("meta_dept"),
         EmployeeMetadata.status.label("meta_status"),
@@ -51,11 +53,12 @@ def get_daily_summary(
             (EmployeeMetadata.shift == text("'D'"), func.cast(func.dateadd(text("hour"), text("-10"), AttendanceLog.attendance_time), Date)),
             else_=func.cast(func.dateadd(text("hour"), text("-4"), AttendanceLog.attendance_time), Date)
         ).label("work_date")
-    ).outerjoin(EmployeeLocalRegistry, AttendanceLog.employee_id == EmployeeLocalRegistry.employee_id) \
-     .outerjoin(EmployeeMetadata, AttendanceLog.employee_id == EmployeeMetadata.employee_id).subquery()
+    ).outerjoin(EmployeeLocalRegistry, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))) \
+     .outerjoin(EmployeeMetadata, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id))).subquery()
     
     query = db.query(
         base_calc_sub.c.employee_id,
+        func.coalesce(base_calc_sub.c.reg_name, base_calc_sub.c.meta_name).label("emp_name"),
         base_calc_sub.c.work_date,
         func.min(base_calc_sub.c.attendance_time).label("first_tap"),
         func.max(base_calc_sub.c.attendance_time).label("last_tap"),
@@ -81,6 +84,8 @@ def get_daily_summary(
 
     query = query.group_by(
         base_calc_sub.c.employee_id, 
+        base_calc_sub.c.reg_name,
+        base_calc_sub.c.meta_name,
         base_calc_sub.c.work_date, 
         base_calc_sub.c.shift, 
         base_calc_sub.c.meta_shift,

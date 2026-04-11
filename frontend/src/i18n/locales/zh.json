@@ -98,6 +98,7 @@
     },
     "table": {
       "emp_id": "员工编号",
+      "emp_name": "姓名",
       "attendance_time": "考勤时间",
       "machine_ip": "考勤机IP",
       "date": "日期",

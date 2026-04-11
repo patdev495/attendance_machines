@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
+import logging
 from sqlalchemy.orm import Session
+from shared.socket_manager import manager
 from sqlalchemy import func, desc
 from typing import List, Optional
 from datetime import date as date_type
 
 from database import get_db, AttendanceLog
 from .service import sync_all_machines, sync_status, status_lock
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
 
@@ -19,7 +23,15 @@ def get_logs(
     size: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
-    query = db.query(AttendanceLog)
+    from database import EmployeeLocalRegistry, EmployeeMetadata
+    query = db.query(
+        AttendanceLog.id,
+        AttendanceLog.employee_id,
+        AttendanceLog.attendance_time,
+        AttendanceLog.machine_ip,
+        func.coalesce(EmployeeLocalRegistry.emp_name, EmployeeMetadata.emp_name).label("emp_name")
+    ).outerjoin(EmployeeLocalRegistry, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))) \
+     .outerjoin(EmployeeMetadata, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id)))
     
     if employee_id:
         query = query.filter(AttendanceLog.employee_id == employee_id)
@@ -39,7 +51,7 @@ def get_logs(
                    .all()
                    
     return {
-        "items": results,
+        "items": [r._asdict() for r in results],
         "total_count": total,
         "total_pages": (total + size - 1) // size
     }
@@ -77,3 +89,20 @@ def start_sync(background_tasks: BackgroundTasks):
 @router.get("/sync/status")
 def get_sync_status():
     return sync_status
+
+@router.websocket("/live/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    logger.info("Incoming WebSocket connection request...")
+    await manager.connect(websocket)
+    try:
+        logger.info("WebSocket connected and stored.")
+        while True:
+            # Keep connection alive
+            data = await websocket.receive_text()
+            logger.debug(f"Received WS data: {data}")
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected gracefully.")
+        manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        manager.disconnect(websocket)

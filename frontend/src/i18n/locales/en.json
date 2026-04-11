@@ -104,6 +104,7 @@
     },
     "table": {
       "emp_id": "Employee ID",
+      "emp_name": "Full Name",
       "attendance_time": "Time",
       "machine_ip": "Machine IP",
       "date": "Date",

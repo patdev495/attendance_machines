@@ -12,6 +12,7 @@
         <thead>
           <tr>
             <th>{{ $t('attendance.table.emp_id') }}</th>
+            <th>{{ $t('attendance.table.emp_name') }}</th>
             <th>{{ $t('attendance.table.date') }}</th>
             <th>{{ $t('attendance.table.shift') }}</th>
             <th>{{ $t('attendance.table.first_tap') }}</th>
@@ -24,18 +25,19 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="9" class="empty-state">
+            <td colspan="10" class="empty-state">
               <div class="loader"></div>
               {{ $t('common.loading') }}
             </td>
           </tr>
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="9" class="empty-state">
+            <td colspan="10" class="empty-state">
               {{ $t('common.no_data') }}
             </td>
           </tr>
           <tr v-for="item in items" :key="item.employee_id + item.attendance_date">
             <td class="bold">{{ item.employee_id }}</td>
+            <td>{{ item.emp_name || '-' }}</td>
             <td>{{ formatDate(item.attendance_date) }}</td>
             <td>
               <span class="badge" :class="getShiftClass(item.shift)">

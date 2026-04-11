@@ -65,8 +65,13 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         else:
             note = "Missing Check-in/out"
 
+        emp_name = getattr(row, "emp_name", None)
+        if not emp_name:
+            logger.debug(f"Missing name for employee_id: {row.employee_id}")
+
         summary_items.append({
             "employee_id": row.employee_id,
+            "emp_name": emp_name,
             "attendance_date": w_date,
             "first_tap": first,
             "last_tap": last,

@@ -1,1 +1,2 @@
-uv run pyinstaller --onefile --name "TimeAttendance" --paths "backend/src" --hidden-import="pyodbc" --hidden-import="pyzk" backend/src/main.py
+uv run pyinstaller --onedir --name "TimeAttendance" --paths "backend/src" --hidden-import="pyodbc" --hidden-import="pyzk" backend/src/main.py
+uv run -m uvicorn main:app --reload --app-dir backend/src --port 8000
