@@ -61,8 +61,8 @@ class LiveMonitorManager:
             except Exception as e:
                 logger.error(f"Error in Live Monitor management loop: {e}")
             
-            # Wait 60 seconds before next check
-            for _ in range(60):
+            # Wait 10 seconds before next check for machines.txt changes
+            for _ in range(10):
                 if not self.is_running: break
                 time.sleep(1)
 
@@ -101,8 +101,8 @@ class LiveMonitorManager:
                     
             except Exception as e:
                 if self.is_running:
-                    logger.error(f"Monitor error on {ip}: {e}. Retrying in 30s...")
-                    time.sleep(30)
+                    logger.error(f"Monitor error on {ip}: {e}. Retrying in 5s...")
+                    time.sleep(5)
             finally:
                 if conn:
                     try: conn.disconnect()

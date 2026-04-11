@@ -23,10 +23,21 @@ from features.logs.router import router as logs_router
 from features.daily_summary.router import router as daily_summary_router
 from features.employees.router import router as employees_router
 from features.machines.router import router as machines_router
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    loop = asyncio.get_running_loop()
+    live_monitor.set_loop(loop)
+    live_monitor.start()
+    yield
+    # Shutdown
+    live_monitor.stop()
 
 def create_app() -> FastAPI:
     init_db()
-    app = FastAPI(title="Time Attendance System")
+    app = FastAPI(title="Time Attendance System", lifespan=lifespan)
 
     # CORS middleware
     app.add_middleware(
@@ -44,15 +55,6 @@ def create_app() -> FastAPI:
     app.include_router(employees_router)    # v2.0
     app.include_router(machines_router)    # v2.0
 
-    @app.on_event("startup")
-    async def startup_event():
-        loop = asyncio.get_running_loop()
-        live_monitor.set_loop(loop)
-        live_monitor.start()
-
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        live_monitor.stop()
 
     # Serve Vue 3 SPA
     app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")

@@ -9,3 +9,5 @@ pytest
 httpx
 xlsxwriter
 websockets
+requests
+charset-normalizer
