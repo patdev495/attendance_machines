@@ -34,20 +34,22 @@ def get_logs(
      .outerjoin(EmployeeMetadata, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id)))
     
     if employee_id:
+        employee_id = employee_id.strip()
         # Step 1: Find matching IDs from registry/metadata (fast, small tables)
         match_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AS').ilike(f"%{employee_id}%")
+            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
         ).all()
         match_ids_meta = db.query(EmployeeMetadata.employee_id).filter(
             EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeMetadata.emp_name.collate('Vietnamese_CI_AS').ilike(f"%{employee_id}%")
+            EmployeeMetadata.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
         ).all()
         
         found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
         
         # Step 2: Filter large AttendanceLog table using indexed IN clause (very fast)
-        query = query.filter(AttendanceLog.employee_id.in_(list(found_ids)))
+        # Use ltrim/rtrim to be robust against machine-generated ID spaces
+        query = query.filter(func.ltrim(func.rtrim(AttendanceLog.employee_id)).in_(list(found_ids)))
     if machine_ip:
         query = query.filter(AttendanceLog.machine_ip == machine_ip)
     

@@ -71,18 +71,19 @@ def get_daily_summary(
     if start_date: query = query.filter(base_calc_sub.c.work_date >= start_date)
     if end_date: query = query.filter(base_calc_sub.c.work_date <= end_date)
     if employee_id:
-        # Optimization: Find matching IDs first (fast) then filter the complex query by ID list (fast)
+        employee_id = employee_id.strip()
         match_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AS').ilike(f"%{employee_id}%")
+            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
         ).all()
         match_ids_meta = db.query(EmployeeMetadata.employee_id).filter(
             EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeMetadata.emp_name.collate('Vietnamese_CI_AS').ilike(f"%{employee_id}%")
+            EmployeeMetadata.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
         ).all()
         
         found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
-        query = query.filter(base_calc_sub.c.employee_id.in_(list(found_ids)))
+        # Use ltrim/rtrim to be robust against machine-generated ID spaces
+        query = query.filter(func.ltrim(func.rtrim(base_calc_sub.c.employee_id)).in_(list(found_ids)))
     if machine_ip: query = query.filter(base_calc_sub.c.machine_ip == machine_ip)
     final_shift = func.coalesce(base_calc_sub.c.shift, base_calc_sub.c.meta_shift)
     if shift == "NA":

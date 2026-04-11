@@ -77,30 +77,32 @@ const { connect, disconnect } = useLiveLogs((payload) => {
   if (payload.type === 'new_log' && liveMode.value) {
     const newLog = payload.data
     
-    // Apply client-side filtering for live events
-    if (activeFilters.value.employee_id && !newLog.employee_id.includes(activeFilters.value.employee_id)) {
-      return
-    }
-    if (activeFilters.value.machine_ip && newLog.machine_ip !== activeFilters.value.machine_ip) {
-      return
-    }
-
-    // Add to top of list
-    items.value.unshift({
+    // Always add to the raw source list
+    rawLiveItems.value.unshift({
       ...newLog,
       is_live: true,
-      id: Date.now() + Math.random() // Temp ID for list rendering
+      id: Date.now() + Math.random()
     })
+    if (rawLiveItems.value.length > 500) rawLiveItems.value.pop()
 
-    // Keep list manageable
-    if (items.value.length > 100) items.value.pop()
+    // Update the filtered view (items)
+    const params = activeFilters.value
+    items.value = rawLiveItems.value.filter(item => {
+      if (params.employee_id && !item.employee_id.includes(params.employee_id)) return false
+      if (params.machine_ip && item.machine_ip !== params.machine_ip) return false
+      return true
+    })
   }
 })
+ Miranda
+
+const rawLiveItems = ref([])
 
 function toggleLiveMode() {
   liveMode.value = !liveMode.value
   if (liveMode.value) {
     items.value = []
+    rawLiveItems.value = []
     totalCount.value = 0
     totalPages.value = 1
     connect()
@@ -115,6 +117,7 @@ async function loadData(page = 1) {
   if (liveMode.value) return
   
   currentPage.value = page
+  loading.value = true
   try {
     const params = {
       page,
@@ -126,7 +129,7 @@ async function loadData(page = 1) {
     totalCount.value = data.total_count
     totalPages.value = data.total_pages
   } catch (e) {
-    error.value = i18n.global.t('attendance.table.error_load_logs')
+    error.value = 'Failed to load logs'
     console.error(e)
   } finally {
     loading.value = false
@@ -143,8 +146,8 @@ function handleFilterChange(filters) {
   activeFilters.value = params
   
   if (liveMode.value) {
-    // In live mode, just filter the current list and wait for new events
-    items.value = items.value.filter(item => {
+    // Re-apply filter to the original full list of live items
+    items.value = rawLiveItems.value.filter(item => {
       if (params.employee_id && !item.employee_id.includes(params.employee_id)) return false
       if (params.machine_ip && item.machine_ip !== params.machine_ip) return false
       return true

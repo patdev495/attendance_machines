@@ -27,15 +27,15 @@ class AttendanceLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(String(50), nullable=False, index=True)
     attendance_date = Column(Date, nullable=False, index=True)
-    attendance_time = Column(DateTime, nullable=False)
+    attendance_time = Column(DateTime, nullable=False, index=True)
     machine_ip = Column(String(50), nullable=False, index=True)
     created_at = Column(DateTime, server_default=func.current_timestamp())
 
 class EmployeeMetadata(Base):
     __tablename__ = "EmployeeMetadata"
     employee_id = Column(String(50), primary_key=True)
-    emp_name = Column(Unicode(255), nullable=True)
-    department = Column(Unicode(255), nullable=True)
+    emp_name = Column(Unicode(255), nullable=True, index=True)
+    department = Column(Unicode(255), nullable=True, index=True)
     group = Column(Unicode(255), nullable=True)
     start_date = Column(Date, nullable=True)
     shift = Column(String(10), nullable=True)  # 'N' or 'D'
@@ -65,11 +65,11 @@ class EmployeeFingerprint(Base):
 class EmployeeLocalRegistry(Base):
     __tablename__ = "EmployeeLocalRegistry"
     employee_id  = Column(String(50), primary_key=True)
-    emp_name     = Column(Unicode(255), nullable=True)
-    department   = Column(Unicode(255), nullable=True)
+    emp_name     = Column(Unicode(255), nullable=True, index=True)
+    department   = Column(Unicode(255), nullable=True, index=True)
     group_name   = Column(Unicode(255), nullable=True)   # "group" is a Python keyword
     start_date   = Column(Date, nullable=True)
-    shift        = Column(String(10), nullable=True)     # 'D' or 'N'
+    shift        = Column(String(10), nullable=True, index=True)     # 'D' or 'N'
     # source_status: 'excel_synced' | 'machine_only' | 'log_only'
     source_status = Column(String(20), nullable=False, default="log_only", index=True)
     updated_at   = Column(DateTime, server_default=func.current_timestamp(),
