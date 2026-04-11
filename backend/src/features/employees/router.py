@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db, EmployeeLocalRegistry
 from typing import List, Optional
 import threading
