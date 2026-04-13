@@ -4,12 +4,12 @@ import logging
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, text, case, Date
+from sqlalchemy import func, desc, text, case, Date, literal_column
 from starlette.background import BackgroundTask
 from typing import List, Optional
 from datetime import date, datetime
 
-from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftRule
+from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftRule, EmployeeDailyShifts
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
 from .export_service import export_status, export_lock, run_export_task
 
@@ -33,8 +33,9 @@ def get_daily_summary(
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    # 100% Match Legacy SQL Logic, just swapping EmployeeMetadata with EmployeeLocalRegistry
-    # Use text("'D'") and dateadd as verified in the perfectly working past version
+    # Phase 13: Use 09:00 AM anchor for work_date calculation
+    # All logs from 09:00 today to 08:59 tomorrow belong to today's shift
+    # This correctly handles Workshop 1 night shifts ending at 08:00 AM
     base_calc_sub = db.query(
         AttendanceLog.id,
         AttendanceLog.attendance_time,
@@ -48,14 +49,16 @@ def get_daily_summary(
         EmployeeMetadata.shift.label("meta_shift"),
         EmployeeMetadata.department.label("meta_dept"),
         EmployeeMetadata.status.label("meta_status"),
+        # Phase 13 rule: Dynamic boundary mapping to prevent fracturing Day or Night shifts
         case(
-            (EmployeeLocalRegistry.shift == text("'D'"), func.cast(func.dateadd(text("hour"), text("-10"), AttendanceLog.attendance_time), Date)),
-            (EmployeeMetadata.shift == text("'D'"), func.cast(func.dateadd(text("hour"), text("-10"), AttendanceLog.attendance_time), Date)),
-            else_=func.cast(func.dateadd(text("hour"), text("-4"), AttendanceLog.attendance_time), Date)
+            (func.coalesce(EmployeeLocalRegistry.shift, EmployeeMetadata.shift, literal_column("'N'")).like("%D%"), 
+             func.cast(func.dateadd(text("hour"), text("-12"), AttendanceLog.attendance_time), Date)),
+            else_=func.cast(func.dateadd(text("hour"), text("-3"), AttendanceLog.attendance_time), Date)
         ).label("work_date")
     ).outerjoin(EmployeeLocalRegistry, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))) \
      .outerjoin(EmployeeMetadata, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id))).subquery()
     
+    # Phase 13: Join with EmployeeDailyShifts to get the daily shift code
     query = db.query(
         base_calc_sub.c.employee_id,
         func.coalesce(base_calc_sub.c.reg_name, base_calc_sub.c.meta_name).label("emp_name"),
@@ -63,9 +66,18 @@ def get_daily_summary(
         func.min(base_calc_sub.c.attendance_time).label("first_tap"),
         func.max(base_calc_sub.c.attendance_time).label("last_tap"),
         func.count(base_calc_sub.c.id).label("tap_count"),
-        func.coalesce(base_calc_sub.c.shift, base_calc_sub.c.meta_shift).label("shift"),
+        # Use daily shift code first, then fallback to employee-level shift
+        func.coalesce(
+            func.max(EmployeeDailyShifts.shift_code),
+            func.coalesce(base_calc_sub.c.shift, base_calc_sub.c.meta_shift)
+        ).label("shift"),
         func.coalesce(base_calc_sub.c.department, base_calc_sub.c.meta_dept).label("department"),
-        func.coalesce(base_calc_sub.c.source_status, base_calc_sub.c.meta_status).label("status")
+        func.coalesce(base_calc_sub.c.source_status, base_calc_sub.c.meta_status).label("status"),
+        func.max(EmployeeDailyShifts.shift_code).label("daily_shift_code")
+    ).outerjoin(
+        EmployeeDailyShifts,
+        (func.ltrim(func.rtrim(base_calc_sub.c.employee_id)) == EmployeeDailyShifts.employee_id) &
+        (base_calc_sub.c.work_date == EmployeeDailyShifts.work_date)
     )
     
     if start_date: query = query.filter(base_calc_sub.c.work_date >= start_date)
@@ -82,14 +94,17 @@ def get_daily_summary(
         ).all()
         
         found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
-        # Use ltrim/rtrim to be robust against machine-generated ID spaces
         query = query.filter(func.ltrim(func.rtrim(base_calc_sub.c.employee_id)).in_(list(found_ids)))
     if machine_ip: query = query.filter(base_calc_sub.c.machine_ip == machine_ip)
-    final_shift = func.coalesce(base_calc_sub.c.shift, base_calc_sub.c.meta_shift)
+    # Filter by shift: use daily code if available
+    final_shift = func.coalesce(
+        func.max(EmployeeDailyShifts.shift_code),
+        func.coalesce(base_calc_sub.c.shift, base_calc_sub.c.meta_shift)
+    )
     if shift == "NA":
-        query = query.filter(final_shift == None)
+        query = query.having(final_shift == None)
     elif shift:
-        query = query.filter(final_shift == shift)
+        query = query.having(final_shift == shift)
     if department: query = query.filter(base_calc_sub.c.department == department)
     final_status = func.coalesce(base_calc_sub.c.source_status, base_calc_sub.c.meta_status)
     if status and status != 'All': 
@@ -150,11 +165,8 @@ def get_daily_detail(
         AttendanceLog.id,
         AttendanceLog.attendance_time,
         AttendanceLog.employee_id,
-        case(
-            (EmployeeLocalRegistry.shift == text("'D'"), func.cast(func.dateadd(text("hour"), text("-10"), AttendanceLog.attendance_time), Date)),
-            (EmployeeMetadata.shift == text("'D'"), func.cast(func.dateadd(text("hour"), text("-10"), AttendanceLog.attendance_time), Date)),
-            else_=func.cast(func.dateadd(text("hour"), text("-4"), AttendanceLog.attendance_time), Date)
-        ).label("work_date")
+        # Phase 13: 09:00 AM anchor (consistent with main summary query)
+        func.cast(func.dateadd(text("hour"), text("-9"), AttendanceLog.attendance_time), Date).label("work_date")
     ).outerjoin(EmployeeLocalRegistry, AttendanceLog.employee_id == EmployeeLocalRegistry.employee_id) \
      .outerjoin(EmployeeMetadata, AttendanceLog.employee_id == EmployeeMetadata.employee_id).subquery()
 

@@ -6,7 +6,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 from sqlalchemy import exists
 
-from database import SessionLocal, ShiftRule, EmployeeMetadata, EmployeeLocalRegistry
+from database import SessionLocal, ShiftRule, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts
 from utils.stats_utils import compute_day_stats
 from features.logs.service import get_machine_list, get_users_from_machine
 
@@ -26,8 +26,11 @@ status_lock = threading.Lock()
 
 def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
     """
-    Ported from AttendanceService. Transform raw grouped SQLAlchemy rows into a list of summary dictionaries.
+    Transform raw grouped SQLAlchemy rows into a list of summary dictionaries.
+    Supports dynamic daily shift codes (Phase 13).
     """
+    from utils.stats_utils import FULL_DAY_LEAVE_CODES
+
     if rules_pool is None:
         db = SessionLocal()
         try:
@@ -43,28 +46,55 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         w_date     = row.work_date
         row_shift  = row.shift
         department = getattr(row, "department", None)
+        daily_code = getattr(row, "daily_shift_code", None)
+        effective_shift_raw = daily_code or row.shift
+        
+        # Display "-" if no shift, but internally calculate as "N"
+        shift_code_display = effective_shift_raw or "-"
+        calculation_shift = effective_shift_raw or "N"
 
         work_hours       = 0.0
         minutes_late     = None
         minutes_early_lv = None
         note = ""
 
-        # Logic: If all taps are before shift start (8:00 for N, 20:00 for D),
-        # AND they are on the same calendar day, treat as Missing Out.
-        boundary_hour = 20 if row_shift == 'D' else 8
+        # Check if this is a full-day leave code
+        if calculation_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
+            # Full-day leave: 0 work hours, 0 OT
+            hours_standard = 0.0
+            hours_ot = 0.0
+            note = calculation_shift.strip().upper()
+            summary_items.append({
+                "employee_id": row.employee_id,
+                "emp_name": getattr(row, "emp_name", None),
+                "attendance_date": w_date,
+                "first_tap": first,
+                "last_tap": last,
+                "tap_count": count,
+                "work_hours": work_hours,
+                "hours_standard": hours_standard,
+                "hours_ot": hours_ot,
+                "shift": shift_code_display,
+                "status": (row.status if hasattr(row, "status") and row.status else "Active"),
+                "note": note,
+                "minutes_late": 0,
+                "minutes_early_leave": 0,
+                "daily_shift_code": shift_code_display,
+            })
+            continue
+
+        # Logic: If all taps are before shift start, treat as Missing Out.
+        boundary_hour = 20 if calculation_shift.upper() == 'D' else 8
         is_double_checkin = (count > 1 and first != last and 
                              last.date() == first.date() and 
                              last.hour < boundary_hour)
         
-        is_valid_day = (count > 1 and first != last and not is_double_checkin)
-
-        if is_valid_day:
-            work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv = compute_day_stats(
-                first, last, w_date, department, row_shift, rules_pool=rules_pool
-            )
-        else:
-            hours_standard = 0.0
-            hours_ot = 0.0
+        # compute_day_stats handles all logic natively including missing taps (first == last)
+        work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv = compute_day_stats(
+            first, last, w_date, department, calculation_shift, rules_pool=rules_pool
+        )
+        
+        if not (count > 1 and first != last and not is_double_checkin):
             note = "Missing Check-in/out"
 
         emp_name = getattr(row, "emp_name", None)
@@ -81,11 +111,12 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "work_hours": work_hours,
             "hours_standard": hours_standard,
             "hours_ot": hours_ot,
-            "shift": row_shift or "N/A",
+            "shift": shift_code_display,
             "status": (row.status if hasattr(row, "status") and row.status else "Active"),
             "note": note,
             "minutes_late": minutes_late,
             "minutes_early_leave": minutes_early_lv,
+            "daily_shift_code": shift_code_display,
         })
     return summary_items
 
@@ -114,8 +145,9 @@ def sync_employees_full(file_bytes: bytes):
         df = pd.read_excel(file_bytes)
         df.columns = df.columns.str.strip()
         
-        if 'EMP_ID' not in df.columns:
-            raise ValueError("Excel file missing required column: EMP_ID")
+        emp_col = 'FULL_EMP_ID' if 'FULL_EMP_ID' in df.columns else 'EMP_ID'
+        if emp_col not in df.columns:
+            raise ValueError("Excel file missing required column: EMP_ID or FULL_EMP_ID")
 
         total_rows = len(df)
         with status_lock:
@@ -128,7 +160,12 @@ def sync_employees_full(file_bytes: bytes):
         excel_synced_ids = set()
         
         for idx, row in df.iterrows():
-            emp_id = str(row['EMP_ID'])
+            if pd.isna(row.get(emp_col)) or str(row.get(emp_col)).strip().lower() in ('nan', ''):
+                continue
+                
+            emp_id = str(row[emp_col]).strip()
+            if emp_id.endswith('.0'): 
+                emp_id = emp_id[:-2]
             excel_synced_ids.add(emp_id)
             
             # Update EmployeeMetadata
@@ -164,9 +201,76 @@ def sync_employees_full(file_bytes: bytes):
             
             with status_lock:
                 sync_status["excel_count"] += 1
-                sync_status["progress"] = int((sync_status["excel_count"] / total_rows) * 50)
+                sync_status["progress"] = int((sync_status["excel_count"] / total_rows) * 40)
 
         db.commit()
+
+        # ── Phase 13: Parse daily shift columns (e.g. "1/4", "2/4", "15/4") ──
+        with status_lock:
+            sync_status["current_step"] = "Parsing daily shift assignments..."
+            sync_status["progress"] = 45
+
+        import re
+        from datetime import date as date_type
+
+        date_columns = {}  # col_name -> (day, month)
+        for col in df.columns:
+            col_str = str(col).strip()
+            # Match patterns like "1/4", "01/04", "15/4"
+            m = re.match(r'^(\d{1,2})/(\d{1,2})$', col_str)
+            if m:
+                day_val, month_val = int(m.group(1)), int(m.group(2))
+                if 1 <= day_val <= 31 and 1 <= month_val <= 12:
+                    date_columns[col] = (day_val, month_val)
+
+        if date_columns:
+            logger.info(f"Found {len(date_columns)} date columns for daily shifts")
+            # Determine the year from the data (use current year as default)
+            from datetime import datetime as dt_class
+            current_year = dt_class.now().year
+
+            # Load existing daily shifts for bulk upsert
+            existing_shifts = {}
+            for shift in db.query(EmployeeDailyShifts).all():
+                key = (shift.employee_id, shift.work_date)
+                existing_shifts[key] = shift
+
+            daily_shift_count = 0
+            for idx, row in df.iterrows():
+                if pd.isna(row.get(emp_col)) or str(row.get(emp_col)).strip().lower() in ('nan', ''):
+                    continue
+                
+                emp_id = str(row[emp_col]).strip()
+                if emp_id.endswith('.0'): emp_id = emp_id[:-2]
+                
+                for col_name, (day_val, month_val) in date_columns.items():
+                    cell_val = row.get(col_name)
+                    if pd.isna(cell_val) or str(cell_val).strip() == '':
+                        continue
+                    shift_code = str(cell_val).strip().upper()
+                    try:
+                        w_date = date_type(current_year, month_val, day_val)
+                    except ValueError:
+                        continue  # Skip invalid dates like Feb 30
+
+                    # Upsert: check if record exists in memory
+                    key = (emp_id, w_date)
+                    existing = existing_shifts.get(key)
+                    if existing:
+                        existing.shift_code = shift_code
+                    else:
+                        new_shift = EmployeeDailyShifts(
+                            employee_id=emp_id, work_date=w_date, shift_code=shift_code
+                        )
+                        db.add(new_shift)
+                        existing_shifts[key] = new_shift
+                        
+                    daily_shift_count += 1
+
+            db.commit()
+            logger.info(f"Upserted {daily_shift_count} daily shift assignments")
+        else:
+            logger.info("No date columns found in Excel — skipping daily shift sync")
 
         # 2. Process Machine Users
         with status_lock:

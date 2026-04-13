@@ -74,12 +74,11 @@ def list_employees(
         else:
             query = query.filter(EmployeeLocalRegistry.shift == shift)
 
-    # Apply sorting - Cast to Integer for numeric ID sorting
-    order_col = cast(EmployeeLocalRegistry.employee_id, Integer)
+    # Apply sorting
     if order.lower() == 'desc':
-        query = query.order_by(order_col.desc())
+        query = query.order_by(EmployeeLocalRegistry.employee_id.desc())
     else:
-        query = query.order_by(order_col.asc())
+        query = query.order_by(EmployeeLocalRegistry.employee_id.asc())
 
     total_count = query.count()
     total_pages = max(1, -(-total_count // page_size))  # ceiling division

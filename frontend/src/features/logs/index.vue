@@ -94,7 +94,6 @@ const { connect, disconnect } = useLiveLogs((payload) => {
     })
   }
 })
- Miranda
 
 const rawLiveItems = ref([])
 

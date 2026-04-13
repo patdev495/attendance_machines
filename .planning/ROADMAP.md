@@ -69,6 +69,16 @@ Goal: Chuyển đổi toàn bộ giao diện dự án sang đa ngôn ngữ (EN, 
   - [ ] **12-02** — Verify UI Alignment: Kiểm tra các button và label ở tiếng Trung (ngắn) và tiếng Việt (dài) để đảm bảo layout không bị vỡ.
   - [ ] **12-03** — Final Walkthrough: Kiểm tra trải nghiệm người dùng khi chuyển đổi ngôn ngữ nóng (hot-reload language).
 
+### Phase 13: Điều chỉnh cách tính công và tăng ca
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 12
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 13 to break down)
+
 ---
 
 ## Phase Summary

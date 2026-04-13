@@ -47,11 +47,11 @@
             </td>
             <td class="time">{{ item.first_tap ? formatTime(item.first_tap) : '-' }}</td>
             <td class="time">{{ item.last_tap ? formatTime(item.last_tap) : '-' }}</td>
-            <td class="hours" :class="{ 'warning': item.work_hours < 8 && item.work_hours > 0 }">
-              {{ item.work_hours ? item.work_hours.toFixed(2) : '0.00' }}
+            <td class="hours" :class="{ 'warning': typeof item.work_hours === 'number' && item.work_hours < 8 && item.work_hours > 0 }">
+              {{ formatHours(item.work_hours) }}
             </td>
             <td class="hours ot">
-              {{ item.hours_ot ? item.hours_ot.toFixed(2) : '0.00' }}
+              {{ formatHours(item.hours_ot) }}
             </td>
             <td>
               <span class="status-indicator" :class="getStatusClass(item.status)"></span>
@@ -111,10 +111,20 @@ const formatTime = (timeStr) => {
   return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
 }
 
+const formatHours = (val) => {
+  if (typeof val === 'number') return val.toFixed(2)
+  if (val === null || val === undefined) return '0.00'
+  return '0.00'
+}
+
 const getShiftClass = (shift) => {
-  if (shift === 'N') return 'badge-success'
-  if (shift === 'D') return 'badge-info'
-  if (shift === 'TV') return 'badge-danger'
+  if (!shift) return 'badge-secondary'
+  const s = shift.toUpperCase()
+  if (s === 'N') return 'badge-success'
+  if (s === 'D') return 'badge-info'
+  if (s === 'TV') return 'badge-danger'
+  if (['P', 'O', 'T', 'C', 'R', 'K', 'X'].includes(s)) return 'badge-warning'
+  if (s.includes('N') || s.includes('D')) return 'badge-primary'
   return 'badge-secondary'
 }
 

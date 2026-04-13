@@ -30,6 +30,7 @@ Refactor completed (v2.0). Now focusing on professionalizing the application wit
 - v1.x: Backend modernization.
 - v2.0: Feature-based architecture refactor (Completed 2026-04-10).
 - v3.0: Comprehensive Multi-language Support (Started 2026-04-10).
+- Phase 13 added: Điều chỉnh cách tính công và tăng ca.
 
 ---
 *Last updated: 2026-04-10*

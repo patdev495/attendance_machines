@@ -75,6 +75,19 @@ class EmployeeLocalRegistry(Base):
     updated_at   = Column(DateTime, server_default=func.current_timestamp(),
                           onupdate=func.current_timestamp())
 
+# ──────────────────────────────────────────────────────────────────────────────
+# v3.0 NEW TABLE — EmployeeDailyShifts
+# Stores per-employee, per-day shift codes imported from the monthly Excel grid.
+# Codes include: N, D, P, O, T, C, R, 4N4R, 2R6N, 6P6N, etc.
+#
+# IMPORTANT: existing tables are NOT modified. This is an additive-only change.
+# ──────────────────────────────────────────────────────────────────────────────
+class EmployeeDailyShifts(Base):
+    __tablename__ = "EmployeeDailyShifts"
+    employee_id = Column(String(50), primary_key=True)
+    work_date   = Column(Date, primary_key=True)
+    shift_code  = Column(String(10), nullable=False)  # e.g. 'N', 'D', '4N4R', 'P', '6R6N'
+
 def init_db():
     # create_all is additive — it only creates tables that do not yet exist.
     # Existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata,
