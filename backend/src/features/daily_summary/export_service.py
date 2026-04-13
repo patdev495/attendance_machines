@@ -43,6 +43,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             AttendanceLog.employee_id,
             EmployeeLocalRegistry.shift,
             EmployeeLocalRegistry.department,
+            EmployeeLocalRegistry.full_emp_id,
             case(
                 (EmployeeLocalRegistry.shift.like("%D%"), 
                  func.cast(func.dateadd(text("hour"), text("-12"), AttendanceLog.attendance_time), Date)),
@@ -53,6 +54,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         # Phase 13: JOIN with EmployeeDailyShifts
         query = db.query(
             base_calc_sub.c.employee_id,
+            base_calc_sub.c.full_emp_id,
             base_calc_sub.c.work_date,
             func.min(base_calc_sub.c.attendance_time).label("first_tap"),
             func.max(base_calc_sub.c.attendance_time).label("last_tap"),
@@ -73,10 +75,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         query = query.filter(base_calc_sub.c.work_date <= end_date)
         query = query.group_by(
             base_calc_sub.c.employee_id, 
+            base_calc_sub.c.full_emp_id,
             base_calc_sub.c.work_date, 
-            base_calc_sub.c.shift,
+            base_calc_sub.c.shift, 
             base_calc_sub.c.department
-        )
+        ).order_by(base_calc_sub.c.work_date, base_calc_sub.c.employee_id)
         
         results = query.all()
         if not results:
@@ -126,6 +129,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             
             # Get effective shift code (daily override or fallback)
             daily_code = getattr(row, 'daily_shift_code', None)
+            full_emp_id = getattr(row, 'full_emp_id', None)
             
             first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
             shift_code_display = daily_code or row.shift or "-"
@@ -159,6 +163,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "shift": shift_code_display,
                 "shift_code": shift_code_display,  # Phase 13: explicit shift code
             }
+            if full_emp_id:
+                processed_data[emp_id]["full_id"] = full_emp_id
 
         # Phase 13: Add days with leave codes but no attendance logs
         for (emp_id, w_date), shift_code in daily_shift_lookup.items():
@@ -185,7 +191,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         wb = Workbook()
         ws = wb.active
         ws.title = "Attendance Export"
-        headers = ["Mã nhân viên", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Ghi chú"]
+        headers = ["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Ghi chú"]
         for d in dates_list: headers.append(f"{d.day}/{d.month}")
         ws.append(headers)
         
@@ -233,7 +239,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 r_idx = current_row + r_offset
                 is_first = (r_offset == 0)
                 
-                vals = [emp_id, emp_name, emp_dept, emp_group, emp_start]
+                full_id_val = emp_data_info.get("full_id") or "-"
+                vals = [emp_id, full_id_val, emp_name, emp_dept, emp_group, emp_start]
                 for c_idx, val in enumerate(vals, 1):
                     cell = ws.cell(row=r_idx, column=c_idx, value=val)
                     cell.border = border_style
@@ -241,7 +248,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     if not is_first:
                         cell.font = white_font
                 
-                cell_ind = ws.cell(row=r_idx, column=6, value=all_indicators[r_offset])
+                cell_ind = ws.cell(row=r_idx, column=7, value=all_indicators[r_offset])
                 cell_ind.border = border_style
                 cell_ind.alignment = alignment_style
 
@@ -273,8 +280,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
         ws2 = wb.create_sheet(title="Thông tin chi tiết")
-        # Phase 13: Add "Mã công" column to Sheet 2
-        ws2.append(["Mã NV", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"])
+        # Standardized IDs for Sheet 2
+        ws2.append(["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"])
         
         for cell in ws2[1]:
             cell.font = bold_font
@@ -300,11 +307,13 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 ot = ds["ot"]
                 display_ot = ot if (isinstance(ot, (int, float)) and ot > 0) else 0
                 shift_code_val = ds.get("shift_code", ds.get("shift", "N"))
+                full_id_val = emp_info.get("full_id") or "-"
                 row_data = [
-                    emp_id, emp_m.emp_name if emp_m else emp_id, emp_m.department if emp_m else "-", 
+                    emp_id, full_id_val, emp_m.emp_name if emp_m else emp_id, 
+                    emp_m.department if emp_m else "-", 
                     emp_m.group_name if emp_m else "-", d.strftime("%d/%m/%Y"), 
                     ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"],
-                    shift_code_val  # Phase 13: Mã công column
+                    shift_code_val
                 ]
                 
                 for c_idx, val in enumerate(row_data, 1):

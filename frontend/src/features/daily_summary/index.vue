@@ -60,7 +60,7 @@
       </div>
       <div v-else class="detail-list">
         <div v-for="log in detailLogs" :key="log.id" class="detail-item">
-          <span class="detail-time">{{ formatTime(log.attendance_time) }}</span>
+          <span class="detail-time">{{ formatDateTime(log.attendance_time) }}</span>
           <span class="detail-machine">{{ log.machine_name || log.machine_ip }}</span>
         </div>
       </div>
@@ -188,10 +188,13 @@ const startExportPolling = () => {
     }, 1500)
 }
 
-const formatTime = (timeStr) => {
+const formatDateTime = (timeStr) => {
   if (!timeStr) return '-'
   const d = new Date(timeStr)
-  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return d.toLocaleString('vi-VN', { 
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit' 
+  })
 }
 
 onMounted(() => {

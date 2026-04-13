@@ -40,6 +40,7 @@ class EmployeeMetadata(Base):
     start_date = Column(Date, nullable=True)
     shift = Column(String(10), nullable=True)  # 'N' or 'D'
     status = Column(String(20), nullable=True) # 'Active' or 'TV'
+    full_emp_id = Column(Unicode(50), nullable=True, index=True)
     updated_at = Column(DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
 
 class EmployeeFingerprint(Base):
@@ -72,6 +73,7 @@ class EmployeeLocalRegistry(Base):
     shift        = Column(String(10), nullable=True, index=True)     # 'D' or 'N'
     # source_status: 'excel_synced' | 'machine_only' | 'log_only'
     source_status = Column(String(20), nullable=False, default="log_only", index=True)
+    full_emp_id   = Column(Unicode(50), nullable=True, index=True)
     updated_at   = Column(DateTime, server_default=func.current_timestamp(),
                           onupdate=func.current_timestamp())
 

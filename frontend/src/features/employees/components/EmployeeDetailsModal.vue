@@ -15,6 +15,11 @@
                   <label>{{ $t('employees.id_label') }}</label>
                   <div class="value">{{ formatValue(employee.employee_id) }}</div>
                 </div>
+
+                <div class="detail-item">
+                  <label>{{ $t('employees.full_id_label') }}</label>
+                  <div class="value">{{ formatValue(employee.full_emp_id) }}</div>
+                </div>
                 
                 <div class="detail-item">
                   <label>{{ $t('employees.name_label') }}</label>

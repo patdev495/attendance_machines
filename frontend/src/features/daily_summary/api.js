@@ -3,6 +3,10 @@ import axios from 'axios'
 const API_BASE = '/api/daily-summary'
 
 export const dailySummaryApi = {
+  getUniqueShifts() {
+    return axios.get(`${API_BASE}/unique-shifts`)
+  },
+  
   getSummary(params) {
     // Strip empty strings to prevent FastAPI 422 errors
     const cleanParams = Object.fromEntries(

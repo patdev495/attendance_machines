@@ -7,6 +7,7 @@ class EmployeeBase(BaseModel):
     emp_name: Optional[str] = None
 
 class EmployeeOut(EmployeeBase):
+    full_emp_id: Optional[str] = None
     department: Optional[str] = None
     group_name: Optional[str] = None
     start_date: Optional[date] = None

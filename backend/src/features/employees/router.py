@@ -56,6 +56,7 @@ def list_employees(
         search = search.strip()
         found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
+            EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%") |
             EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{search}%")
         ).all()
         

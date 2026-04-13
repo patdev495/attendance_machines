@@ -51,8 +51,9 @@
         <label for="shiftSelect">{{ $t('attendance.filters.shift') }}</label>
         <select id="shiftSelect" v-model="filters.shift" @change="emitChange">
           <option value="">{{ $t('attendance.filters.all_shifts') }}</option>
-          <option value="N">{{ $t('attendance.filters.day_shift') }}</option>
-          <option value="D">{{ $t('attendance.filters.night_shift') }}</option>
+          <option v-for="s in shifts" :key="s.value" :value="s.value">
+            {{ s.label }}
+          </option>
           <option value="TV">{{ $t('attendance.filters.resigned') }}</option>
           <option value="NA">{{ $t('attendance.filters.na_shift') }}</option>
         </select>
@@ -89,7 +90,8 @@
 </template>
 
 <script setup>
-import { reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
+import { dailySummaryApi } from '../api'
 
 const props = defineProps({
   initialFilters: {
@@ -100,6 +102,7 @@ const props = defineProps({
 
 const emit = defineEmits(['change'])
 
+const shifts = ref([])
 const filters = reactive({
   employee_id: '',
   start_date: '',
@@ -118,6 +121,24 @@ let debounceTimer = null
 const emitChange = () => {
   emit('change', { ...filters })
 }
+
+const fetchShifts = async () => {
+  try {
+    const { data } = await dailySummaryApi.getUniqueShifts()
+    shifts.ref = data
+    // Map data for display, keeping original for value
+    shifts.value = data.map(s => ({
+      value: s,
+      label: s === 'N' ? 'Day (N)' : (s === 'D' ? 'Night (D)' : s)
+    }))
+  } catch (err) {
+    console.error('Failed to fetch unique shifts:', err)
+  }
+}
+
+onMounted(() => {
+  fetchShifts()
+})
 
 // Special wrapper for text/number input to avoid spamming the backend
 const handleSearchInput = () => {

@@ -4,7 +4,7 @@ import threading
 from typing import List, Dict, Any, Optional
 from datetime import date
 from sqlalchemy.orm import Session
-from sqlalchemy import exists
+from sqlalchemy import exists, text
 
 from database import SessionLocal, ShiftRule, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts
 from utils.stats_utils import compute_day_stats
@@ -40,14 +40,16 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
     summary_items = []
     for row in results:
-        first      = row.first_tap
-        last       = row.last_tap
-        count      = row.tap_count
-        w_date     = row.work_date
-        row_shift  = row.shift
+        first      = getattr(row, "first_tap", None)
+        last       = getattr(row, "last_tap", None)
+        count      = getattr(row, "tap_count", 0)
+        w_date     = getattr(row, "work_date", None)
+        # Use the combined calculation shift from the row object
+        row_shift  = getattr(row, "shift", None)
         department = getattr(row, "department", None)
         daily_code = getattr(row, "daily_shift_code", None)
-        effective_shift_raw = daily_code or row.shift
+        
+        effective_shift_raw = daily_code or row_shift
         
         # Display "-" if no shift, but internally calculate as "N"
         shift_code_display = effective_shift_raw or "-"
@@ -103,6 +105,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
         summary_items.append({
             "employee_id": row.employee_id,
+            "full_emp_id": getattr(row, "full_emp_id", None),
             "emp_name": emp_name,
             "attendance_date": w_date,
             "first_tap": first,
@@ -154,18 +157,31 @@ def sync_employees_full(file_bytes: bytes):
             sync_status["total"] = total_rows
             sync_status["current_step"] = f"Processing {total_rows} Excel records..."
 
+        # --- CLEAN SYNC PRE-PHASE: Mark all current excel_synced as stale ---
+        db.execute(text("UPDATE EmployeeLocalRegistry SET source_status = 'stale' WHERE source_status = 'excel_synced'"))
+        db.commit()
+
         existing_meta = {e.employee_id: e for e in db.query(EmployeeMetadata).all()}
         existing_registry = {r.employee_id: r for r in db.query(EmployeeLocalRegistry).all()}
         
         excel_synced_ids = set()
         
         for idx, row in df.iterrows():
-            if pd.isna(row.get(emp_col)) or str(row.get(emp_col)).strip().lower() in ('nan', ''):
+            # ID mappings based on user's final logic: EMP_ID is the PK, FULL_EMP_ID is display
+            emp_id_raw = str(row.get('EMP_ID', '')).strip()
+            full_id_raw = str(row.get('FULL_EMP_ID', '')).strip()
+            
+            # Clean .0 from Excel numbers
+            if emp_id_raw.endswith('.0'): emp_id_raw = emp_id_raw[:-2]
+            if full_id_raw.endswith('.0'): full_id_raw = full_id_raw[:-2]
+
+            # PK is ALWAYS EMP_ID
+            emp_id = emp_id_raw
+            if not emp_id or emp_id.lower() == 'nan':
                 continue
-                
-            emp_id = str(row[emp_col]).strip()
-            if emp_id.endswith('.0'): 
-                emp_id = emp_id[:-2]
+            
+            f_id = full_id_raw if (full_id_raw and full_id_raw.lower() != 'nan') else None
+            
             excel_synced_ids.add(emp_id)
             
             # Update EmployeeMetadata
@@ -174,6 +190,8 @@ def sync_employees_full(file_bytes: bytes):
                 meta = EmployeeMetadata(employee_id=emp_id)
                 db.add(meta)
                 existing_meta[emp_id] = meta
+            
+            meta.full_emp_id = f_id
             
             if 'SHIFT' in row and pd.notna(row['SHIFT']):
                 val = str(row['SHIFT']).strip().upper()
@@ -197,6 +215,7 @@ def sync_employees_full(file_bytes: bytes):
             reg.department = meta.department
             reg.group_name = meta.group
             reg.shift = meta.shift
+            reg.full_emp_id = f_id
             reg.source_status = 'excel_synced'
             
             with status_lock:
@@ -237,11 +256,10 @@ def sync_employees_full(file_bytes: bytes):
 
             daily_shift_count = 0
             for idx, row in df.iterrows():
-                if pd.isna(row.get(emp_col)) or str(row.get(emp_col)).strip().lower() in ('nan', ''):
-                    continue
-                
-                emp_id = str(row[emp_col]).strip()
+                emp_id = str(row.get('EMP_ID', '')).strip()
                 if emp_id.endswith('.0'): emp_id = emp_id[:-2]
+                if not emp_id or emp_id.lower() == 'nan':
+                    continue
                 
                 for col_name, (day_val, month_val) in date_columns.items():
                     cell_val = row.get(col_name)
@@ -299,11 +317,14 @@ def sync_employees_full(file_bytes: bytes):
                 db.add(reg)
                 existing_registry[u_id] = reg
                 with status_lock: sync_status["machine_only_count"] += 1
-            elif reg.source_status == 'log_only': # Upgrade from log_only to machine_only
+            elif reg.source_status == 'log_only' or reg.source_status == 'stale': 
+                # Upgrade to machine_only if they are found on machine
                 reg.source_status = 'machine_only'
                 if not reg.emp_name: reg.emp_name = u_name
                 with status_lock: sync_status["machine_only_count"] += 1
 
+        # --- CLEAN SYNC POST-PHASE: Demote remaining stale records to log_only ---
+        db.execute(text("UPDATE EmployeeLocalRegistry SET source_status = 'log_only' WHERE source_status = 'stale'"))
         db.commit()
         
         with status_lock:
