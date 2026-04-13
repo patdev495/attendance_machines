@@ -134,6 +134,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
             shift_code_display = daily_code or row.shift or "-"
             effective_shift = daily_code or row.shift or "N"
+            note = ""
 
             # Check for full-day leave
             if effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
@@ -141,6 +142,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 ot = 0
                 late = 0
                 early = 0
+                note = effective_shift.strip().upper()
                 if row.tap_count >= 1: first_val = row.first_tap.strftime("%H:%M")
                 if row.tap_count >= 2: last_val = row.last_tap.strftime("%H:%M")
             elif row.tap_count >= 1:
@@ -148,7 +150,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 last_val = row.last_tap.strftime("%H:%M")
                 emp_m = emp_meta.get(emp_id)
                 department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
-                _, std, ot, late, early = compute_day_stats(
+                res_work, std, ot, late, early = compute_day_stats(
                     row.first_tap, 
                     row.last_tap, 
                     w_date, 
@@ -156,12 +158,15 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     effective_shift,
                     rules_pool=rules_pool
                 )
+                if not (row.tap_count > 1 and row.first_tap != row.last_tap):
+                    note = "Missing Check-in/out"
             
             processed_data[emp_id]["days"][w_date] = {
                 "first": first_val, "last": last_val, 
                 "std": std, "ot": ot, "late": late, "early": early,
                 "shift": shift_code_display,
-                "shift_code": shift_code_display,  # Phase 13: explicit shift code
+                "shift_code": shift_code_display,
+                "note": note
             }
             if full_emp_id:
                 processed_data[emp_id]["full_id"] = full_emp_id
@@ -191,8 +196,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         wb = Workbook()
         ws = wb.active
         ws.title = "Attendance Export"
-        headers = ["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Ghi chú"]
+        # Column 7 renamed to "Chỉ số", and real "Ghi chú" added at the end
+        headers = ["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Chỉ số"]
         for d in dates_list: headers.append(f"{d.day}/{d.month}")
+        headers.append("Ghi chú")
         ws.append(headers)
         
         for cell in ws[1]:
@@ -252,8 +259,20 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 cell_ind.border = border_style
                 cell_ind.alignment = alignment_style
 
+            # Fill in notes in the last column of the first row of each employee block
+            notes_str = ""
+            for d in dates_list:
+                if d in emp_data and emp_data[d].get("note"):
+                    if notes_str: notes_str += "; "
+                    notes_str += f"{d.day}/{d.month}: {emp_data[d]['note']}"
+            
+            notes_col = len(dates_list) + 8
+            ws.cell(row=current_row, column=notes_col, value=notes_str if notes_str else "-").border = border_style
+            for i in range(1, num_rows):
+                ws.cell(row=current_row+i, column=notes_col, value="").border = border_style
+
             for date_idx, d in enumerate(dates_list):
-                col = date_idx + 7
+                col = date_idx + 8 # Date columns start after "Chỉ số" (Column 7)
                 if d not in emp_data:
                     for i in range(num_rows): 
                         cell = ws.cell(row=current_row+i, column=col, value="-")
@@ -264,7 +283,6 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     def fmt_ot(v):
                         return v if (isinstance(v, (int, float)) and v > 0) else "-"
 
-                    # Phase 13: Build values with "Mã công" appended
                     if view_mode=="time":
                         vals = [ds["first"], ds["last"], ds["late"], ds["early"], ds.get("shift_code", "-")]
                     elif view_mode=="hours":
@@ -280,8 +298,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
         ws2 = wb.create_sheet(title="Thông tin chi tiết")
-        # Standardized IDs for Sheet 2
-        ws2.append(["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"])
+        # Added "Ngày vào làm" to Sheet 2
+        ws2.append(["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"])
         
         for cell in ws2[1]:
             cell.font = bold_font
@@ -308,10 +326,13 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 display_ot = ot if (isinstance(ot, (int, float)) and ot > 0) else 0
                 shift_code_val = ds.get("shift_code", ds.get("shift", "N"))
                 full_id_val = emp_info.get("full_id") or "-"
+                hired_date_val = emp_m.start_date.strftime("%d/%m/%Y") if emp_m and emp_m.start_date else "-"
                 row_data = [
                     emp_id, full_id_val, emp_m.emp_name if emp_m else emp_id, 
                     emp_m.department if emp_m else "-", 
-                    emp_m.group_name if emp_m else "-", d.strftime("%d/%m/%Y"), 
+                    emp_m.group_name if emp_m else "-", 
+                    hired_date_val,
+                    d.strftime("%d/%m/%Y"), 
                     ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"],
                     shift_code_val
                 ]

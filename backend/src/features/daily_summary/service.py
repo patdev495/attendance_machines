@@ -201,8 +201,19 @@ def sync_employees_full(file_bytes: bytes):
             if 'EMP_NAME' in df.columns and pd.notna(row['EMP_NAME']): meta.emp_name = str(row['EMP_NAME'])
             if 'DEPARTMENT' in df.columns and pd.notna(row['DEPARTMENT']): meta.department = str(row['DEPARTMENT'])
             if 'GROUP' in df.columns and pd.notna(row['GROUP']): meta.group = str(row['GROUP'])
-            if 'START_DATE' in df.columns and pd.notna(row['START_DATE']):
-                meta.start_date = pd.to_datetime(row['START_DATE']).date()
+            # Phase 13: Robust hired date mapping
+            start_date_aliases = ['START_DATE', 'NGÀY VÀO LÀM', 'NGAY VAO LAM', 'HIRED DATE', 'DATE HIRED']
+            hired_date_val = None
+            for alias in start_date_aliases:
+                if alias in df.columns:
+                    hired_date_val = row[alias]
+                    break
+            
+            if hired_date_val and pd.notna(hired_date_val):
+                try:
+                    meta.start_date = pd.to_datetime(hired_date_val).date()
+                except:
+                    pass
 
             # Upsert into EmployeeLocalRegistry
             reg = existing_registry.get(emp_id)
@@ -214,6 +225,7 @@ def sync_employees_full(file_bytes: bytes):
             reg.emp_name = meta.emp_name
             reg.department = meta.department
             reg.group_name = meta.group
+            reg.start_date = meta.start_date
             reg.shift = meta.shift
             reg.full_emp_id = f_id
             reg.source_status = 'excel_synced'
