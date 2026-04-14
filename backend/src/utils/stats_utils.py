@@ -1,6 +1,7 @@
-import re
 from datetime import datetime, timedelta, time
 from typing import Optional, List, Any
+import math
+
 
 # ── Full-day leave/absence codes (Legacy fallback) ──────────────────────────
 # These are used if the code is not found in the ShiftDefinitions table.
@@ -100,22 +101,34 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
         actual_ot_threshold = official_end_dt
     
     if last > actual_ot_threshold:
-        ot_secs = (last - actual_ot_threshold).total_seconds()
+        raw_ot = (last - actual_ot_threshold).total_seconds() / 3600.0
+        # Round down to nearest 0.5 (e.g. 1.4 -> 1.0, 1.9 -> 1.5)
+        rounded_ot = math.floor(raw_ot * 2) / 2
+        # Minimum threshold 1.0h
+        hours_ot = rounded_ot if rounded_ot >= 1.0 else 0.0
     else:
-        ot_secs = 0.0
+        hours_ot = 0.0
 
+    # 4. Standard hours
+    # First, calculate effective work hours (Total - Break)
+    raw_work_hours = (total_secs - break_secs) / 3600.0
+    if raw_work_hours < 0: raw_work_hours = 0.0
 
-    hours_ot = round(ot_secs / 3600.0, 2)
-    
-    # Standard hours
-    raw_std_hours = max(0.0, raw_work_hours - (ot_secs / 3600.0))
+    # Standard hours is the part of total work that IS NOT counted as valid OT, 
+    # but still capped at the expected duration.
+    # Note: If someone works 9.5h and gets 1.5h OT, they get 8.0h standard.
+    # If someone works 8.8h and gets 0.0h OT (since < 1.0), they get min(8.8, 8.0) = 8.0h standard.
+    hours_standard = min(raw_work_hours - hours_ot, float(window['work_hours_expected']))
+    if hours_standard < 0: hours_standard = 0.0
 
-    # Cap standard hours at the expected duration
-    raw_std_hours = min(raw_std_hours, float(window['work_hours_expected']))
-
-    # Final Rounding
+    # Final Rounding for display
     work_hours = round(raw_work_hours, 2)
-    hours_standard = round(raw_std_hours, 2)
+    hours_standard = round(hours_standard, 2)
+    hours_ot = round(hours_ot, 2)
+
+
+    # Protection Rule: If neither late nor early, force standard hours to expected
+
     
     # Protection Rule: If neither late nor early, force standard hours to expected
     if minutes_late == 0 and minutes_early <= 5: 
