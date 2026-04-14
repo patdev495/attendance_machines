@@ -52,14 +52,9 @@
         <option value="machine_only">{{ $t('attendance.filters.status_machine') }}</option>
         <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
       </select>
-      <select v-model="shiftFilter" @change="resetAndFetch">
-        <option value="">{{ $t('employees.all_shifts') }}</option>
-        <option value="N">{{ $t('attendance.filters.day_shift') }}</option>
-        <option value="D">{{ $t('attendance.filters.night_shift') }}</option>
-        <option value="TV">{{ $t('attendance.filters.resigned') }}</option>
-        <option value="__none__">{{ $t('employees.none_shift') }}</option>
-      </select>
     </div>
+
+
 
     <EmployeesTable 
       :employees="employees" 
@@ -118,7 +113,7 @@ const notification = useNotificationStore()
 const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
-const shiftFilter = ref('')
+
 
 const currentPage = ref(1)
 const totalCount = ref(0)
@@ -244,7 +239,7 @@ const fetchEmployees = async () => {
     const filters = {}
     if (searchQuery.value) filters.search = searchQuery.value
     if (statusFilter.value) filters.source_status = statusFilter.value
-    if (shiftFilter.value) filters.shift = shiftFilter.value
+
     filters.order = idSortOrder.value
     
     const result = await employeesApi.getEmployees(filters, currentPage.value, PAGE_SIZE)

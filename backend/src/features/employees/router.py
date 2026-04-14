@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, Integer
 from database import get_db, EmployeeLocalRegistry
 from typing import List, Optional
 import threading
@@ -47,8 +47,8 @@ def list_employees(
     page_size: int = 50,
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
-    shift: Optional[str] = None,
     order: str = 'asc',
+
     db: Session = Depends(get_db)
 ):
     query = db.query(EmployeeLocalRegistry)
@@ -66,20 +66,14 @@ def list_employees(
         
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
-        
-    if shift:
-        if shift == "__none__":
-            query = query.filter(
-                (EmployeeLocalRegistry.shift == None) | (EmployeeLocalRegistry.shift == "-")
-            )
-        else:
-            query = query.filter(EmployeeLocalRegistry.shift == shift)
 
-    # Apply sorting
+
+    # Apply sorting (Numeric sort for employee_id)
     if order.lower() == 'desc':
-        query = query.order_by(EmployeeLocalRegistry.employee_id.desc())
+        query = query.order_by(func.cast(EmployeeLocalRegistry.employee_id, Integer).desc())
     else:
-        query = query.order_by(EmployeeLocalRegistry.employee_id.asc())
+        query = query.order_by(func.cast(EmployeeLocalRegistry.employee_id, Integer).asc())
+
 
     total_count = query.count()
     total_pages = max(1, -(-total_count // page_size))  # ceiling division
