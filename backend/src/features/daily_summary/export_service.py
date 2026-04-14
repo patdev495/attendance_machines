@@ -7,7 +7,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
-from database import AttendanceLog, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftRule, SessionLocal
+from database import AttendanceLog, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, SessionLocal
+
 from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES
 
 export_status = {
@@ -34,7 +35,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             })
 
         # Pre-fetch shift rules for extreme performance
-        rules_pool = db.query(ShiftRule).all()
+        rules_pool = db.query(ShiftDefinition).all()
+
 
         # Phase 13: Use 09:00 AM anchor for work_date (consistent with router.py)
         base_calc_sub = db.query(
@@ -131,13 +133,25 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             daily_code = getattr(row, 'daily_shift_code', None)
             full_emp_id = getattr(row, 'full_emp_id', None)
             
+            # Phase 13: Map to NA if not in definitions table
+            valid_codes = {r.shift_code for r in rules_pool} if rules_pool else set()
+            effective_shift_raw = daily_code or row.shift or "N"
+            
+            if not effective_shift_raw or effective_shift_raw.strip().upper() not in valid_codes:
+                shift_code_display = "NA"
+                effective_shift = "N"
+            else:
+                shift_code_display = effective_shift_raw.strip().upper()
+                effective_shift = shift_code_display
+
+            # Initialization for row record
             first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
-            shift_code_display = daily_code or row.shift or "-"
-            effective_shift = daily_code or row.shift or "N"
             note = ""
 
             # Check for full-day leave
             if effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
+
+
                 std = 0
                 ot = 0
                 late = 0
@@ -150,7 +164,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 last_val = row.last_tap.strftime("%H:%M")
                 emp_m = emp_meta.get(emp_id)
                 department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
-                res_work, std, ot, late, early = compute_day_stats(
+                res_work, std, ot, late, early, hp, hr, ho = compute_day_stats(
                     row.first_tap, 
                     row.last_tap, 
                     w_date, 
@@ -158,8 +172,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     effective_shift,
                     rules_pool=rules_pool
                 )
-                if not (row.tap_count > 1 and row.first_tap != row.last_tap):
+                if not (row.tap_count > 1 and row.first_tap != row.last_tap) and not (hp or hr or ho):
                     note = "Missing Check-in/out"
+
             
             processed_data[emp_id]["days"][w_date] = {
                 "first": first_val, "last": last_val, 

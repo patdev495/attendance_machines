@@ -9,7 +9,8 @@ from starlette.background import BackgroundTask
 from typing import List, Optional
 from datetime import date, datetime, time, timedelta
 
-from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftRule, EmployeeDailyShifts
+from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftDefinition, EmployeeDailyShifts
+
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
 from .export_service import export_status, export_lock, run_export_task
 
@@ -19,24 +20,16 @@ router = APIRouter(prefix="/api/daily-summary", tags=["Daily Summary"])
 
 @router.get("/unique-shifts")
 def get_unique_shifts(db: Session = Depends(get_db)):
-    """
-    Returns a list of all unique shift codes found in:
-    - EmployeeDailyShifts
-    - EmployeeLocalRegistry
-    - EmployeeMetadata
-    """
-    from sqlalchemy import union_all
-
-    # Use union to get unique values across 3 tables
-    q1 = db.query(EmployeeDailyShifts.shift_code).distinct()
-    q2 = db.query(EmployeeLocalRegistry.shift).distinct().filter(EmployeeLocalRegistry.shift != None)
-    q3 = db.query(EmployeeMetadata.shift).distinct().filter(EmployeeMetadata.shift != None)
+    # Only pull from the official definitions table
+    q = db.query(ShiftDefinition.shift_code).distinct()
     
-    # Use list comprehension and set for uniqueness
-    results = [r[0] for r in q1.all()] + [r[0] for r in q2.all()] + [r[0] for r in q3.all()]
+    results = [r[0] for r in q.all()]
     unique_shifts = sorted(list(set(s.strip().upper() for s in results if s and s.strip())))
     
-    return unique_shifts
+    # Always include NA at the beginning
+    return ["NA"] + unique_shifts
+
+
 
 @router.get("")
 def get_daily_summary(
@@ -157,15 +150,24 @@ def get_daily_summary(
         found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
         query = query.filter(func.ltrim(func.rtrim(base_calc_sub.c.employee_id)).in_(list(found_ids)))
     if machine_ip: query = query.filter(base_calc_sub.c.machine_ip == machine_ip)
-    # Filter by shift: use daily code if available
+    # Filter by shift: respect defined codes, everything else is NA
     final_shift = func.coalesce(
         func.max(EmployeeDailyShifts.shift_code),
         func.coalesce(base_calc_sub.c.reg_shift, base_calc_sub.c.meta_shift)
     )
-    if shift == "NA":
-        query = query.having(final_shift == None)
-    elif shift:
-        query = query.having(final_shift == shift)
+    
+    valid_shift_ids = db.query(ShiftDefinition.shift_code).subquery()
+    
+    # Logic: If the found code exists in ShiftDefinitions, use it. Otherwise, it's 'NA'.
+    mapped_shift = case(
+        (final_shift.in_(valid_shift_ids), final_shift),
+        else_="NA"
+    )
+
+    if shift:
+        query = query.having(mapped_shift == shift)
+
+
     if department: query = query.filter(base_calc_sub.c.department == department)
     final_status = func.coalesce(base_calc_sub.c.source_status, base_calc_sub.c.meta_status)
     if status and status != 'All': 
@@ -185,7 +187,8 @@ def get_daily_summary(
         base_calc_sub.c.full_emp_id
     ).order_by(desc(base_calc_sub.c.work_date), base_calc_sub.c.employee_id)
 
-    rules_pool = db.query(ShiftRule).all()
+    rules_pool = db.query(ShiftDefinition).all()
+
 
     if min_hours or max_hours or only_missing:
         all_results = query.all()

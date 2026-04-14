@@ -26,8 +26,10 @@
     "title": "Chấm Công & Thời Gian",
     "dashboard": "Bảng Điều Khiển",
     "machines": "Máy Chấm Công",
-    "employees": "Nhân Viên"
+    "employees": "Nhân Viên",
+    "shifts": "Quản Lý Ca"
   },
+
   "employees": {
     "title": "Quản Lý Nhân Viên",
     "upload_sync": "Tải lên & Đồng bộ Registry",
@@ -237,5 +239,37 @@
     "progress": "Đang đồng bộ: Máy {current}/{total} ({ip}) - Đã thêm: {added}",
     "machines": "Đồng bộ Máy",
     "uploading": "Đang tải file lên..."
+  },
+  "shifts": {
+    "title": "Quản Lý Ca Làm Việc",
+    "subtitle": "Định nghĩa giờ bắt đầu, kết thúc, giờ nghỉ và định mức công cho từng mã ca.",
+    "add_btn": "Thêm Ca Mới",
+    "edit_title": "Chỉnh Sửa Ca",
+    "delete_confirm": "Bạn có chắc muốn xóa mã ca {code}?",
+    "table": {
+      "code": "Mã Ca",
+      "time_window": "Khung Giờ",
+      "night": "Ca Đêm",
+      "work_hours": "Giờ Công",
+      "break_hours": "Giờ Nghỉ",
+      "paid_leave": "NP (P)",
+      "unpaid_leave": "VR (R)",
+      "other_leave": "Khác (O)",
+      "standard": "Định Mức",
+      "desc": "Mô Tả"
+    },
+    "form": {
+      "code": "Mã Ca (Ví dụ: N, D12, 4N4P)",
+      "start": "Giờ Bắt Đầu",
+      "end": "Giờ Kết Thúc",
+      "night": "Đây là ca đêm (kết thúc hôm sau)",
+      "work": "Số giờ làm việc thực tế",
+      "break": "Số giờ nghỉ giữa ca",
+      "p": "Số giờ nghỉ phép (Hưởng lương)",
+      "r": "Số giờ nghỉ việc riêng (Không lương)",
+      "o": "Số giờ nghỉ khác (Ốm, BHXH)",
+      "std": "Tổng định mức chuẩn (Ví dụ: 8.0)",
+      "desc": "Mô tả ngắn gọn"
+    }
   }
-}
+}

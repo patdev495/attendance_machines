@@ -6,8 +6,10 @@ from datetime import date
 from sqlalchemy.orm import Session
 from sqlalchemy import exists, text
 
-from database import SessionLocal, ShiftRule, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts
+from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition
+
 from utils.stats_utils import compute_day_stats
+
 from features.logs.service import get_machine_list, get_users_from_machine
 
 logger = logging.getLogger(__name__)
@@ -34,9 +36,10 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
     if rules_pool is None:
         db = SessionLocal()
         try:
-            rules_pool = db.query(ShiftRule).all()
+            rules_pool = db.query(ShiftDefinition).all()
         finally:
             db.close()
+
 
     summary_items = []
     for row in results:
@@ -51,9 +54,18 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         
         effective_shift_raw = daily_code or row_shift
         
+        # Phase 13: Check if the shift code is defined in the ShiftDefinitions table
+        # Only pull from rules_pool if we have one.
+        valid_codes = {r.shift_code for r in rules_pool} if rules_pool else set()
+        
         # Display "-" if no shift, but internally calculate as "N"
-        shift_code_display = effective_shift_raw or "-"
-        calculation_shift = effective_shift_raw or "N"
+        if not effective_shift_raw or effective_shift_raw.strip().upper() not in valid_codes:
+            shift_code_display = "NA"
+            calculation_shift = "N" # Fallback for calculation
+        else:
+            shift_code_display = effective_shift_raw.strip().upper()
+            calculation_shift = shift_code_display
+
 
         work_hours       = 0.0
         minutes_late     = None
@@ -91,8 +103,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                              last.date() == first.date() and 
                              last.hour < boundary_hour)
         
-        # compute_day_stats handles all logic natively including missing taps (first == last)
-        work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv = compute_day_stats(
+        # compute_day_stats now returns 8 values
+        work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv, hours_p, hours_r, hours_o = compute_day_stats(
             first, last, w_date, department, calculation_shift, rules_pool=rules_pool
         )
         
@@ -111,9 +123,13 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "first_tap": first,
             "last_tap": last,
             "tap_count": count,
-            "work_hours": work_hours,
+            "work_hours": hours_standard,
             "hours_standard": hours_standard,
             "hours_ot": hours_ot,
+
+            "hours_p": hours_p,
+            "hours_r": hours_r,
+            "hours_o": hours_o,
             "shift": shift_code_display,
             "status": (row.status if hasattr(row, "status") and row.status else "Active"),
             "note": note,
@@ -121,6 +137,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "minutes_early_leave": minutes_early_lv,
             "daily_shift_code": shift_code_display,
         })
+
     return summary_items
 
 def sync_employees_full(file_bytes: bytes):

@@ -4,7 +4,12 @@ from sqlalchemy.orm import sessionmaker
 from config import config
 
 # Using the connection string format from central config
-engine = create_engine(config.DATABASE_URL)
+engine = create_engine(
+    config.DATABASE_URL, 
+    pool_pre_ping=True, 
+    pool_recycle=3600,
+)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -89,6 +94,30 @@ class EmployeeDailyShifts(Base):
     employee_id = Column(String(50), primary_key=True)
     work_date   = Column(Date, primary_key=True)
     shift_code  = Column(String(10), nullable=False)  # e.g. 'N', 'D', '4N4R', 'P', '6R6N'
+
+# ──────────────────────────────────────────────────────────────────────────────
+# v3.0 NEW TABLE — ShiftDefinitions
+# Centralized dictionary for all attendance codes (N, D, P, R, 4N4P, etc.)
+# Stores timing rules and payroll/leave logic per code.
+# ──────────────────────────────────────────────────────────────────────────────
+class ShiftDefinition(Base):
+    __tablename__ = "ShiftDefinitions"
+    shift_code      = Column(Unicode(50), primary_key=True)
+    start_time      = Column(Time, nullable=True)
+    end_time        = Column(Time, nullable=True)
+    ot_start_time   = Column(Time, nullable=True) # Official start of OT (fallback to end_time)
+    is_night_shift  = Column(Boolean, default=False)
+
+    break_hours     = Column(Float, default=0.0)
+    work_hours      = Column(Float, default=0.0)
+
+
+    leave_hours_p   = Column(Float, default=0.0) # Paid Leave (NP)
+    leave_hours_r   = Column(Float, default=0.0) # Personal Leave (VR)
+    leave_hours_o   = Column(Float, default=0.0) # Other Leave (Om, BHXH...)
+    standard_hours  = Column(Float, default=0.0) # Rounding target (e.g. 8.0, 12.0)
+    description     = Column(Unicode(255), nullable=True)
+
 
 def init_db():
     # create_all is additive — it only creates tables that do not yet exist.

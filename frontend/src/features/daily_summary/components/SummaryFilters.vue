@@ -54,9 +54,8 @@
           <option v-for="s in shifts" :key="s.value" :value="s.value">
             {{ s.label }}
           </option>
-          <option value="TV">{{ $t('attendance.filters.resigned') }}</option>
-          <option value="NA">{{ $t('attendance.filters.na_shift') }}</option>
         </select>
+
       </div>
       <div class="filter-group">
         <label for="minHoursInput">{{ $t('attendance.filters.min_hours') }}</label>
@@ -126,11 +125,12 @@ const fetchShifts = async () => {
   try {
     const { data } = await dailySummaryApi.getUniqueShifts()
     shifts.ref = data
-    // Map data for display, keeping original for value
+    // Simplified: use the raw code as both value and label
     shifts.value = data.map(s => ({
       value: s,
-      label: s === 'N' ? 'Day (N)' : (s === 'D' ? 'Night (D)' : s)
+      label: s
     }))
+
   } catch (err) {
     console.error('Failed to fetch unique shifts:', err)
   }

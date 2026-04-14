@@ -23,7 +23,9 @@ from features.logs.router import router as logs_router
 from features.daily_summary.router import router as daily_summary_router
 from features.employees.router import router as employees_router
 from features.machines.router import router as machines_router
+from features.shift_definitions.router import router as shift_router
 from contextlib import asynccontextmanager
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,7 +55,9 @@ def create_app() -> FastAPI:
     app.include_router(logs_router)       # v2.0
     app.include_router(daily_summary_router) # v2.0
     app.include_router(employees_router)    # v2.0
-    app.include_router(machines_router)    # v2.0
+    app.include_router(machines_router)     # v2.0
+    app.include_router(shift_router)        # v3.0
+
 
 
     # Serve Vue 3 SPA

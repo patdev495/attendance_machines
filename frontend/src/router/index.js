@@ -7,6 +7,8 @@ import EmployeesFeature from '@/features/employees/index.vue'
 import MachinesFeature from '@/features/machines/index.vue'
 import MachineListView from '@/features/machines/views/MachineListView.vue'
 import MachineDetailView from '@/features/machines/views/MachineDetailView.vue'
+import ShiftManagementView from '@/features/admin/ShiftManagementView.vue'
+
 
 const routes = [
   {
@@ -45,6 +47,12 @@ const routes = [
       }
     ]
   },
+  {
+    path: '/shifts',
+    name: 'shifts',
+    component: ShiftManagementView
+  },
+
   // Legacy Routes Disabled
 ]
 

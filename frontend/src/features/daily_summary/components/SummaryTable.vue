@@ -19,23 +19,28 @@
             <th>{{ $t('attendance.table.last_tap') }}</th>
             <th>{{ $t('attendance.table.work_hours') }}</th>
             <th>{{ $t('attendance.table.hours_ot') }}</th>
+            <th class="text-center">P</th>
+            <th class="text-center">R</th>
+            <th class="text-center">O</th>
             <th>{{ $t('attendance.table.status') }}</th>
             <th>{{ $t('attendance.table.note') }}</th>
+
             <th class="actions-col">{{ $t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="11" class="empty-state">
+            <td colspan="14" class="empty-state">
               <div class="loader"></div>
               {{ $t('common.loading') }}
             </td>
           </tr>
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="11" class="empty-state">
+            <td colspan="14" class="empty-state">
               {{ $t('common.no_data') }}
             </td>
           </tr>
+
           <tr v-for="item in items" :key="item.employee_id + item.attendance_date">
             <td class="bold">{{ item.employee_id }}</td>
             <td>{{ item.emp_name || '-' }}</td>
@@ -53,7 +58,17 @@
             <td class="hours ot">
               {{ formatHours(item.hours_ot) }}
             </td>
+            <td class="text-center font-bold text-success" :class="{ 'dimmed': !item.hours_p }">
+              {{ item.hours_p ? item.hours_p.toFixed(1) : '-' }}
+            </td>
+            <td class="text-center font-bold text-warning" :class="{ 'dimmed': !item.hours_r }">
+              {{ item.hours_r ? item.hours_r.toFixed(1) : '-' }}
+            </td>
+            <td class="text-center font-bold text-info" :class="{ 'dimmed': !item.hours_o }">
+              {{ item.hours_o ? item.hours_o.toFixed(1) : '-' }}
+            </td>
             <td>
+
               <span class="status-indicator" :class="getStatusClass(item.status)"></span>
               {{ getStatusLabel(item.status) }}
             </td>
@@ -202,6 +217,14 @@ tr:hover td {
 .hours.ot { color: #f59e0b; } /* Amber-500 for OT */
 .hours.warning { color: var(--warning); }
 .error-text { color: var(--danger); font-size: 0.85rem; font-weight: 500; }
+
+.text-center { text-align: center; }
+.text-success { color: #2ecc71; }
+.text-warning { color: #f1c40f; }
+.text-info { color: #3498db; }
+.font-bold { font-weight: 700; }
+.dimmed { opacity: 0.15; font-weight: 400 !important; }
+
 
 .sub-note {
   font-size: 0.75rem;
