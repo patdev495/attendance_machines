@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 
 from database import AttendanceLog, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, SessionLocal
 
-from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES
+from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap
 
 export_status = {
     "is_running": False,
@@ -223,7 +223,12 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     rules_pool=rules_pool
                 )
                 if not (row.tap_count > 1 and row.first_tap != row.last_tap) and not (hp or hr or ho):
-                    note = "Missing Check-in/out"
+                    note = determine_missing_tap(row.first_tap, w_date, effective_shift, department, rules_pool)
+                    # Single tap: suppress the metric we cannot know
+                    if note == "Missing Check-out":
+                        early = 0   # don't know when they left
+                    elif note == "Missing Check-in":
+                        late = 0    # don't know when they arrived
 
             
             # ── Classify std/ot by shift_category (NORMAL / HOLIDAY / ROTATION)

@@ -68,7 +68,9 @@
       "error_prefix": "导出错误"
     },
     "notes": {
-      "missing_tap": "缺卡"
+      "missing_tap": "缺卡",
+      "missing_checkin": "缺打卡 (上班)",
+      "missing_checkout": "缺打卡 (下班)"
     },
     "summary_subtitle": "分析每日出勤情况、管理班次并导出报告。",
     "filters": {

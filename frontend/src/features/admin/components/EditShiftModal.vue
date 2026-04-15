@@ -24,6 +24,16 @@
                   />
                 </div>
 
+                <!-- Shift Category -->
+                <div class="form-group">
+                  <label>Phân Loại Ngày Làm Việc (Tính công/Tăng ca)</label>
+                  <select v-model="formData.shift_category" class="form-select">
+                    <option value="NORMAL">Ngày Thường (Tính công chuẩn/OT thường)</option>
+                    <option value="HOLIDAY">Nghỉ Lễ (Tính công/OT Lễ)</option>
+                    <option value="ROTATION">Nghỉ Luân Phiên (Tính công/OT Luân phiên)</option>
+                  </select>
+                </div>
+
                 <div class="form-row">
                   <!-- Start Time -->
                   <div class="form-group flex-1">
@@ -131,6 +141,7 @@ const loading = ref(false)
 
 const formData = ref({
   shift_code: '',
+  shift_category: 'NORMAL',
   start_time: '08:00:00',
   end_time: '17:00:00',
   ot_start_time: null,
@@ -152,6 +163,7 @@ watch(() => props.isOpen, (newVal) => {
     } else {
       formData.value = {
         shift_code: '',
+        shift_category: 'NORMAL',
         start_time: '08:00:00',
         end_time: '17:00:00',
         ot_start_time: null,
@@ -268,7 +280,8 @@ const close = () => {
   font-size: 0.8rem;
 }
 
-.form-group input {
+.form-group input,
+.form-group select {
   width: 100%;
   padding: 0.65rem;
   border-radius: 6px;
@@ -279,7 +292,13 @@ const close = () => {
   font-size: 0.9rem;
 }
 
-.form-group input:focus {
+.form-group select option {
+  background: #1e293b;
+  color: white;
+}
+
+.form-group input:focus,
+.form-group select:focus {
   border-color: #3b82f6;
 }
 

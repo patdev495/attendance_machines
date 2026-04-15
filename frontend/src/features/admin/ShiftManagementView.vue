@@ -18,6 +18,7 @@
             <tr>
               <th>Mã Ca</th>
               <th>Khung Giờ</th>
+              <th>Loại Ngày</th>
               <th class="text-center">Công</th>
               <th class="text-center">Nghỉ</th>
               <th class="text-center">NP (P)</th>
@@ -45,6 +46,11 @@
                   <span v-if="shift.is_night_shift" class="tag-night">Đêm</span>
 
                 </div>
+              </td>
+              <td>
+                <span class="category-badge" :class="getCategoryClass(shift.shift_category)">
+                  {{ formatCategory(shift.shift_category) }}
+                </span>
               </td>
               <td class="text-center font-semibold">{{ shift.work_hours.toFixed(1) }}h</td>
               <td class="text-center text-muted">{{ shift.break_hours.toFixed(1) }}h</td>
@@ -128,6 +134,18 @@ const handleDelete = async (shift) => {
       notification.error('Lỗi khi xóa')
     }
   }
+}
+
+const formatCategory = (cat) => {
+  if (cat === 'HOLIDAY') return 'Nghỉ Lễ';
+  if (cat === 'ROTATION') return 'Luân Phiên';
+  return 'Ngày Thường';
+}
+
+const getCategoryClass = (cat) => {
+  if (cat === 'HOLIDAY') return 'tag-holiday';
+  if (cat === 'ROTATION') return 'tag-rotation';
+  return 'tag-normal';
 }
 
 onMounted(fetchShifts)
@@ -273,6 +291,17 @@ onMounted(fetchShifts)
   border-radius: 4px;
   margin-left: 2px;
 }
+
+.category-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tag-normal { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+.tag-holiday { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+.tag-rotation { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
 
 .text-muted { color: #64748b; }
 .text-success { color: #2ecc71; }

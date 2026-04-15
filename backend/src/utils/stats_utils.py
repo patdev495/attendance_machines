@@ -135,3 +135,34 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
         hours_standard = float(window['work_hours_expected'])
 
     return work_hours, hours_standard, hours_ot, minutes_late, minutes_early, hours_p, hours_r, hours_o
+
+
+def determine_missing_tap(tap_time, w_date, shift_code, department, rules_pool=None):
+    """Determine whether a single tap is a missing check-in or missing check-out.
+
+    Heuristic: compare the tap's distance to shift start_time vs end_time.
+      - Closer to start_time → user checked IN, forgot to check OUT → 'Missing Check-out'
+      - Closer to end_time   → user checked OUT, forgot to check IN  → 'Missing Check-in'
+      - Cannot determine     → 'Missing Check-in/out' (fallback)
+    """
+    if not tap_time or not w_date:
+        return "Missing Check-in/out"
+
+    try:
+        window = parse_shift_window(shift_code, department, rules_pool=rules_pool)
+
+        start_dt = datetime.combine(w_date, window['official_start'])
+        if window.get('end_next_day'):
+            end_dt = datetime.combine(w_date + timedelta(days=1), window['official_end'])
+        else:
+            end_dt = datetime.combine(w_date, window['official_end'])
+
+        dist_to_start = abs((tap_time - start_dt).total_seconds())
+        dist_to_end   = abs((tap_time - end_dt).total_seconds())
+
+        if dist_to_start <= dist_to_end:
+            return "Missing Check-out"
+        else:
+            return "Missing Check-in"
+    except Exception:
+        return "Missing Check-in/out"

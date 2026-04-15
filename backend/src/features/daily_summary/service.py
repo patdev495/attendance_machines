@@ -8,7 +8,7 @@ from sqlalchemy import exists, text
 
 from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition
 
-from utils.stats_utils import compute_day_stats
+from utils.stats_utils import compute_day_stats, determine_missing_tap
 
 from features.logs.service import get_machine_list, get_users_from_machine
 
@@ -109,7 +109,12 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         )
         
         if not (count > 1 and first != last and not is_double_checkin):
-            note = "Missing Check-in/out"
+            note = determine_missing_tap(first, w_date, calculation_shift, department, rules_pool)
+            # Single tap: suppress the metric we cannot know
+            if note == "Missing Check-out":
+                minutes_early_lv = 0   # don't know when they left
+            elif note == "Missing Check-in":
+                minutes_late = 0       # don't know when they arrived
 
         emp_name = getattr(row, "emp_name", None)
         if not emp_name:

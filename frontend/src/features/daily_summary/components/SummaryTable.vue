@@ -73,7 +73,7 @@
               {{ getStatusLabel(item.status) }}
             </td>
             <td class="note">
-              <span :class="{ 'error-text': item.note }">{{ (item.note && item.note.toLowerCase().includes('missing') && item.note.toLowerCase().includes('check-in/out')) ? $t('attendance.notes.missing_tap') : (item.note || '-') }}</span>
+              <span :class="{ 'error-text': item.note }">{{ translateNote(item.note) }}</span>
               <div v-if="item.minutes_late" class="sub-note late">{{ $t('attendance.table.late', { m: item.minutes_late }) }}</div>
               <div v-if="item.minutes_early_leave" class="sub-note early">{{ $t('attendance.table.early', { m: item.minutes_early_leave }) }}</div>
             </td>
@@ -155,6 +155,15 @@ const getStatusClass = (status) => {
   if (status === 'machine_only') return 'status-machine'
   if (status === 'log_only') return 'status-log'
   return 'status-default'
+}
+
+const translateNote = (note) => {
+  if (!note) return '-'
+  const n = note.toLowerCase()
+  if (n === 'missing check-out') return t('attendance.notes.missing_checkout')
+  if (n === 'missing check-in')  return t('attendance.notes.missing_checkin')
+  if (n.includes('missing'))     return t('attendance.notes.missing_tap')
+  return note
 }
 </script>
 
