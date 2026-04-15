@@ -41,6 +41,8 @@ def get_daily_summary(
     min_hours: Optional[float] = Query(None),
     max_hours: Optional[float] = Query(None),
     only_missing: Optional[bool] = Query(False),
+    late_arrival: Optional[bool] = Query(False),
+    early_departure: Optional[bool] = Query(False),
     department: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -190,7 +192,7 @@ def get_daily_summary(
     rules_pool = db.query(ShiftDefinition).all()
 
 
-    if min_hours or max_hours or only_missing:
+    if min_hours or max_hours or only_missing or late_arrival or early_departure:
         all_results = query.all()
         processed_items = process_summary_rows(all_results, rules_pool=rules_pool)
         
@@ -200,6 +202,8 @@ def get_daily_summary(
             wh = item['work_hours'] or 0.0
             if min_hours and wh < min_hours: continue
             if max_hours and wh > max_hours: continue
+            if late_arrival and not (item.get('minutes_late') and item.get('minutes_late') > 0): continue
+            if early_departure and not (item.get('minutes_early_leave') and item.get('minutes_early_leave') > 0): continue
             filtered_items.append(item)
             
         total = len(filtered_items)

@@ -102,6 +102,8 @@
       "night_shift": "Night Shift",
       "na_shift": "NA",
       "only_missing": "Only Missing",
+      "late_arrival": "Late In",
+      "early_departure": "Early Out",
       "emp_placeholder": "e.g. 101 or Name",
       "hours_placeholder": "e.g. {h}"
     },

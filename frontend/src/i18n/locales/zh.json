@@ -97,6 +97,8 @@
       "night_shift": "夜班",
       "na_shift": "未知",
       "only_missing": "仅缺卡",
+      "late_arrival": "迟到",
+      "early_departure": "早退",
       "emp_placeholder": "例如：101 或 姓名",
       "hours_placeholder": "例如：{h}"
     },

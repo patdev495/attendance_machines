@@ -104,6 +104,8 @@
       "night_shift": "Ca Đêm (D)",
       "na_shift": "NA",
       "only_missing": "Chỉ Thiếu Thông Tin",
+      "late_arrival": "Đi muộn",
+      "early_departure": "Về sớm",
       "emp_placeholder": "VD: 101 hoặc Tên",
       "hours_placeholder": "VD: {h}"
     },

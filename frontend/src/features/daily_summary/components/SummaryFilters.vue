@@ -83,6 +83,16 @@
           <span class="checkmark"></span>
           {{ $t('attendance.filters.only_missing') }}
         </label>
+        <label class="checkbox-container">
+          <input type="checkbox" v-model="filters.late_arrival" @change="emitChange" />
+          <span class="checkmark"></span>
+          {{ $t('attendance.filters.late_arrival') }}
+        </label>
+        <label class="checkbox-container">
+          <input type="checkbox" v-model="filters.early_departure" @change="emitChange" />
+          <span class="checkmark"></span>
+          {{ $t('attendance.filters.early_departure') }}
+        </label>
       </div>
     </div>
   </section>
@@ -111,6 +121,8 @@ const filters = reactive({
   min_hours: null,
   max_hours: null,
   only_missing: false,
+  late_arrival: false,
+  early_departure: false,
   ...props.initialFilters
 })
 
@@ -163,7 +175,9 @@ const resetFilters = () => {
     shift: '',
     min_hours: null,
     max_hours: null,
-    only_missing: false
+    only_missing: false,
+    late_arrival: false,
+    early_departure: false
   })
   emitChange()
 }
@@ -212,8 +226,10 @@ const resetFilters = () => {
 }
 
 .checkbox-group {
-  justify-content: center;
+  justify-content: flex-start;
   padding-bottom: 5px;
+  flex-direction: row;
+  gap: 24px;
 }
 
 .checkbox-container {

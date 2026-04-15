@@ -96,7 +96,9 @@ const filters = reactive({
   shift: '',
   min_hours: null,
   max_hours: null,
-  only_missing: false
+  only_missing: false,
+  late_arrival: false,
+  early_departure: false
 })
 
 const pagination = reactive({
