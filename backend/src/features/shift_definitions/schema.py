@@ -16,6 +16,8 @@ class ShiftDefinitionBase(BaseModel):
     leave_hours_o: float = 0.0
     standard_hours: float = 8.0
     description: Optional[str] = None
+    # 'NORMAL' | 'HOLIDAY' | 'ROTATION'
+    shift_category: Optional[str] = "NORMAL"
 
 class ShiftDefinitionCreate(ShiftDefinitionBase):
     pass
@@ -33,6 +35,7 @@ class ShiftDefinitionUpdate(BaseModel):
     leave_hours_o: Optional[float] = None
     standard_hours: Optional[float] = None
     description: Optional[str] = None
+    shift_category: Optional[str] = None
 
 class ShiftDefinitionSchema(ShiftDefinitionBase):
     class Config:

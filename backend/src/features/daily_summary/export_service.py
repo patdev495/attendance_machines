@@ -1,8 +1,9 @@
 import os
 import threading
 import tempfile
-from datetime import date, datetime, timedelta
-from sqlalchemy import text, func, Date, case, literal_column
+from datetime import date, datetime, timedelta, time
+from sqlalchemy import text, func, Date, Time, case, literal_column
+from sqlalchemy.orm import aliased
 from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
@@ -22,6 +23,20 @@ export_status = {
 }
 export_lock = threading.Lock()
 
+def _get_shift_meta(shift_code, rules_pool):
+    """Return (shift_category, is_night_shift) for a given shift_code.
+
+    shift_category values: 'NORMAL' | 'HOLIDAY' | 'ROTATION'
+    Defaults to ('NORMAL', False) when the code is not in rules_pool.
+    """
+    if rules_pool and shift_code:
+        code = shift_code.strip().upper()
+        for r in rules_pool:
+            if r.shift_code == code:
+                cat = (r.shift_category or "NORMAL").upper()
+                return cat, bool(r.is_night_shift)
+    return "NORMAL", False
+
 def run_export_task(start_date: date, end_date: date, view_mode: str):
     global export_status
     
@@ -39,6 +54,13 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
 
         # Phase 13: Use 09:00 AM anchor for work_date (consistent with router.py)
+        # Phase 15 (export): Use the same shift-aware work_date logic as the daily summary router.
+        # The old -12h anchor was only based on EmployeeLocalRegistry.shift, which is often empty
+        # when the employee's shift is set only via daily shift codes (EmployeeDailyShifts).
+        # This fix aligns export grouping with the tab view.
+        today_shift = aliased(EmployeeDailyShifts)
+        yest_shift  = aliased(EmployeeDailyShifts)
+
         base_calc_sub = db.query(
             AttendanceLog.id,
             AttendanceLog.attendance_time,
@@ -47,11 +69,39 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             EmployeeLocalRegistry.department,
             EmployeeLocalRegistry.full_emp_id,
             case(
-                (EmployeeLocalRegistry.shift.like("%D%"), 
-                 func.cast(func.dateadd(text("hour"), text("-12"), AttendanceLog.attendance_time), Date)),
+                # Priority 1: Today is D-like + tap before noon → belongs to yesterday
+                (
+                    (func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift).like("%D%")) &
+                    (func.cast(AttendanceLog.attendance_time, Time) < time(12, 0)),
+                    func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date)
+                ),
+                # Priority 2: Today is D-like + tap ≥ 18:00 → belongs to today
+                (
+                    (func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift).like("%D%")) &
+                    (func.cast(AttendanceLog.attendance_time, Time) >= time(18, 0)),
+                    func.cast(AttendanceLog.attendance_time, Date)
+                ),
+                # Priority 3: Yesterday was D-like + early morning tap → belongs to yesterday
+                (
+                    (func.coalesce(yest_shift.shift_code, EmployeeLocalRegistry.shift).like("%D%")) &
+                    (func.cast(AttendanceLog.attendance_time, Time) < time(10, 0)),
+                    func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date)
+                ),
+                # Default: -3h anchor (day shifts)
                 else_=func.cast(func.dateadd(text("hour"), text("-3"), AttendanceLog.attendance_time), Date)
             ).label("work_date")
-        ).outerjoin(EmployeeLocalRegistry, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))).subquery()
+        ).outerjoin(
+            EmployeeLocalRegistry,
+            func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))
+        ).outerjoin(
+            today_shift,
+            (func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(today_shift.employee_id))) &
+            (func.cast(AttendanceLog.attendance_time, Date) == today_shift.work_date)
+        ).outerjoin(
+            yest_shift,
+            (func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(yest_shift.employee_id))) &
+            (func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date) == yest_shift.work_date)
+        ).subquery()
         
         # Phase 13: JOIN with EmployeeDailyShifts
         query = db.query(
@@ -176,12 +226,37 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     note = "Missing Check-in/out"
 
             
+            # ── Classify std/ot by shift_category (NORMAL / HOLIDAY / ROTATION)
+            #    and day vs night shift. Logic unchanged — only routing results.
+            _cat, _is_night = _get_shift_meta(effective_shift, rules_pool)
+            _std_num = std if isinstance(std, (int, float)) else 0.0
+            _ot_num  = ot  if isinstance(ot,  (int, float)) else 0.0
+            work_normal = work_holiday = work_rotation = 0.0
+            ot_normal_day = ot_holiday_day = ot_rotation_day = 0.0
+            ot_normal_night = ot_holiday_night = ot_rotation_night = 0.0
+            if _cat == "HOLIDAY":
+                work_holiday = _std_num
+                if _is_night: ot_holiday_night = _ot_num
+                else:         ot_holiday_day   = _ot_num
+            elif _cat == "ROTATION":
+                work_rotation = _std_num
+                if _is_night: ot_rotation_night = _ot_num
+                else:         ot_rotation_day   = _ot_num
+            else:  # NORMAL (default)
+                work_normal = _std_num
+                if _is_night: ot_normal_night = _ot_num
+                else:         ot_normal_day   = _ot_num
+
             processed_data[emp_id]["days"][w_date] = {
                 "first": first_val, "last": last_val, 
                 "std": std, "ot": ot, "late": late, "early": early,
                 "shift": shift_code_display,
                 "shift_code": shift_code_display,
-                "note": note
+                "note": note,
+                # 9 cột phân loại
+                "work_normal": work_normal, "work_holiday": work_holiday, "work_rotation": work_rotation,
+                "ot_normal_day": ot_normal_day, "ot_holiday_day": ot_holiday_day, "ot_rotation_day": ot_rotation_day,
+                "ot_normal_night": ot_normal_night, "ot_holiday_night": ot_holiday_night, "ot_rotation_night": ot_rotation_night,
             }
             if full_emp_id:
                 processed_data[emp_id]["full_id"] = full_emp_id
@@ -198,6 +273,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                         "std": 0, "ot": 0, "late": 0, "early": 0,
                         "shift": code_upper,
                         "shift_code": code_upper,
+                        # Leave days: all category buckets = 0
+                        "work_normal": 0, "work_holiday": 0, "work_rotation": 0,
+                        "ot_normal_day": 0, "ot_holiday_day": 0, "ot_rotation_day": 0,
+                        "ot_normal_night": 0, "ot_holiday_night": 0, "ot_rotation_night": 0,
                     }
             
         sorted_emp_ids = sorted(processed_data.keys())
@@ -314,7 +393,14 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
         ws2 = wb.create_sheet(title="Thông tin chi tiết")
         # Added "Ngày vào làm" to Sheet 2
-        ws2.append(["Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm", "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"])
+        ws2.append([
+            "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
+            "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
+            # 9 cột phân loại theo shift_category
+            "Giờ ngày thường", "Giờ ngày nghỉ lễ", "Giờ ngày nghỉ luân phiên",
+            "TC thường - ca ngày", "TC lễ - ca ngày", "TC luân phiên - ca ngày",
+            "TC thường - ca đêm", "TC lễ - ca đêm", "TC luân phiên - ca đêm",
+        ])
         
         for cell in ws2[1]:
             cell.font = bold_font
@@ -349,7 +435,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     hired_date_val,
                     d.strftime("%d/%m/%Y"), 
                     ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"],
-                    shift_code_val
+                    shift_code_val,
+                    # 9 cột phân loại theo shift_category + ca ngày/đêm
+                    ds.get("work_normal", 0), ds.get("work_holiday", 0), ds.get("work_rotation", 0),
+                    ds.get("ot_normal_day", 0), ds.get("ot_holiday_day", 0), ds.get("ot_rotation_day", 0),
+                    ds.get("ot_normal_night", 0), ds.get("ot_holiday_night", 0), ds.get("ot_rotation_night", 0),
                 ]
                 
                 for c_idx, val in enumerate(row_data, 1):

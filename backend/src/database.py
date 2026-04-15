@@ -117,6 +117,9 @@ class ShiftDefinition(Base):
     leave_hours_o   = Column(Float, default=0.0) # Other Leave (Om, BHXH...)
     standard_hours  = Column(Float, default=0.0) # Rounding target (e.g. 8.0, 12.0)
     description     = Column(Unicode(255), nullable=True)
+    # shift_category: 'NORMAL' | 'HOLIDAY' | 'ROTATION'
+    # Added via migrate_shift_category.py — maps the existing DB column.
+    shift_category  = Column(Unicode(50), nullable=True, default="NORMAL")
 
 
 def init_db():
