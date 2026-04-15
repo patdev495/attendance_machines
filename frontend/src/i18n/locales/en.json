@@ -70,7 +70,8 @@
     "notes": {
       "missing_tap": "Missing Check-in/out",
       "missing_checkin": "Missing Check-in",
-      "missing_checkout": "Missing Check-out"
+      "missing_checkout": "Missing Check-out",
+      "absent": "Absent"
     },
     "summary_subtitle": "Analyze daily attendance, manage shifts, and export reports.",
     "excel_sync": {

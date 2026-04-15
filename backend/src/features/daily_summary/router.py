@@ -57,142 +57,169 @@ def get_daily_summary(
     today_shift = aliased(EmployeeDailyShifts)
     yest_shift = aliased(EmployeeDailyShifts)
 
+    # Optimization: Filter raw logs by date range early (+/- 1 day to catch overnight shifts)
+    from datetime import timedelta
+    log_filter = []
+    if start_date: log_filter.append(AttendanceLog.attendance_date >= (start_date - timedelta(days=1)))
+    if end_date: log_filter.append(AttendanceLog.attendance_date <= (end_date + timedelta(days=1)))
+
     base_calc_sub = db.query(
         AttendanceLog.id,
         AttendanceLog.attendance_time,
         AttendanceLog.employee_id,
         AttendanceLog.machine_ip,
-        EmployeeLocalRegistry.emp_name.label("reg_name"),
-        func.nullif(EmployeeLocalRegistry.shift, "").label("reg_shift"),
-        EmployeeLocalRegistry.department,
-        EmployeeLocalRegistry.source_status,
-        EmployeeLocalRegistry.full_emp_id,
-        EmployeeMetadata.emp_name.label("meta_name"),
-        func.nullif(EmployeeMetadata.shift, "").label("meta_shift"),
-        EmployeeMetadata.department.label("meta_dept"),
-        EmployeeMetadata.status.label("meta_status"),
         # Logic: Determine work_date by checking if this tap is a completion of yesterday's Night Shift
-        # or a start of today's shift.
+        # or a start of today's shift. Priority: DailyShift > Employee Default.
         case(
             # Priority 1: If Today is a Night Shift (D), taps before 12:00 (Noon) MUST belong to Yesterday
             (
-                (func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).like("%D%")) &
+                (func.coalesce(today_shift.shift_code, "").like("%D%")) &
                 (func.cast(AttendanceLog.attendance_time, Time) < time(12, 0)),
                 func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date)
             ),
             # Priority 2: If Today is a Night Shift (D), taps after 18:00 MUST belong to Today
             (
-                (func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).like("%D%")) &
+                (func.coalesce(today_shift.shift_code, "").like("%D%")) &
                 (func.cast(AttendanceLog.attendance_time, Time) >= time(18, 0)),
                 func.cast(AttendanceLog.attendance_time, Date)
             ),
             # Priority 3: If Yesterday was a Night Shift (D) and it's early morning, belong to Yesterday
             (
-                (func.coalesce(yest_shift.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).like("%D%")) &
+                (func.coalesce(yest_shift.shift_code, "").like("%D%")) &
                 (func.cast(AttendanceLog.attendance_time, Time) < time(10, 0)),
                 func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date)
             ),
             # Default fallback: 3-hour anchor (standard for Day shifts)
             else_=func.cast(func.dateadd(text("hour"), text("-3"), AttendanceLog.attendance_time), Date)
         ).label("work_date")
-    ).outerjoin(
-        EmployeeLocalRegistry, 
-        func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))
-    ).outerjoin(
-        EmployeeMetadata, 
-        func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id))
-    ).outerjoin(
+    ).filter(*log_filter).outerjoin(
         today_shift,
-        (func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(today_shift.employee_id))) &
+        (AttendanceLog.employee_id == today_shift.employee_id) & 
         (func.cast(AttendanceLog.attendance_time, Date) == today_shift.work_date)
     ).outerjoin(
         yest_shift,
-        (func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(yest_shift.employee_id))) &
+        (AttendanceLog.employee_id == yest_shift.employee_id) & 
         (func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date) == yest_shift.work_date)
     ).subquery()
     
-    # Phase 13: Join with EmployeeDailyShifts to get the daily shift code
-    query = db.query(
+    # 1. Base Aggregated Logs Subquery (Keys + Metrics)
+    agg_logs_sub = db.query(
         base_calc_sub.c.employee_id,
-        base_calc_sub.c.full_emp_id, # Display full ID
-        func.coalesce(base_calc_sub.c.reg_name, base_calc_sub.c.meta_name).label("emp_name"),
         base_calc_sub.c.work_date,
         func.min(base_calc_sub.c.attendance_time).label("first_tap"),
         func.max(base_calc_sub.c.attendance_time).label("last_tap"),
         func.count(base_calc_sub.c.id).label("tap_count"),
-        # Use daily shift code first, then fallback to employee-level shift
-        func.coalesce(
-            func.max(EmployeeDailyShifts.shift_code),
-            func.coalesce(base_calc_sub.c.reg_shift, base_calc_sub.c.meta_shift)
-        ).label("shift"),
-        func.coalesce(base_calc_sub.c.department, base_calc_sub.c.meta_dept).label("department"),
-        func.coalesce(base_calc_sub.c.source_status, base_calc_sub.c.meta_status).label("status"),
-        func.max(EmployeeDailyShifts.shift_code).label("daily_shift_code")
-    ).outerjoin(
-        EmployeeDailyShifts,
-        (func.ltrim(func.rtrim(base_calc_sub.c.employee_id)) == func.ltrim(func.rtrim(EmployeeDailyShifts.employee_id))) &
-        (base_calc_sub.c.work_date == EmployeeDailyShifts.work_date)
+        func.max(base_calc_sub.c.machine_ip).label("machine_ip")
+    ).group_by(base_calc_sub.c.employee_id, base_calc_sub.c.work_date).subquery()
+
+    # 2. Roster Subquery (Excel schedule)
+    roster_sub_query = db.query(
+        EmployeeDailyShifts.employee_id,
+        EmployeeDailyShifts.work_date,
+        EmployeeDailyShifts.shift_code
     )
+    if start_date: roster_sub_query = roster_sub_query.filter(EmployeeDailyShifts.work_date >= start_date)
+    if end_date: roster_sub_query = roster_sub_query.filter(EmployeeDailyShifts.work_date <= end_date)
+    roster_sub = roster_sub_query.subquery()
+
+    # 3. Union Keys (Set of Employee + Date to report on)
+    # Use explicit labels to ensure column names are consistent across UNION
+    roster_keys = db.query(
+        roster_sub.c.employee_id.label('employee_id'), 
+        roster_sub.c.work_date.label('work_date')
+    )
+    log_keys = db.query(
+        agg_logs_sub.c.employee_id.label('employee_id'), 
+        agg_logs_sub.c.work_date.label('work_date')
+    )
+    # Match range for logs as well
+    if start_date: log_keys = log_keys.filter(agg_logs_sub.c.work_date >= start_date)
+    if end_date: log_keys = log_keys.filter(agg_logs_sub.c.work_date <= end_date)
     
-    if start_date: query = query.filter(base_calc_sub.c.work_date >= start_date)
-    if end_date: query = query.filter(base_calc_sub.c.work_date <= end_date)
+    union_query = roster_keys.union(log_keys)
+    union_keys = union_query.subquery('union_keys')
+
+    # 4. Main Query: Join Union Keys with Metrics and Metadata
+    query = db.query(
+        union_keys.c.employee_id,
+        union_keys.c.work_date,
+        agg_logs_sub.c.first_tap,
+        agg_logs_sub.c.last_tap,
+        func.coalesce(agg_logs_sub.c.tap_count, 0).label("tap_count"),
+        func.coalesce(roster_sub.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).label("shift"),
+        func.coalesce(EmployeeLocalRegistry.emp_name, EmployeeMetadata.emp_name).label("emp_name"),
+        func.coalesce(EmployeeLocalRegistry.full_emp_id, EmployeeMetadata.full_emp_id).label("full_emp_id"),
+        func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department).label("department"),
+        # Status 'excel_synced' if present in roster for this day, else 'machine_only'
+        case(
+            (roster_sub.c.employee_id.isnot(None), "excel_synced"),
+            else_="machine_only"
+        ).label("status"),
+        roster_sub.c.shift_code.label("daily_shift_code")
+    ).outerjoin(
+        agg_logs_sub, 
+        (union_keys.c.employee_id == agg_logs_sub.c.employee_id) & 
+        (union_keys.c.work_date == agg_logs_sub.c.work_date)
+    ).outerjoin(
+        roster_sub,
+        (union_keys.c.employee_id == roster_sub.c.employee_id) & 
+        (union_keys.c.work_date == roster_sub.c.work_date)
+    ).outerjoin(
+        EmployeeLocalRegistry, 
+        union_keys.c.employee_id == EmployeeLocalRegistry.employee_id
+    ).outerjoin(
+        EmployeeMetadata, 
+        union_keys.c.employee_id == EmployeeMetadata.employee_id
+    )
+
+    # 5. Filters
     if employee_id:
         employee_id = employee_id.strip()
-        match_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
+        id_match_q = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
             EmployeeLocalRegistry.full_emp_id.ilike(f"%{employee_id}%") |
             EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
-        ).all()
-        match_ids_meta = db.query(EmployeeMetadata.employee_id).filter(
+        )
+        id_match_meta_q = db.query(EmployeeMetadata.employee_id).filter(
             EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
             EmployeeMetadata.full_emp_id.ilike(f"%{employee_id}%") |
             EmployeeMetadata.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
-        ).all()
+        )
         
-        found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
-        query = query.filter(func.ltrim(func.rtrim(base_calc_sub.c.employee_id)).in_(list(found_ids)))
-    if machine_ip: query = query.filter(base_calc_sub.c.machine_ip == machine_ip)
-    # Filter by shift: respect defined codes, everything else is NA
-    final_shift = func.coalesce(
-        func.max(EmployeeDailyShifts.shift_code),
-        func.coalesce(base_calc_sub.c.reg_shift, base_calc_sub.c.meta_shift)
-    )
+        query = query.filter(
+            (union_keys.c.employee_id.in_(id_match_q)) | 
+            (union_keys.c.employee_id.in_(id_match_meta_q)) |
+            (union_keys.c.employee_id.like(f"%{employee_id}%"))
+        )
+
+    if machine_ip: query = query.filter(agg_logs_sub.c.machine_ip == machine_ip)
     
-    valid_shift_ids = db.query(ShiftDefinition.shift_code).subquery()
+    if department: 
+        query = query.filter(func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department) == department)
     
-    # Logic: If the found code exists in ShiftDefinitions, use it. Otherwise, it's 'NA'.
-    mapped_shift = case(
-        (final_shift.in_(valid_shift_ids), final_shift),
-        else_="NA"
-    )
+    if status and status != 'All': 
+        # Match against our dynamic status logic
+        dynamic_status = case((roster_sub.c.employee_id.isnot(None), "excel_synced"), else_="machine_only")
+        query = query.filter(dynamic_status == status)
 
     if shift:
-        query = query.having(mapped_shift == shift)
+        valid_shift_ids = db.query(ShiftDefinition.shift_code).subquery()
+        effective_shift = func.coalesce(roster_sub.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift)
+        mapped_shift = case(
+            (effective_shift.in_(valid_shift_ids), effective_shift),
+            else_="NA"
+        )
+        query = query.filter(mapped_shift == shift)
 
-
-    if department: query = query.filter(base_calc_sub.c.department == department)
-    final_status = func.coalesce(base_calc_sub.c.source_status, base_calc_sub.c.meta_status)
-    if status and status != 'All': 
-        query = query.filter(final_status == status)
-
-    query = query.group_by(
-        base_calc_sub.c.employee_id, 
-        base_calc_sub.c.reg_name,
-        base_calc_sub.c.meta_name,
-        base_calc_sub.c.work_date, 
-        base_calc_sub.c.reg_shift, 
-        base_calc_sub.c.meta_shift,
-        base_calc_sub.c.department, 
-        base_calc_sub.c.meta_dept,
-        base_calc_sub.c.source_status,
-        base_calc_sub.c.meta_status,
-        base_calc_sub.c.full_emp_id
-    ).order_by(desc(base_calc_sub.c.work_date), base_calc_sub.c.employee_id)
+    query = query.order_by(desc(union_keys.c.work_date), union_keys.c.employee_id)
 
     rules_pool = db.query(ShiftDefinition).all()
 
 
     if min_hours or max_hours or only_missing or late_arrival or early_departure:
+        # Complex calculation filters require fetching results to compute metrics
+        # But we still only fetch what is needed. For now, fetch ALL then filter.
+        # POTENTIAL FUTURE OPTIMIZATION: Push metrics into SQL.
         all_results = query.all()
         processed_items = process_summary_rows(all_results, rules_pool=rules_pool)
         
@@ -210,10 +237,9 @@ def get_daily_summary(
         start_idx = (page - 1) * size
         summary_items = filtered_items[start_idx:start_idx + size]
     else:
-        # Use query.all() then slice to be 100% safe on MSSQL complex group by
-        all_results = query.all()
-        total = len(all_results)
-        results = all_results[(page - 1) * size : page * size]
+        # Standard case: Use database-level pagination
+        total = query.count()
+        results = query.offset((page - 1) * size).limit(size).all()
         summary_items = process_summary_rows(results, rules_pool=rules_pool)
          
     return {
@@ -239,26 +265,24 @@ def get_daily_detail(
         AttendanceLog.employee_id,
         case(
             (
-                (func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).like("%D%")) &
+                (func.coalesce(today_shift.shift_code, "").like("%D%")) &
                 (func.cast(AttendanceLog.attendance_time, Time) < time(12, 0)),
                 func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date)
             ),
             (
-                (func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).like("%D%")) &
+                (func.coalesce(today_shift.shift_code, "").like("%D%")) &
                 (func.cast(AttendanceLog.attendance_time, Time) >= time(18, 0)),
                 func.cast(AttendanceLog.attendance_time, Date)
             ),
             (
-                (func.coalesce(yest_shift.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).like("%D%")) &
+                (func.coalesce(yest_shift.shift_code, "").like("%D%")) &
                 (func.cast(AttendanceLog.attendance_time, Time) < time(10, 0)),
                 func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date)
             ),
             else_=func.cast(func.dateadd(text("hour"), text("-3"), AttendanceLog.attendance_time), Date)
         ).label("work_date")
-    ).outerjoin(EmployeeLocalRegistry, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))) \
-     .outerjoin(EmployeeMetadata, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id))) \
-     .outerjoin(today_shift, (func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(today_shift.employee_id))) & (func.cast(AttendanceLog.attendance_time, Date) == today_shift.work_date)) \
-     .outerjoin(yest_shift, (func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(yest_shift.employee_id))) & (func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date) == yest_shift.work_date)) \
+    ).outerjoin(today_shift, (AttendanceLog.employee_id == today_shift.employee_id) & (func.cast(AttendanceLog.attendance_time, Date) == today_shift.work_date)) \
+     .outerjoin(yest_shift, (AttendanceLog.employee_id == yest_shift.employee_id) & (func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date) == yest_shift.work_date)) \
      .subquery()
 
     logs = db.query(AttendanceLog) \

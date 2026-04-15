@@ -8,7 +8,7 @@ from sqlalchemy import exists, text
 
 from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition
 
-from utils.stats_utils import compute_day_stats, determine_missing_tap
+from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window
 
 from features.logs.service import get_machine_list, get_users_from_machine
 
@@ -68,16 +68,43 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
 
         work_hours       = 0.0
-        minutes_late     = None
-        minutes_early_lv = None
+        minutes_late     = 0
+        minutes_early_lv = 0
         note = ""
 
-        # Check if this is a full-day leave code
-        if calculation_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
-            # Full-day leave: 0 work hours, 0 OT
-            hours_standard = 0.0
-            hours_ot = 0.0
-            note = calculation_shift.strip().upper()
+        # Check if this is a full-day leave code (Even if they quet)
+        is_leave_code = calculation_shift.strip().upper() in FULL_DAY_LEAVE_CODES
+        
+        # 1. Handle Absent / No Taps
+        if not first or not last or count == 0:
+            window = parse_shift_window(calculation_shift, department, rules_pool=rules_pool)
+            summary_items.append({
+                "employee_id": row.employee_id,
+                "full_emp_id": getattr(row, "full_emp_id", None),
+                "emp_name": getattr(row, "emp_name", None),
+                "attendance_date": w_date,
+                "first_tap": None,
+                "last_tap": None,
+                "tap_count": 0,
+                "work_hours": 0.0,
+                "hours_standard": 0.0,
+                "hours_ot": 0.0,
+                "hours_p": window.get('leave_hours_p', 0.0),
+                "hours_r": window.get('leave_hours_r', 0.0),
+                "hours_o": window.get('leave_hours_o', 0.0),
+                "shift": shift_code_display,
+                "status": (row.status if hasattr(row, "status") and row.status else "Active"),
+                "note": (calculation_shift.strip().upper() if window['is_leave'] else "Vắng"),
+                "minutes_late": 0,
+                "minutes_early_leave": 0,
+                "daily_shift_code": shift_code_display,
+            })
+            continue
+
+        # 2. Handle known leave code with some quets (optional, usually they don't quet if leave)
+        if is_leave_code:
+            # For now, follow the same logic as before for full-day leave
+            window = parse_shift_window(calculation_shift, department, rules_pool=rules_pool)
             summary_items.append({
                 "employee_id": row.employee_id,
                 "emp_name": getattr(row, "emp_name", None),
@@ -85,12 +112,12 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "first_tap": first,
                 "last_tap": last,
                 "tap_count": count,
-                "work_hours": work_hours,
-                "hours_standard": hours_standard,
-                "hours_ot": hours_ot,
+                "work_hours": 0.0,
+                "hours_standard": 0.0,
+                "hours_ot": 0.0,
                 "shift": shift_code_display,
                 "status": (row.status if hasattr(row, "status") and row.status else "Active"),
-                "note": note,
+                "note": calculation_shift.strip().upper(),
                 "minutes_late": 0,
                 "minutes_early_leave": 0,
                 "daily_shift_code": shift_code_display,
@@ -297,9 +324,11 @@ def sync_employees_full(file_bytes: bytes):
                 
                 for col_name, (day_val, month_val) in date_columns.items():
                     cell_val = row.get(col_name)
+                    # If cell is empty, interpret as 'NA' shift so it appears in reports
                     if pd.isna(cell_val) or str(cell_val).strip() == '':
-                        continue
-                    shift_code = str(cell_val).strip().upper()
+                        shift_code = 'NA'
+                    else:
+                        shift_code = str(cell_val).strip().upper()
                     try:
                         w_date = date_type(current_year, month_val, day_val)
                     except ValueError:

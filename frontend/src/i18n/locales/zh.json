@@ -70,7 +70,8 @@
     "notes": {
       "missing_tap": "缺卡",
       "missing_checkin": "缺打卡 (上班)",
-      "missing_checkout": "缺打卡 (下班)"
+      "missing_checkout": "缺打卡 (下班)",
+      "absent": "缺勤"
     },
     "summary_subtitle": "分析每日出勤情况、管理班次并导出报告。",
     "filters": {

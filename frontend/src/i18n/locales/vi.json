@@ -72,7 +72,8 @@
     "notes": {
       "missing_tap": "Thiếu Check-in/out",
       "missing_checkin": "Thiếu Check-in",
-      "missing_checkout": "Thiếu Check-out"
+      "missing_checkout": "Thiếu Check-out",
+      "absent": "Vắng mặt"
     },
     "summary_subtitle": "Phân tích chấm công hàng ngày, quản lý ca và xuất báo cáo.",
     "excel_sync": {
