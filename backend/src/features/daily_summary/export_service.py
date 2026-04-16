@@ -458,7 +458,76 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 
                 ws2_row += 1
 
-        for sheet in [ws, ws2]:
+        with export_lock: export_status["current_step"] = "Generating Sheet 3 (Summary)..."
+        ws3_title = f"Bảng công {start_date.strftime('%d.%m')}-{end_date.strftime('%d.%m')}"
+        ws3 = wb.create_sheet(title=ws3_title[:31]) # Excel sheet names are limited to 31 chars
+        
+        ws3_headers = [
+            "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
+            "Tổng số lần đi muộn", "Tổng số lần về sớm",
+            "Tổng Giờ Công", "Tổng Tăng Ca", "Tổng Giờ trợ cấp ca đêm",
+            "Tổng Giờ ngày thường", "Tổng Giờ ngày nghỉ lễ", "Tổng Giờ ngày nghỉ luân phiên",
+            "Tổng TC thường - ca ngày", "Tổng TC lễ - ca ngày", "Tổng TC luân phiên - ca ngày",
+            "Tổng TC thường - ca đêm", "Tổng TC lễ - ca đêm", "Tổng TC luân phiên - ca đêm"
+        ]
+        ws3.append(ws3_headers)
+        for cell in ws3[1]:
+            cell.font = bold_font
+            cell.alignment = alignment_style
+            cell.border = border_style
+            cell.fill = header_fill
+
+        for emp_id in sorted_emp_ids:
+            emp_info = processed_data[emp_id]
+            emp_m = emp_meta.get(emp_id)
+            
+            late_count = 0
+            early_count = 0
+            sum_std = sum_ot = sum_ns = 0.0
+            sum_wn = sum_wh = sum_wr = 0.0
+            sum_otnd = sum_othd = sum_otrd = 0.0
+            sum_otnn = sum_othn = sum_otrn = 0.0
+
+            for d in dates_list:
+                if d not in emp_info["days"]: continue
+                ds = emp_info["days"][d]
+                
+                if isinstance(ds.get("late"), (int, float)) and ds["late"] > 0: late_count += 1
+                if isinstance(ds.get("early"), (int, float)) and ds["early"] > 0: early_count += 1
+                
+                sum_std += float(ds.get("std", 0.0))
+                sum_ot  += float(ds.get("ot", 0.0))
+                sum_ns  += float(ds.get("night_subsidy", 0.0))
+                sum_wn  += float(ds.get("work_normal", 0.0))
+                sum_wh  += float(ds.get("work_holiday", 0.0))
+                sum_wr  += float(ds.get("work_rotation", 0.0))
+                sum_otnd += float(ds.get("ot_normal_day", 0.0))
+                sum_othd += float(ds.get("ot_holiday_day", 0.0))
+                sum_otrd += float(ds.get("ot_rotation_day", 0.0))
+                sum_otnn += float(ds.get("ot_normal_night", 0.0))
+                sum_othn += float(ds.get("ot_holiday_night", 0.0))
+                sum_otrn += float(ds.get("ot_rotation_night", 0.0))
+
+            full_id_val = emp_info.get("full_id") or "-"
+            hired_date_val = emp_m.start_date.strftime("%d/%m/%Y") if emp_m and emp_m.start_date else "-"
+            
+            row_data_ws3 = [
+                emp_id, full_id_val, emp_m.emp_name if emp_m else emp_id, 
+                emp_m.department if emp_m else "-", 
+                emp_m.group_name if emp_m else "-", 
+                hired_date_val,
+                late_count, early_count,
+                round(sum_std, 2), round(sum_ot, 2), round(sum_ns, 2),
+                round(sum_wn, 2), round(sum_wh, 2), round(sum_wr, 2),
+                round(sum_otnd, 2), round(sum_othd, 2), round(sum_otrd, 2),
+                round(sum_otnn, 2), round(sum_othn, 2), round(sum_otrn, 2)
+            ]
+            ws3.append(row_data_ws3)
+            for cell in ws3[ws3.max_row]:
+                cell.border = border_style
+                cell.alignment = alignment_style
+
+        for sheet in [ws, ws2, ws3]:
             for col_idx in range(1, sheet.max_column + 1):
                 column_letter = get_column_letter(col_idx)
                 max_length = 0
