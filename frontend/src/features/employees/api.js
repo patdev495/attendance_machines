@@ -40,5 +40,15 @@ export const employeesApi = {
   getBiometricCoverage: async (id) => {
     const response = await axios.get(`${BASE}/${id}/biometric-coverage`)
     return response.data
+  },
+
+  bulkDeleteHardware: async (file, machineIps) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('machine_ips', machineIps.join(','))
+    const response = await axios.post(`${BASE}/bulk-delete-hardware`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return response.data
   }
 }

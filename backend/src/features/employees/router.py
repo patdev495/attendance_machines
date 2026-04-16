@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import func, Integer
 from database import get_db, EmployeeLocalRegistry
@@ -15,7 +15,12 @@ from .schema import (
     BiometricCoverageOut
 )
 from .service import update_registry, delete_user_from_hardware, update_employee_info
-from features.machines.service import get_biometric_coverage
+from features.machines.service import (
+    get_biometric_coverage, 
+    bulk_delete_ids_from_selected_machines,
+    run_bulk_delete_on_machines,
+    bulk_delete_status
+)
 
 router = APIRouter(prefix="/api/employees", tags=["Employees"])
 
@@ -133,3 +138,30 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
 def get_biometric_coverage_endpoint(employee_id: str):
     results = get_biometric_coverage(employee_id)
     return results
+
+@router.post("/bulk-delete-hardware")
+async def bulk_delete_hardware_endpoint(
+    bg_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    machine_ips: str = Form(...)  # Comma separated
+):
+    # 1. Parse IDs from file
+    content = await file.read()
+    text = content.decode('utf-8')
+    # Filter out empty lines and strip whitespace
+    employee_ids = [line.strip() for line in text.splitlines() if line.strip()]
+    
+    if not employee_ids:
+        raise HTTPException(status_code=400, detail="No valid Employee IDs found in file")
+        
+    # 2. Parse IPs
+    ips = [ip.strip() for ip in machine_ips.split(",") if ip.strip()]
+    if not ips:
+        raise HTTPException(status_code=400, detail="No target machines selected")
+        
+    # 3. Perform bulk deletion (Background)
+    if bulk_delete_status["is_running"]:
+        raise HTTPException(status_code=400, detail="Another bulk operation is in progress")
+        
+    bg_tasks.add_task(run_bulk_delete_on_machines, employee_ids, ips)
+    return {"status": "Started", "count": len(employee_ids), "total_machines": len(ips)}

@@ -379,10 +379,43 @@ bulk_delete_status = {
 
 bulk_status_lock = threading.Lock()
 
+def bulk_delete_ids_from_selected_machines(employee_ids: list, target_ips: list):
+    """
+    Parallel bulk deletion across a specific list of machines.
+    Updates the global bulk_delete_status as it progresses.
+    """
+    results = {}
+    total = len(target_ips)
+    
+    # Reset/Update status if we're starting a fresh operation
+    with bulk_status_lock:
+        bulk_delete_status["total_machines"] = total
+        bulk_delete_status["processed_count"] = 0
+        bulk_delete_status["results"] = {}
+
+    with ThreadPoolExecutor(max_workers=max(1, total)) as executor:
+        future_to_ip = {executor.submit(bulk_delete_users_from_machine, ip, employee_ids): ip for ip in target_ips}
+        for future in concurrent.futures.as_completed(future_to_ip):
+            ip = future_to_ip[future]
+            with bulk_status_lock:
+                bulk_delete_status["current_ip"] = ip
+            
+            try:
+                deleted_count, status = future.result()
+                results[ip] = {"deleted": deleted_count, "status": status}
+            except Exception as e:
+                results[ip] = {"deleted": 0, "status": f"Error: {str(e)}"}
+            
+            with bulk_status_lock:
+                bulk_delete_status["processed_count"] += 1
+                bulk_delete_status["results"][ip] = results[ip]
+                
+    return results
+
 def bulk_delete_users_from_all_machines(employee_ids: list):
     """
-    Orchestrates bulk deletion across all known hardware.
-    IDs are deleted from each machine in sequence.
+    Background task for bulk deletion across ALL machines.
+    Maintains compatibility with existing global delete status.
     """
     global bulk_delete_status
     with bulk_status_lock:
@@ -392,51 +425,43 @@ def bulk_delete_users_from_all_machines(employee_ids: list):
             "employee_ids": employee_ids,
             "results": {}, 
             "processed_count": 0, 
-            "current_ip": "",
+            "current_ip": "Starting...",
             "total_machines": 0
         })
     
     try:
         ips = get_machine_list()
+        # This function now handles updating processed_count and current_ip internally
+        results = bulk_delete_ids_from_selected_machines(employee_ids, ips)
+        
         with bulk_status_lock:
-            bulk_delete_status["total_machines"] = len(ips)
-            
-        for ip in ips:
-            with bulk_status_lock: 
-                bulk_delete_status["current_ip"] = ip
+            bulk_delete_status["current_ip"] = "Done"
                 
-            # Perform bulk delete on this machine
-            zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-            conn = None
-            machine_res = []
-            try:
-                conn = zk.connect()
-                conn.disable_device()
-                users = conn.get_users()
-                
-                for eid in employee_ids:
-                    target = next((u for u in users if u.user_id == str(eid)), None)
-                    if target:
-                        conn.delete_user(uid=target.uid, user_id=target.user_id)
-                        machine_res.append({"id": eid, "status": "Deleted"})
-                    else:
-                        machine_res.append({"id": eid, "status": "Not Found"})
-                
-                conn.enable_device()
-                with bulk_status_lock:
-                    bulk_delete_status["results"][ip] = {"status": "Success", "details": machine_res}
-            except Exception as e:
-                logger.error(f"Bulk delete error on {ip}: {e}")
-                with bulk_status_lock:
-                    bulk_delete_status["results"][ip] = {"status": "Error", "message": str(e)}
-            finally:
-                if conn:
-                    try: conn.disconnect()
-                    except: pass
-                    
-            with bulk_status_lock: 
-                bulk_delete_status["processed_count"] += 1
-                
+    finally:
+        with bulk_status_lock: 
+            bulk_delete_status["is_running"] = False
+
+def run_bulk_delete_on_machines(employee_ids: list, target_ips: list):
+    """
+    Background task for bulk deletion across SELECTED machines.
+    """
+    global bulk_delete_status
+    with bulk_status_lock:
+        if bulk_delete_status["is_running"]: return
+        bulk_delete_status.update({
+            "is_running": True, 
+            "employee_ids": employee_ids,
+            "results": {}, 
+            "processed_count": 0, 
+            "current_ip": "Starting...",
+            "total_machines": len(target_ips)
+        })
+    
+    try:
+        # This helper now updates progress internally
+        bulk_delete_ids_from_selected_machines(employee_ids, target_ips)
+        with bulk_status_lock:
+            bulk_delete_status["current_ip"] = "Done"
     finally:
         with bulk_status_lock: 
             bulk_delete_status["is_running"] = False

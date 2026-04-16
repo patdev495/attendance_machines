@@ -16,6 +16,10 @@
             <span class="icon">🗑️</span> {{ $t('employees.bulk_delete_all', { count: selectedIds.length }) }}
           </button>
         </transition>
+
+        <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
+          <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
+        </button>
       </div>
     </div>
     
@@ -92,6 +96,11 @@
       :employee="selectedEmployee"
       @close="isDetailsModalOpen = false"
     />
+
+    <BulkDeleteHardwareModal
+      :isOpen="isBulkDeleteModalOpen"
+      @close="isBulkDeleteModalOpen = false"
+    />
   </div>
 </template>
 
@@ -102,6 +111,7 @@ import EmployeesTable from './components/EmployeesTable.vue'
 import EditEmployeeModal from './components/EditEmployeeModal.vue'
 import EmployeeDetailsModal from './components/EmployeeDetailsModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
+import BulkDeleteHardwareModal from './components/BulkDeleteHardwareModal.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
 import { useI18n } from 'vue-i18n'
@@ -273,6 +283,7 @@ const handleSort = (key) => {
 const isEditModalOpen = ref(false)
 const isDetailsModalOpen = ref(false)
 const isCoverageModalOpen = ref(false)
+const isBulkDeleteModalOpen = ref(false)
 const selectedEmployee = ref(null)
 
 const onView = (emp) => {
@@ -362,6 +373,24 @@ onUnmounted(() => {
 .btn-primary:disabled {
   background-color: #475569;
   cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: #475569;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #64748b;
 }
 
 .btn-danger {

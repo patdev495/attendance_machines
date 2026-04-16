@@ -51,7 +51,23 @@
     "start_date": "Start Date",
     "last_updated": "Last Updated",
     "save_changes": "Save Changes",
-    "updated_success": "Employee updated successfully"
+    "updated_success": "Employee updated successfully",
+    "bulk_hardware_delete": {
+      "title": "Bulk Delete from Machines",
+      "subtitle": "Delete employee data directly from machine memory.",
+      "upload_label": "Upload ID List (.txt)",
+      "file_help": "One EMP_ID per line",
+      "select_machines": "Select Machines",
+      "start": "Start Bulk Deletion",
+      "status_idle": "Ready",
+      "status_running": "Deleting on {current}...",
+      "status_complete": "Complete",
+      "results_table": {
+        "ip": "Machine IP",
+        "deleted": "Deleted",
+        "status": "Result"
+      }
+    }
   },
   "attendance": {
     "raw_logs": "Raw Logs",
@@ -179,6 +195,7 @@
     "bulk_delete_confirm": "Are you sure you want to delete {count} selected employees from this machine?",
     "bulk_deleting": "Deleting {count} employees...",
     "bulk_delete_success": "Successfully deleted {count} employees (skipped if non-existent)",
+    "delete_success": "Successfully deleted employee {id}",
     "delete_success": "Successfully deleted employee {id}"
   },
   "machines": {

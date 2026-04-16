@@ -53,7 +53,23 @@
     "start_date": "Ngày Bắt Đầu",
     "last_updated": "Cập Nhật Lần Cuối",
     "save_changes": "Lưu Thay Đổi",
-    "updated_success": "Cập nhật nhân viên thành công"
+    "updated_success": "Cập nhật nhân viên thành công",
+    "bulk_hardware_delete": {
+      "title": "Xóa hàng loạt khỏi máy",
+      "subtitle": "Xóa dữ liệu nhân viên trực tiếp từ bộ nhớ máy chấm công.",
+      "upload_label": "Tải lên danh sách ID (.txt)",
+      "file_help": "Mỗi dòng là một mã nhân viên (EMP_ID)",
+      "select_machines": "Chọn máy chấm công",
+      "start": "Bắt đầu xóa hàng loạt",
+      "status_idle": "Sẵn sàng",
+      "status_running": "Đang thực hiện xóa trên {current}...",
+      "status_complete": "Hoàn thành",
+      "results_table": {
+        "ip": "IP Máy",
+        "deleted": "Đã xóa",
+        "status": "Kết quả"
+      }
+    }
   },
   "attendance": {
     "raw_logs": "Log Thô",
@@ -75,7 +91,6 @@
       "missing_checkout": "Thiếu Check-out",
       "absent": "Vắng mặt"
     },
-    "summary_subtitle": "Phân tích chấm công hàng ngày, quản lý ca và xuất báo cáo.",
     "excel_sync": {
       "title": "Đồng bộ Excel & Máy",
       "drag_drop": "Kéo thả file Excel (.xlsx) vào đây",

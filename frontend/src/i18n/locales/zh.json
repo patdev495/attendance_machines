@@ -51,7 +51,23 @@
     "start_date": "入职日期",
     "last_updated": "最后更新日期",
     "save_changes": "保存修改",
-    "updated_success": "员工信息更新成功"
+    "updated_success": "员工信息更新成功",
+    "bulk_hardware_delete": {
+      "title": "从机器批量删除",
+      "subtitle": "直接从考勤机内存中删除员工数据。",
+      "upload_label": "上传 ID 列表 (.txt)",
+      "file_help": "每行一个员工 ID (EMP_ID)",
+      "select_machines": "选择机器",
+      "start": "开始批量删除",
+      "status_idle": "就绪",
+      "status_running": "正在删除 {current}...",
+      "status_complete": "完成",
+      "results_table": {
+        "ip": "机器 IP",
+        "deleted": "已删除",
+        "status": "结果"
+      }
+    }
   },
   "attendance": {
     "raw_logs": "原始记录",
@@ -172,6 +188,7 @@
     "bulk_delete_confirm": "您确定要从此设备中删除 {count} 名选定的员工吗？",
     "bulk_deleting": "正在删除 {count} 名员工...",
     "bulk_delete_success": "成功删除 {count} 名员工（如果不存在则跳过）",
+    "delete_success": "成功删除员工 {id}",
     "delete_success": "成功删除员工 {id}"
   },
   "machines": {
