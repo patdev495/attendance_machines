@@ -130,8 +130,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                              last.date() == first.date() and 
                              last.hour < boundary_hour)
         
-        # compute_day_stats now returns 8 values
-        work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv, hours_p, hours_r, hours_o = compute_day_stats(
+        # compute_day_stats now returns 9 values
+        work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv, hours_p, hours_r, hours_o, night_subsidy = compute_day_stats(
             first, last, w_date, department, calculation_shift, rules_pool=rules_pool
         )
         
@@ -168,6 +168,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "minutes_late": minutes_late,
             "minutes_early_leave": minutes_early_lv,
             "daily_shift_code": shift_code_display,
+            "night_subsidy": night_subsidy,
         })
 
     return summary_items

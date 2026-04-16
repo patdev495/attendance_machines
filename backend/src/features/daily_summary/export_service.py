@@ -196,6 +196,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             # Initialization for row record
             first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
+            night_subsidy = 0.0
             note = ""
 
             # Check for full-day leave
@@ -214,7 +215,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 last_val = row.last_tap.strftime("%H:%M")
                 emp_m = emp_meta.get(emp_id)
                 department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
-                res_work, std, ot, late, early, hp, hr, ho = compute_day_stats(
+                res_work, std, ot, late, early, hp, hr, ho, night_subsidy = compute_day_stats(
                     row.first_tap, 
                     row.last_tap, 
                     w_date, 
@@ -251,13 +252,14 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 work_normal = _std_num
                 if _is_night: ot_normal_night = _ot_num
                 else:         ot_normal_day   = _ot_num
-
+ 
             processed_data[emp_id]["days"][w_date] = {
                 "first": first_val, "last": last_val, 
                 "std": std, "ot": ot, "late": late, "early": early,
                 "shift": shift_code_display,
                 "shift_code": shift_code_display,
                 "note": note,
+                "night_subsidy": night_subsidy,
                 # 9 cột phân loại
                 "work_normal": work_normal, "work_holiday": work_holiday, "work_rotation": work_rotation,
                 "ot_normal_day": ot_normal_day, "ot_holiday_day": ot_holiday_day, "ot_rotation_day": ot_rotation_day,
@@ -401,6 +403,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         ws2.append([
             "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
             "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
+            "Giờ trợ cấp ca đêm",
             # 9 cột phân loại theo shift_category
             "Giờ ngày thường", "Giờ ngày nghỉ lễ", "Giờ ngày nghỉ luân phiên",
             "TC thường - ca ngày", "TC lễ - ca ngày", "TC luân phiên - ca ngày",
@@ -441,6 +444,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     d.strftime("%d/%m/%Y"), 
                     ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"],
                     shift_code_val,
+                    ds.get("night_subsidy", 0),
                     # 9 cột phân loại theo shift_category + ca ngày/đêm
                     ds.get("work_normal", 0), ds.get("work_holiday", 0), ds.get("work_rotation", 0),
                     ds.get("ot_normal_day", 0), ds.get("ot_holiday_day", 0), ds.get("ot_rotation_day", 0),

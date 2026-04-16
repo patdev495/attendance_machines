@@ -68,7 +68,7 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
 
     # ── Full-day leave: return leave hours and zeros for work ─────────────────
     if first == last and window['is_leave']:
-        return 0.0, 0.0, 0.0, 0, 0, hours_p, hours_r, hours_o
+        return 0.0, 0.0, 0.0, 0, 0, hours_p, hours_r, hours_o, 0.0
 
     # ── Build effective datetime window ──────────────────────────────────────
     official_start_dt = datetime.combine(w_date, window['official_start'])
@@ -121,6 +121,22 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
     hours_standard = min(raw_work_hours - hours_ot, float(window['work_hours_expected']))
     if hours_standard < 0: hours_standard = 0.0
 
+    # 5. Night Subsidy (22:00 - 05:00)
+    night_subsidy_hours = 0.0
+    if window.get('end_next_day'):
+        # Window: 22:00 today to 05:00 tomorrow
+        ns = datetime.combine(w_date, time(22, 0))
+        ne = datetime.combine(w_date + timedelta(days=1), time(5, 0))
+        
+        # Intersection of [first, last] and [ns, ne]
+        overlap_start = max(first, ns)
+        overlap_end = min(last, ne)
+        
+        if overlap_start < overlap_end:
+            overlap_secs = (overlap_end - overlap_start).total_seconds()
+            actual_night_secs = max(0.0, overlap_secs - break_secs)
+            night_subsidy_hours = round(actual_night_secs / 3600.0, 2)
+
     # Final Rounding for display
     work_hours = round(raw_work_hours, 2)
     hours_standard = round(hours_standard, 2)
@@ -134,7 +150,7 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
     if minutes_late == 0 and minutes_early <= 5: 
         hours_standard = float(window['work_hours_expected'])
 
-    return work_hours, hours_standard, hours_ot, minutes_late, minutes_early, hours_p, hours_r, hours_o
+    return work_hours, hours_standard, hours_ot, minutes_late, minutes_early, hours_p, hours_r, hours_o, night_subsidy_hours
 
 
 def determine_missing_tap(tap_time, w_date, shift_code, department, rules_pool=None):
