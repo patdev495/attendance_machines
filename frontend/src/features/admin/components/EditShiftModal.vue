@@ -74,11 +74,10 @@
                     <input type="number" v-model.number="formData.break_hours" step="0.1" min="0" />
                   </div>
                 </div>
-
                 <div class="form-row">
                   <!-- P -->
                   <div class="form-group flex-1">
-                    <label>Nghỉ Phép (P)</label>
+                    <label>Phép (P)</label>
                     <input type="number" v-model.number="formData.leave_hours_p" step="0.1" min="0" />
                   </div>
                   <!-- R -->
@@ -88,14 +87,38 @@
                   </div>
                   <!-- O -->
                   <div class="form-group flex-1">
-                    <label>Nghỉ Ốm/Khác (O)</label>
+                    <label>Ốm (O)</label>
                     <input type="number" v-model.number="formData.leave_hours_o" step="0.1" min="0" />
                   </div>
                 </div>
 
-                 <div class="form-group">
-                  <label>Định Mức Công Chuẩn (Ví dụ: 8.0, 12.0)</label>
-                  <input type="number" v-model.number="formData.standard_hours" step="0.1" min="0" />
+                <div class="form-row">
+                  <!-- T -->
+                  <div class="form-group flex-1">
+                    <label>Tang (T)</label>
+                    <input type="number" v-model.number="formData.leave_hours_t" step="0.1" min="0" />
+                  </div>
+                  <!-- C -->
+                  <div class="form-group flex-1">
+                    <label>Cưới (C)</label>
+                    <input type="number" v-model.number="formData.leave_hours_c" step="0.1" min="0" />
+                  </div>
+                  <!-- K -->
+                  <div class="form-group flex-1">
+                    <label>Không Phép (K)</label>
+                    <input type="number" v-model.number="formData.leave_hours_k" step="0.1" min="0" />
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group flex-1">
+                    <label>Định Mức LÀM TRÒN (VD: 8.0, 12.0)</label>
+                    <input type="number" v-model.number="formData.standard_hours" step="0.1" min="0" />
+                  </div>
+                  <div class="form-group flex-1">
+                    <label>Định Mức CHIA CÔNG (VD: 8.0, 12.0)</label>
+                    <input type="number" v-model.number="formData.workday_base" step="0.1" min="0" />
+                  </div>
                 </div>
 
                 <div class="form-group">
@@ -152,7 +175,11 @@ const formData = ref({
   leave_hours_p: 0.0,
   leave_hours_r: 0.0,
   leave_hours_o: 0.0,
+  leave_hours_t: 0.0,
+  leave_hours_c: 0.0,
+  leave_hours_k: 0.0,
   standard_hours: 8.0,
+  workday_base: 8.0,
   description: ''
 })
 
@@ -174,7 +201,11 @@ watch(() => props.isOpen, (newVal) => {
         leave_hours_p: 0.0,
         leave_hours_r: 0.0,
         leave_hours_o: 0.0,
+        leave_hours_t: 0.0,
+        leave_hours_c: 0.0,
+        leave_hours_k: 0.0,
         standard_hours: 8.0,
+        workday_base: 8.0,
         description: ''
       }
     }

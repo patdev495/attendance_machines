@@ -193,16 +193,17 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             else:
                 shift_code_display = effective_shift_raw.strip().upper()
                 effective_shift = shift_code_display
-
+            
             # Initialization for row record
             first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
             night_subsidy = 0.0
+            hp = hr = ho = ht = hc = hk = 0.0
+            std_expected = 8.0
+            workday_base = 8.0
             note = ""
 
             # Check for full-day leave
             if effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
-
-
                 std = 0
                 ot = 0
                 late = 0
@@ -210,12 +211,24 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 note = effective_shift.strip().upper()
                 if row.tap_count >= 1: first_val = row.first_tap.strftime("%H:%M")
                 if row.tap_count >= 2: last_val = row.last_tap.strftime("%H:%M")
+                # Phase 15: Get standard hours and leave types for leave days
+                emp_m = emp_meta.get(emp_id)
+                dept = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
+                win = parse_shift_window(effective_shift, dept, rules_pool=rules_pool)
+                std_expected = win.get('standard_hours', 8.0)
+                workday_base = win.get('workday_base', 8.0)
+                hp = win.get('leave_hours_p', 0.0)
+                hr = win.get('leave_hours_r', 0.0)
+                ho = win.get('leave_hours_o', 0.0)
+                ht = win.get('leave_hours_t', 0.0)
+                hc = win.get('leave_hours_c', 0.0)
+                hk = win.get('leave_hours_k', 0.0)
             elif row.tap_count >= 1:
                 first_val = row.first_tap.strftime("%H:%M")
                 last_val = row.last_tap.strftime("%H:%M")
                 emp_m = emp_meta.get(emp_id)
                 department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
-                res_work, std, ot, late, early, hp, hr, ho, night_subsidy = compute_day_stats(
+                res_work, std, ot, late, early, hp, hr, ho, ht, hc, hk, night_subsidy, std_expected, workday_base = compute_day_stats(
                     row.first_tap, 
                     row.last_tap, 
                     w_date, 
@@ -223,7 +236,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     effective_shift,
                     rules_pool=rules_pool
                 )
-                if not (row.tap_count > 1 and row.first_tap != row.last_tap) and not (hp or hr or ho):
+                if not (row.tap_count > 1 and row.first_tap != row.last_tap) and not (hp or hr or ho or ht or hc or hk):
                     note = determine_missing_tap(row.first_tap, w_date, effective_shift, department, rules_pool)
                     # Single tap: suppress the metric we cannot know
                     if note == "Missing Check-out":
@@ -260,6 +273,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "shift_code": shift_code_display,
                 "note": note,
                 "night_subsidy": night_subsidy,
+                "std_expected": std_expected,
+                "workday_base": workday_base,
+                "hp": hp, "hr": hr, "ho": ho, "ht": ht, "hc": hc, "hk": hk,
                 # 9 cột phân loại
                 "work_normal": work_normal, "work_holiday": work_holiday, "work_rotation": work_rotation,
                 "ot_normal_day": ot_normal_day, "ot_holiday_day": ot_holiday_day, "ot_rotation_day": ot_rotation_day,
@@ -403,6 +419,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         ws2.append([
             "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
             "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
+            "Công tiêu chuẩn",
             "Giờ trợ cấp ca đêm",
             # 9 cột phân loại theo shift_category
             "Giờ ngày thường", "Giờ ngày nghỉ lễ", "Giờ ngày nghỉ luân phiên",
@@ -444,6 +461,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     d.strftime("%d/%m/%Y"), 
                     ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"],
                     shift_code_val,
+                    ds.get("std_expected", 8.0),
                     ds.get("night_subsidy", 0),
                     # 9 cột phân loại theo shift_category + ca ngày/đêm
                     ds.get("work_normal", 0), ds.get("work_holiday", 0), ds.get("work_rotation", 0),
@@ -464,6 +482,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         
         ws3_headers = [
             "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
+            "Tổng Ngày Công",
+            "Nghỉ Phép (P)", "Việc Riêng (R)", "Nghỉ Ốm (O)", "Nghỉ Tang (T)", "Nghỉ Cưới (C)", "Không Phép (K)",
             "Tổng số lần đi muộn", "Tổng số lần về sớm",
             "Tổng Giờ Công", "Tổng Tăng Ca", "Tổng Giờ trợ cấp ca đêm",
             "Tổng Giờ ngày thường", "Tổng Giờ ngày nghỉ lễ", "Tổng Giờ ngày nghỉ luân phiên",
@@ -483,6 +503,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             
             late_count = 0
             early_count = 0
+            total_workdays = 0.0
+            total_hp = total_hr = total_ho = total_ht = total_hc = total_hk = 0.0
             sum_std = sum_ot = sum_ns = 0.0
             sum_wn = sum_wh = sum_wr = 0.0
             sum_otnd = sum_othd = sum_otrd = 0.0
@@ -491,6 +513,18 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             for d in dates_list:
                 if d not in emp_info["days"]: continue
                 ds = emp_info["days"][d]
+                
+                # Calculate daily contributions: Actual Hours / Workday Base
+                std_h = float(ds.get("std", 0.0))
+                base = float(ds.get("workday_base", 8.0))
+                if base > 0:
+                    total_workdays += (std_h / base)
+                    total_hp += (float(ds.get("hp", 0.0)) / base)
+                    total_hr += (float(ds.get("hr", 0.0)) / base)
+                    total_ho += (float(ds.get("ho", 0.0)) / base)
+                    total_ht += (float(ds.get("ht", 0.0)) / base)
+                    total_hc += (float(ds.get("hc", 0.0)) / base)
+                    total_hk += (float(ds.get("hk", 0.0)) / base)
                 
                 if isinstance(ds.get("late"), (int, float)) and ds["late"] > 0: late_count += 1
                 if isinstance(ds.get("early"), (int, float)) and ds["early"] > 0: early_count += 1
@@ -516,6 +550,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 emp_m.department if emp_m else "-", 
                 emp_m.group_name if emp_m else "-", 
                 hired_date_val,
+                round(total_workdays, 3),
+                round(total_hp, 3), round(total_hr, 3), round(total_ho, 3),
+                round(total_ht, 3), round(total_hc, 3), round(total_hk, 3),
                 late_count, early_count,
                 round(sum_std, 2), round(sum_ot, 2), round(sum_ns, 2),
                 round(sum_wn, 2), round(sum_wh, 2), round(sum_wr, 2),

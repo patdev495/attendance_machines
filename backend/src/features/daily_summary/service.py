@@ -92,6 +92,10 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "hours_p": window.get('leave_hours_p', 0.0),
                 "hours_r": window.get('leave_hours_r', 0.0),
                 "hours_o": window.get('leave_hours_o', 0.0),
+                "hours_t": window.get('leave_hours_t', 0.0),
+                "hours_c": window.get('leave_hours_c', 0.0),
+                "hours_k": window.get('leave_hours_k', 0.0),
+                "workday_base": window.get('workday_base', 8.0),
                 "shift": shift_code_display,
                 "status": (row.status if hasattr(row, "status") and row.status else "Active"),
                 "note": (calculation_shift.strip().upper() if window['is_leave'] else "Vắng"),
@@ -115,6 +119,13 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "work_hours": 0.0,
                 "hours_standard": 0.0,
                 "hours_ot": 0.0,
+                "hours_p": window.get('leave_hours_p', 0.0),
+                "hours_r": window.get('leave_hours_r', 0.0),
+                "hours_o": window.get('leave_hours_o', 0.0),
+                "hours_t": window.get('leave_hours_t', 0.0),
+                "hours_c": window.get('leave_hours_c', 0.0),
+                "hours_k": window.get('leave_hours_k', 0.0),
+                "workday_base": window.get('workday_base', 8.0),
                 "shift": shift_code_display,
                 "status": (row.status if hasattr(row, "status") and row.status else "Active"),
                 "note": calculation_shift.strip().upper(),
@@ -130,8 +141,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                              last.date() == first.date() and 
                              last.hour < boundary_hour)
         
-        # compute_day_stats now returns 9 values
-        work_hours, hours_standard, hours_ot, minutes_late, minutes_early_lv, hours_p, hours_r, hours_o, night_subsidy = compute_day_stats(
+        # compute_day_stats now returns 14 values
+        res_work, hours_standard, hours_ot, minutes_late, minutes_early_lv, hours_p, hours_r, hours_o, hours_t, hours_c, hours_k, night_subsidy, std_hours_shift, workday_base = compute_day_stats(
             first, last, w_date, department, calculation_shift, rules_pool=rules_pool
         )
         
@@ -162,6 +173,9 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "hours_p": hours_p,
             "hours_r": hours_r,
             "hours_o": hours_o,
+            "hours_t": hours_t,
+            "hours_c": hours_c,
+            "hours_k": hours_k,
             "shift": shift_code_display,
             "status": (row.status if hasattr(row, "status") and row.status else "Active"),
             "note": note,
@@ -169,6 +183,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "minutes_early_leave": minutes_early_lv,
             "daily_shift_code": shift_code_display,
             "night_subsidy": night_subsidy,
+            "standard_hours_shift": std_hours_shift,
+            "workday_base": workday_base,
         })
 
     return summary_items

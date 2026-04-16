@@ -21,9 +21,14 @@
               <th>Loại Ngày</th>
               <th class="text-center">Công</th>
               <th class="text-center">Nghỉ</th>
-              <th class="text-center">NP (P)</th>
-              <th class="text-center">VR (R)</th>
-              <th class="text-center">Mức</th>
+              <th class="text-center" title="Nghỉ Phép">P</th>
+              <th class="text-center" title="Việc Riêng">R</th>
+              <th class="text-center" title="Ốm/Khác">O</th>
+              <th class="text-center" title="Nghỉ Tang">T</th>
+              <th class="text-center" title="Nghỉ Cưới">C</th>
+              <th class="text-center" title="Không Phép">K</th>
+              <th class="text-center" title="Định mức làm tròn">Tròn</th>
+              <th class="text-center" title="Định mức chia công">Chia</th>
               <th>Mô Tả</th>
               <th class="text-right">Thao Tác</th>
             </tr>
@@ -55,12 +60,25 @@
               <td class="text-center font-semibold">{{ shift.work_hours.toFixed(1) }}h</td>
               <td class="text-center text-muted">{{ shift.break_hours.toFixed(1) }}h</td>
               <td class="text-center text-success" :class="{ 'inactive': shift.leave_hours_p === 0 }">
-                {{ shift.leave_hours_p.toFixed(1) }}h
+                {{ shift.leave_hours_p.toFixed(1) }}
               </td>
               <td class="text-center text-warning" :class="{ 'inactive': shift.leave_hours_r === 0 }">
-                {{ shift.leave_hours_r.toFixed(1) }}h
+                {{ shift.leave_hours_r.toFixed(1) }}
               </td>
-              <td class="text-center text-primary">{{ shift.standard_hours.toFixed(1) }}h</td>
+              <td class="text-center text-danger" :class="{ 'inactive': shift.leave_hours_o === 0 }">
+                {{ shift.leave_hours_o.toFixed(1) }}
+              </td>
+              <td class="text-center" :class="{ 'inactive': shift.leave_hours_t === 0 }">
+                {{ shift.leave_hours_t.toFixed(1) }}
+              </td>
+              <td class="text-center" :class="{ 'inactive': shift.leave_hours_c === 0 }">
+                {{ shift.leave_hours_c.toFixed(1) }}
+              </td>
+              <td class="text-center" :class="{ 'inactive': shift.leave_hours_k === 0 }">
+                {{ shift.leave_hours_k.toFixed(1) }}
+              </td>
+              <td class="text-center text-primary">{{ shift.standard_hours.toFixed(1) }}</td>
+              <td class="text-center text-accent font-bold">{{ shift.workday_base.toFixed(1) }}</td>
               <td class="text-muted italic desc-col">{{ shift.description || '-' }}</td>
               <td class="text-right actions">
                 <button class="btn-icon" title="Sửa" @click="handleEdit(shift)">
@@ -306,7 +324,9 @@ onMounted(fetchShifts)
 .text-muted { color: #64748b; }
 .text-success { color: #2ecc71; }
 .text-warning { color: #f1c40f; }
+.text-danger { color: #ff4757; }
 .text-primary { color: #3498db; }
+.text-accent { color: #00d2ff; }
 .text-center { text-align: center; }
 .text-right { text-align: right; }
 .font-semibold { font-weight: 600; }

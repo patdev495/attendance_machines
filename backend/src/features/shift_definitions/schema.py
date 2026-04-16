@@ -14,7 +14,12 @@ class ShiftDefinitionBase(BaseModel):
     leave_hours_p: float = 0.0
     leave_hours_r: float = 0.0
     leave_hours_o: float = 0.0
+    leave_hours_t: float = 0.0
+    leave_hours_c: float = 0.0
+    leave_hours_k: float = 0.0
+
     standard_hours: float = 8.0
+    workday_base: float = 8.0
     description: Optional[str] = None
     # 'NORMAL' | 'HOLIDAY' | 'ROTATION'
     shift_category: Optional[str] = "NORMAL"
@@ -33,7 +38,11 @@ class ShiftDefinitionUpdate(BaseModel):
     leave_hours_p: Optional[float] = None
     leave_hours_r: Optional[float] = None
     leave_hours_o: Optional[float] = None
+    leave_hours_t: Optional[float] = None
+    leave_hours_c: Optional[float] = None
+    leave_hours_k: Optional[float] = None
     standard_hours: Optional[float] = None
+    workday_base: Optional[float] = None
     description: Optional[str] = None
     shift_category: Optional[str] = None
 

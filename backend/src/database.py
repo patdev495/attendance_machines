@@ -115,7 +115,12 @@ class ShiftDefinition(Base):
     leave_hours_p   = Column(Float, default=0.0) # Paid Leave (NP)
     leave_hours_r   = Column(Float, default=0.0) # Personal Leave (VR)
     leave_hours_o   = Column(Float, default=0.0) # Other Leave (Om, BHXH...)
+    leave_hours_t   = Column(Float, default=0.0) # Funeral Leave (Tang)
+    leave_hours_c   = Column(Float, default=0.0) # Wedding Leave (Cuoi)
+    leave_hours_k   = Column(Float, default=0.0) # Unexcused Leave (Khong phep)
+    
     standard_hours  = Column(Float, default=0.0) # Rounding target (e.g. 8.0, 12.0)
+    workday_base    = Column(Float, default=8.0) # Denominator for day calculations (4, 6, 8, 12)
     description     = Column(Unicode(255), nullable=True)
     # shift_category: 'NORMAL' | 'HOLIDAY' | 'ROTATION'
     # Added via migrate_shift_category.py — maps the existing DB column.

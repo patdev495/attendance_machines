@@ -21,10 +21,15 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
 
     if matching_rule:
         return {
-            'is_leave': matching_rule.leave_hours_p > 0 or matching_rule.leave_hours_r > 0 or matching_rule.leave_hours_o > 0,
+            'is_leave': (matching_rule.leave_hours_p > 0 or matching_rule.leave_hours_r > 0 or 
+                        matching_rule.leave_hours_o > 0 or matching_rule.leave_hours_t > 0 or 
+                        matching_rule.leave_hours_c > 0 or matching_rule.leave_hours_k > 0),
             'leave_hours_p': matching_rule.leave_hours_p,
             'leave_hours_r': matching_rule.leave_hours_r,
             'leave_hours_o': matching_rule.leave_hours_o,
+            'leave_hours_t': matching_rule.leave_hours_t,
+            'leave_hours_c': matching_rule.leave_hours_c,
+            'leave_hours_k': matching_rule.leave_hours_k,
             'official_start': matching_rule.start_time or time(8, 0),
             'official_end': matching_rule.end_time or time(17, 0),
             'ot_start_time': matching_rule.ot_start_time,
@@ -32,9 +37,10 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
             'work_hours_expected': matching_rule.work_hours,
 
             'break_hours': matching_rule.break_hours,
-            'has_overtime': True, # Overtime is allowed for all defined shifts unless capped
+            'has_overtime': True, 
             'max_hours': None,
             'standard_hours': matching_rule.standard_hours,
+            'workday_base': matching_rule.workday_base or 8.0,
         }
 
     # ── Fallback logic for undefined codes ──
@@ -43,7 +49,10 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
         'is_leave': is_leave,
         'leave_hours_p': 8.0 if code == 'P' else 0.0,
         'leave_hours_r': 8.0 if code == 'R' else 0.0,
-        'leave_hours_o': 8.0 if code in ('O', 'T', 'C') else 0.0,
+        'leave_hours_t': 8.0 if code == 'T' else 0.0,
+        'leave_hours_c': 8.0 if code == 'C' else 0.0,
+        'leave_hours_o': 8.0 if code in ('O', 'X') else 0.0,
+        'leave_hours_k': 8.0 if code == 'K' else 0.0,
         'official_start': time(8, 0),
         'official_end': time(17, 0),
         'end_next_day': code == 'D', # Legacy D was overnight
@@ -52,6 +61,7 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
         'has_overtime': not is_leave,
         'max_hours': None,
         'standard_hours': 0.0 if is_leave else 8.0,
+        'workday_base': 8.0,
     }
 
 
@@ -65,10 +75,13 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
     hours_p = window.get('leave_hours_p', 0.0)
     hours_r = window.get('leave_hours_r', 0.0)
     hours_o = window.get('leave_hours_o', 0.0)
+    hours_t = window.get('leave_hours_t', 0.0)
+    hours_c = window.get('leave_hours_c', 0.0)
+    hours_k = window.get('leave_hours_k', 0.0)
 
     # ── Full-day leave: return leave hours and zeros for work ─────────────────
     if first == last and window['is_leave']:
-        return 0.0, 0.0, 0.0, 0, 0, hours_p, hours_r, hours_o, 0.0
+        return 0.0, 0.0, 0.0, 0, 0, hours_p, hours_r, hours_o, hours_t, hours_c, hours_k, 0.0, window['standard_hours'], window['workday_base']
 
     # ── Build effective datetime window ──────────────────────────────────────
     official_start_dt = datetime.combine(w_date, window['official_start'])
@@ -146,11 +159,14 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
     # Protection Rule: If neither late nor early, force standard hours to expected
 
     
-    # Protection Rule: If neither late nor early, force standard hours to expected
     if minutes_late == 0 and minutes_early <= 5: 
         hours_standard = float(window['work_hours_expected'])
 
-    return work_hours, hours_standard, hours_ot, minutes_late, minutes_early, hours_p, hours_r, hours_o, night_subsidy_hours
+    return (
+        work_hours, hours_standard, hours_ot, minutes_late, minutes_early, 
+        hours_p, hours_r, hours_o, hours_t, hours_c, hours_k,
+        night_subsidy_hours, window['standard_hours'], window['workday_base']
+    )
 
 
 def determine_missing_tap(tap_time, w_date, shift_code, department, rules_pool=None):
