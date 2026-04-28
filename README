@@ -2,3 +2,15 @@ uv run pyinstaller --onedir --name "TimeAttendance" --paths "backend/src" --hidd
 uv run -m uvicorn main:app --reload --app-dir backend/src --port 8000
 
 192.168.209.60 # nolive
+
+
+docker compose up -d --build
+# Xem trạng thái các container đang chạy
+docker compose ps
+
+# Xem log trực tiếp của toàn bộ hệ thống (Bấm Ctrl+C để thoát xem log)
+docker compose logs -f
+
+# Hoặc nếu chỉ muốn xem log của backend:
+docker compose logs -f backend
+

@@ -1,0 +1,64 @@
+# HƯỚNG DẪN ĐÓNG GÓI VÀ TRIỂN KHAI DOCKER (DEPLOYMENT GUIDE)
+
+Tài liệu này hướng dẫn cách mang hệ thống Time Attendance Machine sang một máy tính/server khác để chạy mà KHÔNG cần phải copy source code (đảm bảo bảo mật code) và KHÔNG cần kết nối mạng Internet (cài đặt offline).
+
+---
+
+## BƯỚC 1: ĐÓNG GÓI HỆ THỐNG TẠI MÁY DEV (MÁY CODE)
+Sau khi đã chạy lệnh `docker compose up -d --build` thành công, Docker đã lưu lại 2 images của Frontend và Backend. 
+
+Mở Terminal và gõ lệnh sau để xuất (export) 2 image này thành 2 file nén `.tar`:
+```bash
+docker save time_attendance_machine-backend > backend_image.tar
+docker save time_attendance_machine-frontend > frontend_image.tar
+```
+*Lưu ý: Quá trình này có thể mất 1-2 phút tùy tốc độ ổ cứng, file sinh ra thường có dung lượng vài trăm MB.*
+
+---
+
+## BƯỚC 2: CHUẨN BỊ "GÓI TRIỂN KHAI" (DEPLOYMENT BUNDLE)
+Tạo một thư mục mới (ví dụ: `Time_Attendance_Deploy`). Bạn chỉ copy những file/thư mục dưới đây vào thư mục đó để mang đi (KHÔNG copy code Python hay Vue.js):
+
+1. `backend_image.tar` (File vừa tạo ở bước 1)
+2. `frontend_image.tar` (File vừa tạo ở bước 1)
+3. `docker-compose.yml` (File cấu hình chạy Docker)
+4. Thư mục `backend` (Bên trong chỉ cần chứa đúng file `.env` để cấu hình database. Bạn có thể xóa hết code bên trong thư mục này đi)
+5. `machines.txt` (Danh sách máy chấm công)
+6. `employee_work_shift.xlsx` (File Excel ca làm việc)
+
+Copy thư mục `Time_Attendance_Deploy` này vào USB hoặc upload lên Server mới.
+
+---
+
+## BƯỚC 3: CÀI ĐẶT VÀ CHẠY Ở MÁY KHÁCH HÀNG / SERVER MỚI
+Yêu cầu duy nhất: Máy tính/Server mới phải được cài sẵn **Docker** và **Docker Compose**.
+
+Mở Terminal tại thư mục `Time_Attendance_Deploy` ở máy mới và làm theo thứ tự:
+
+**1. Nạp (Load) Image vào hệ thống Docker của máy mới:**
+```bash
+docker load < backend_image.tar
+docker load < frontend_image.tar
+```
+
+**2. Khởi động toàn bộ hệ thống:**
+```bash
+docker compose up -d
+```
+
+**3. Xem log để kiểm tra (tùy chọn):**
+- Xem log của Backend (để xem có lỗi kết nối DB hay không):
+  `docker compose logs -f backend`
+- Xem log của Frontend/Nginx:
+  `docker compose logs -f frontend`
+
+**4. Dừng hệ thống (khi cần nâng cấp hoặc sửa file env):**
+```bash
+docker compose down
+```
+
+---
+**💡 CÁCH CẬP NHẬT DỮ LIỆU/CẤU HÌNH:**
+Vì chúng ta đã thiết lập "Volume", khi bạn muốn sửa thông tin kết nối Database hoặc file Excel, bạn chỉ việc:
+1. Sửa trực tiếp file `backend/.env` hoặc `employee_work_shift.xlsx` ở máy Server.
+2. Chạy lệnh: `docker compose restart backend` để hệ thống nạp lại file mới mà không cần build lại.

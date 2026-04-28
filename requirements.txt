@@ -11,3 +11,6 @@ xlsxwriter
 websockets
 requests
 charset-normalizer
+pandas
+openpyxl
+python-multipart

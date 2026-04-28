@@ -32,7 +32,7 @@ class Config:
     @property
     def DATABASE_URL(self):
         # We need to escape special characters if in connection string, but f-string is usually fine here
-        return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+        return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no"
 
     # Directory settings
     BACKEND_DIR = INTERNAL_DIR / "backend"

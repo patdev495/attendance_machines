@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: time_attendance_backend
+    volumes:
+      # Map .env so we don't have to rebuild to change config
+      - ./backend/.env:/app/backend/.env:ro
+      
+      # Map the data files so the user can easily update them from host
+      - ./machines.txt:/app/machines.txt:ro
+      - ./employee_work_shift.xlsx:/app/employee_work_shift.xlsx:ro
+      
+      # Persist logs on the host machine
+      - ./backend/logs:/app/backend/logs
+      
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: time_attendance_frontend
+    ports:
+      - "80:80" # Publish Nginx to port 80
+    depends_on:
+      - backend
+    restart: unless-stopped
