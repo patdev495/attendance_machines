@@ -61,6 +61,14 @@ export function getDeleteStatus(employeeId) {
   return apiFetch(`/delete-status/${employeeId}`)
 }
 
+export function syncMachineTime(ip) {
+  return apiFetch(`/${encodeURIComponent(ip)}/sync-time`, { method: 'POST' })
+}
+
+export function syncAllMachinesTime() {
+  return apiFetch('/sync-time-all', { method: 'POST' })
+}
+
 export function bulkDeleteGlobal(employeeIds) {
   return apiFetch('/bulk-delete-global', {
     method: 'POST',

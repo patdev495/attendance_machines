@@ -161,6 +161,10 @@
     "machine": "Máy: ",
     "employee_count": "{filtered} / {total} nhân viên",
     "connecting": "Đang kết nối máy...",
+    "sync_time": "Đồng bộ giờ",
+    "syncing_time": "Đang đồng bộ giờ...",
+    "sync_time_success": "Đồng bộ giờ thành công",
+    "sync_time_failed": "Đồng bộ giờ thất bại: {err}",
     "action": {
       "sync_finger": "Đồng bộ vân tay",
       "rename": "Đổi tên",

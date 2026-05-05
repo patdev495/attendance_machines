@@ -160,6 +160,10 @@
     "machine": "Machine: ",
     "employee_count": "{filtered} / {total} emp",
     "connecting": "Connecting...",
+    "sync_time": "Sync Time",
+    "syncing_time": "Syncing time...",
+    "sync_time_success": "Time synced successfully",
+    "sync_time_failed": "Failed to sync time: {err}",
     "action": {
       "sync_finger": "Sync Fingerprint",
       "rename": "Rename",

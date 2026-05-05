@@ -14,6 +14,10 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           {{ $t('device.action.delete') }} ({{ selectedIds.length }})
         </button>
+        <button class="btn btn-ghost" @click="handleSyncTime" style="border-color:#10b981; color:#10b981;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          {{ $t('device.sync_time') }}
+        </button>
         <button class="btn btn-ghost" @click="handleBulkSyncFinger" style="border-color:#fbbf24; color:#fbbf24;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           {{ $t('biometric.sync_all') }}
@@ -106,6 +110,7 @@ import PaginationBar from '@/components/shared/PaginationBar.vue'
 import MachineEmployeeTable from '../components/MachineEmployeeTable.vue'
 import EmployeeDetailsModal from '@/features/employees/components/EmployeeDetailsModal.vue'
 import FingerprintCloneModal from '../components/FingerprintCloneModal.vue'
+import { syncMachineTime } from '../api.js'
 
 const props = defineProps({ ip: { type: String, required: true } })
 const store = useMachineStore()
@@ -122,6 +127,18 @@ const selectedIdForClone = ref('')
 onMounted(() => {
   store.loadMachineEmployees(props.ip)
 })
+
+async function handleSyncTime() {
+  const notifyId = notification.info(t('device.syncing_time'), 0)
+  try {
+    await syncMachineTime(props.ip)
+    notification.success(t('device.sync_time_success'))
+  } catch (e) {
+    notification.error(t('device.sync_time_failed', { err: e.message }))
+  } finally {
+    notification.remove(notifyId)
+  }
+}
 
 function handleView(u) {
   // Map machine-specific fields to registry-style fields for the modal
