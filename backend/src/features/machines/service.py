@@ -558,3 +558,37 @@ def push_fingerprints_to_machines(employee_id: str, target_ips: list):
         db.close()
         with push_status_lock:
             push_status["is_running"] = False
+
+def sync_time_on_machine(ip: str):
+    """Synchronizes the time of a specific machine with the current system time."""
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        current_time = datetime.datetime.now()
+        conn.set_time(current_time)
+        conn.enable_device()
+        return "Success"
+    except Exception as e:
+        logger.error(f"Error syncing time on machine {ip}: {e}")
+        return str(e)
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def bulk_sync_time_all_machines():
+    """Synchronizes time across all configured machines."""
+    ips = get_machine_list()
+    results = {}
+    with ThreadPoolExecutor(max_workers=max(1, len(ips))) as executor:
+        future_to_ip = {executor.submit(sync_time_on_machine, ip): ip for ip in ips}
+        for future in concurrent.futures.as_completed(future_to_ip):
+            ip = future_to_ip[future]
+            try:
+                status = future.result()
+                results[ip] = status
+            except Exception as e:
+                results[ip] = f"Error: {str(e)}"
+    return results

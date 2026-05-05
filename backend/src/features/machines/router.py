@@ -10,7 +10,8 @@ from .service import (
     update_user_name_all_machines, download_fingerprints_from_machine,
     bulk_download_fingerprints_from_machine, get_biometric_coverage,
     delete_status, delete_user_from_all_machines,
-    bulk_delete_status, bulk_delete_users_from_all_machines
+    bulk_delete_status, bulk_delete_users_from_all_machines,
+    sync_time_on_machine, bulk_sync_time_all_machines
 )
 from .biometric_service import BiometricExportService
 from pydantic import BaseModel
@@ -151,3 +152,17 @@ def get_push_status():
     """Poll status of the fingerprint push operation."""
     from .service import push_status
     return push_status
+
+@router.post("/sync-time-all")
+def sync_all_machines_time():
+    """Sync time for all connected machines."""
+    results = bulk_sync_time_all_machines()
+    return {"results": results}
+
+@router.post("/{ip}/sync-time")
+def sync_machine_time(ip: str):
+    """Sync time for a specific machine."""
+    status = sync_time_on_machine(ip)
+    if status != "Success":
+        raise HTTPException(status_code=500, detail=status)
+    return {"status": status}
