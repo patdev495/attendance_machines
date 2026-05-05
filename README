@@ -14,3 +14,10 @@ docker compose logs -f
 # Hoặc nếu chỉ muốn xem log của backend:
 docker compose logs -f backend
 
+
+
+C:\Windows\System32>wsl hostname -I
+172.25.82.150 172.17.0.1 172.18.0.1
+
+C:\Windows\System32>netsh interface portproxy add v4tov4 listenport=8001 listenaddress=0.0.0.0 connectport=8001 connectaddress=172.25.82.150
+
