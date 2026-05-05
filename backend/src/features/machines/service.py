@@ -298,18 +298,19 @@ def check_user_biometric_on_machine(ip: str, employee_id: str):
         
         # Optimized: Check specific slots instead of downloading thousands of templates
         has_finger = False
+        finger_count = 0
         # Most users have fingers in slots 0-9
         for fid in range(10):
             try:
                 tmp = conn.get_user_template(uid=target.uid, temp_id=fid, user_id=target.user_id)
                 if tmp and tmp.template:
                     has_finger = True
-                    break
+                    finger_count += 1
             except:
                 continue
                 
         conn.enable_device()
-        return {"ip": ip, "status": "Online", "has_user": True, "has_finger": has_finger}
+        return {"ip": ip, "status": "Online", "has_user": True, "has_finger": has_finger, "finger_count": finger_count}
     except Exception as e:
         logger.error(f"Error checking biometric on {ip}: {e}")
         return {"ip": ip, "status": "Online" if "connect" not in str(e).lower() else "Offline", "error": str(e), "has_user": False, "has_finger": False}

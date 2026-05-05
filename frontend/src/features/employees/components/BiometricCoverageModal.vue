@@ -46,7 +46,7 @@
                     <template v-else>
                       <div class="badge-pill" :class="m.has_finger ? 'success' : (m.has_user ? 'warning' : 'info')">
                         <div class="dot" :class="{ 'green-glow': m.has_finger }"></div>
-                        {{ m.has_finger ? $t('biometric.template_ok') : (m.has_user ? $t('biometric.no_template') : $t('biometric.not_registered')) }}
+                        {{ m.has_finger ? $t('biometric.template_ok') + (m.finger_count ? ` (${m.finger_count})` : '') : (m.has_user ? $t('biometric.no_template') : $t('biometric.not_registered')) }}
                       </div>
                     </template>
                   </div>
