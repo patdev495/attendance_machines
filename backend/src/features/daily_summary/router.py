@@ -151,10 +151,7 @@ def get_daily_summary(
         func.coalesce(EmployeeLocalRegistry.full_emp_id, EmployeeMetadata.full_emp_id).label("full_emp_id"),
         func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department).label("department"),
         # Status 'excel_synced' if present in roster for this day, else 'machine_only'
-        case(
-            (roster_sub.c.employee_id.isnot(None), "excel_synced"),
-            else_="machine_only"
-        ).label("status"),
+        func.coalesce(EmployeeLocalRegistry.source_status, "machine_only").label("status"),
         roster_sub.c.shift_code.label("daily_shift_code")
     ).outerjoin(
         agg_logs_sub, 
@@ -199,7 +196,7 @@ def get_daily_summary(
     
     if status and status != 'All': 
         # Match against our dynamic status logic
-        dynamic_status = case((roster_sub.c.employee_id.isnot(None), "excel_synced"), else_="machine_only")
+        dynamic_status = func.coalesce(EmployeeLocalRegistry.source_status, "machine_only")
         query = query.filter(dynamic_status == status)
 
     if shift:

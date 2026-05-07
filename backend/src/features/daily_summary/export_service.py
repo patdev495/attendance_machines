@@ -236,13 +236,21 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     effective_shift,
                     rules_pool=rules_pool
                 )
-                if not (row.tap_count > 1 and row.first_tap != row.last_tap) and not (hp or hr or ho or ht or hc or hk):
+                # If only 1 tap, OR multiple taps but they are within 5 minutes (duplicate taps)
+                if row.tap_count == 1 or (row.last_tap - row.first_tap).total_seconds() < 300:
                     note = determine_missing_tap(row.first_tap, w_date, effective_shift, department, rules_pool)
                     # Single tap: suppress the metric we cannot know
                     if note == "Missing Check-out":
                         early = 0   # don't know when they left
+                        last_val = "-"
                     elif note == "Missing Check-in":
                         late = 0    # don't know when they arrived
+                        first_val = "-"
+                    
+                    # If there's leave hours, we might want to suppress the "Missing" note 
+                    # but we ALWAYS keep the '-' in first_val/last_val as requested.
+                    if (hp or hr or ho or ht or hc or hk):
+                        note = "" # Leave note will be handled by the shift code or general notes
 
             
             # ── Classify std/ot by shift_category (NORMAL / HOLIDAY / ROTATION)

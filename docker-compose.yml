@@ -18,6 +18,8 @@ services:
       - ./backend/logs:/app/backend/logs
       
     restart: unless-stopped
+    ports:
+      - "8001:8001"
     environment:
       - TZ=Asia/Ho_Chi_Minh
 

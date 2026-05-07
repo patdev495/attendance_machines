@@ -47,4 +47,5 @@ class BiometricCoverageOut(BaseModel):
     status: str
     has_user: bool
     has_finger: bool
+    finger_count: Optional[int] = None
     error: Optional[str] = None
