@@ -223,12 +223,7 @@ def sync_employees_full(file_bytes: bytes):
             sync_status["total"] = total_rows
             sync_status["current_step"] = f"Processing {total_rows} Excel records..."
 
-        # --- CLEAN SYNC PRE-PHASE: Mark all current excel_synced as stale ---
-        db.execute(text("UPDATE EmployeeLocalRegistry SET source_status = 'stale' WHERE source_status = 'excel_synced'"))
-        db.commit()
-
         existing_meta = {e.employee_id: e for e in db.query(EmployeeMetadata).all()}
-        existing_registry = {r.employee_id: r for r in db.query(EmployeeLocalRegistry).all()}
         
         excel_synced_ids = set()
         
@@ -281,25 +276,14 @@ def sync_employees_full(file_bytes: bytes):
                 except:
                     pass
 
-            # Upsert into EmployeeLocalRegistry
-            reg = existing_registry.get(emp_id)
-            if not reg:
-                reg = EmployeeLocalRegistry(employee_id=emp_id)
-                db.add(reg)
-                existing_registry[emp_id] = reg
-            
-            reg.emp_name = meta.emp_name
-            reg.department = meta.department
-            reg.group_name = meta.group
-            reg.start_date = meta.start_date
-            reg.shift = meta.shift
-            reg.full_emp_id = f_id
-            reg.source_status = 'excel_synced'
-            
             with status_lock:
-                sync_status["excel_count"] += 1
-                sync_status["progress"] = int((sync_status["excel_count"] / total_rows) * 40)
+                sync_status["progress"] = int((len(excel_synced_ids) / total_rows) * 40)
 
+        # Xóa metadata của những nhân viên không còn trong file Excel
+        for e_id, meta in existing_meta.items():
+            if e_id not in excel_synced_ids:
+                db.delete(meta)
+                
         db.commit()
 
         # ── Phase 13: Parse daily shift columns (e.g. "1/4", "2/4", "15/4") ──
@@ -370,47 +354,23 @@ def sync_employees_full(file_bytes: bytes):
         else:
             logger.info("No date columns found in Excel — skipping daily shift sync")
 
-        # 2. Process Machine Users
+        # 2. Call centralized update_registry
         with status_lock:
-            sync_status["current_step"] = "Scanning machines for additional users..."
+            sync_status["current_step"] = "Scanning machines and logs to sync registry..."
             sync_status["progress"] = 60
-
-        machine_ips = get_machine_list()
-        machine_users_found = {} # emp_id -> name
-        
-        for ip in machine_ips:
-            users, msg = get_users_from_machine(ip)
-            if msg == "Success":
-                for u in users:
-                    u_id = str(u['user_id'])
-                    if u_id not in machine_users_found:
-                        machine_users_found[u_id] = u['name']
-
-        # 3. Merge Machine-only users
-        for u_id, u_name in machine_users_found.items():
-            if u_id in excel_synced_ids:
-                continue # Already handled via Excel
             
-            reg = existing_registry.get(u_id)
-            if not reg:
-                reg = EmployeeLocalRegistry(employee_id=u_id, emp_name=u_name, source_status='machine_only')
-                db.add(reg)
-                existing_registry[u_id] = reg
-                with status_lock: sync_status["machine_only_count"] += 1
-            elif reg.source_status == 'log_only' or reg.source_status == 'stale': 
-                # Upgrade to machine_only if they are found on machine
-                reg.source_status = 'machine_only'
-                if not reg.emp_name: reg.emp_name = u_name
-                with status_lock: sync_status["machine_only_count"] += 1
-
-        # --- CLEAN SYNC POST-PHASE: Demote remaining stale records to log_only ---
-        db.execute(text("UPDATE EmployeeLocalRegistry SET source_status = 'log_only' WHERE source_status = 'stale'"))
-        db.commit()
+        from features.employees.service import update_registry
+        update_registry(db)
+        
+        excel_count = db.query(EmployeeLocalRegistry).filter_by(source_status='excel_synced').count()
+        machine_only_count = db.query(EmployeeLocalRegistry).filter_by(source_status='machine_only').count()
         
         with status_lock:
             sync_status.update({
                 "progress": 100, 
                 "is_running": False, 
+                "excel_count": excel_count,
+                "machine_only_count": machine_only_count,
                 "current_step": "Sync complete."
             })
 

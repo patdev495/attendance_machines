@@ -231,7 +231,7 @@
     "no_template": "No Template",
     "not_registered": "Not Registered",
     "refresh": "Refresh Coverage",
-    "export_fingerprints": "Export Fingerprints",
+    "export_fingerprints": "Export All Employees",
     "sync_all": "Sync All Fingerprints",
     "clone_title": "Clone Fingerprints",
     "clone_desc": "ID: {id} - Fingerprints downloaded successfully. Select target machines to push to:",
@@ -242,7 +242,7 @@
     "cloning_action": "Cloning...",
     "push_action": "Push to {count} Machines"
   },
-    "export": {
+  "export": {
     "progress_label": "Export",
     "time": "Export: Time",
     "hours": "Export: Hours",

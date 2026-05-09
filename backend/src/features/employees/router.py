@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, Integer
 from database import get_db, EmployeeLocalRegistry
@@ -14,7 +15,7 @@ from .schema import (
     UpdateHardwareOut,
     BiometricCoverageOut
 )
-from .service import update_registry, delete_user_from_hardware, update_employee_info
+from .service import update_registry, delete_user_from_hardware, update_employee_info, export_employees_to_excel
 from features.machines.service import (
     get_biometric_coverage, 
     bulk_delete_ids_from_selected_machines,
@@ -100,6 +101,21 @@ def trigger_update_registry(background_tasks: BackgroundTasks, db: Session = Dep
     
     background_tasks.add_task(run_update_registry, db)
     return UpdateStatusOut(is_running=True, status="Started", progress=0)
+
+@router.get("/export")
+def export_employees(
+    search: Optional[str] = None, 
+    source_status: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    from datetime import datetime
+    output = export_employees_to_excel(db, search, source_status)
+    filename = f"Employees_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 @router.get("/update-status", response_model=UpdateStatusOut)
 def get_update_status():

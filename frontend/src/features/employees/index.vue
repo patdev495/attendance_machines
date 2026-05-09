@@ -17,6 +17,10 @@
           </button>
         </transition>
 
+        <a :href="exportUrl" class="btn-secondary" style="text-decoration: none;">
+          <span class="icon">📊</span> {{ $t('biometric.export_fingerprints') || 'Xuất Excel' }}
+        </a>
+
         <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
           <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
         </button>
@@ -105,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { employeesApi } from './api'
 import EmployeesTable from './components/EmployeesTable.vue'
 import EditEmployeeModal from './components/EditEmployeeModal.vue'
@@ -142,6 +146,13 @@ const bulkActionStatus = ref({
 
 
 const fileInput = ref(null)
+
+const exportUrl = computed(() => {
+  const params = new URLSearchParams()
+  if (searchQuery.value) params.append('search', searchQuery.value)
+  if (statusFilter.value) params.append('source_status', statusFilter.value)
+  return `/api/employees/export?${params.toString()}`
+})
 
 import { bulkDeleteGlobal, getBulkDeleteStatus } from '@/features/machines/api'
 

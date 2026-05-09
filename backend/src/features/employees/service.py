@@ -6,6 +6,9 @@ from features.machines.service import get_users_from_machine, delete_user_from_m
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import logging
+import io
+import openpyxl
+from sqlalchemy import func, Integer
 
 logger = logging.getLogger(__name__)
 
@@ -17,53 +20,66 @@ def update_registry(db: Session):
     3. Logs (AttendanceLogs)
     """
     try:
-        # 1. Update from Excel
-        excel_users = db.query(EmployeeMetadata).all()
-        for emp in excel_users:
-            registry_entry = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == emp.employee_id).first()
-            if not registry_entry:
-                registry_entry = EmployeeLocalRegistry(employee_id=emp.employee_id)
-                db.add(registry_entry)
-            
-            registry_entry.emp_name = emp.emp_name
-            registry_entry.department = emp.department
-            registry_entry.group_name = emp.group
-            registry_entry.start_date = emp.start_date
-            registry_entry.shift = emp.shift
-            registry_entry.source_status = 'excel_synced'
-        db.commit()
-
-        # 2. Update from Machines
+        # 1. Gather current sets
+        excel_users = {emp.employee_id: emp for emp in db.query(EmployeeMetadata).all()}
+        
+        machine_users = set()
         ips = get_machine_list()
         for ip in ips:
             users, status = get_users_from_machine(ip)
             if status == "Success":
                 for u in users:
-                    emp_id = str(u.get('user_id'))
-                    registry_entry = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == emp_id).first()
-                    if not registry_entry:
-                        registry_entry = EmployeeLocalRegistry(
-                            employee_id=emp_id,
-                            source_status='machine_only'
-                        )
-                        db.add(registry_entry)
-                    else:
-                        # Existing user, don't overwrite excel_synced status
-                        if registry_entry.source_status != 'excel_synced':
-                            if registry_entry.source_status == 'log_only':
-                                registry_entry.source_status = 'machine_only'
+                    machine_users.add(str(u.get('user_id')))
+                    
+        log_users = {emp_id for (emp_id,) in db.query(AttendanceLog.employee_id).distinct().all()}
+        
+        all_active_ids = set(excel_users.keys()) | machine_users | log_users
+        
+        # 2. Update existing and delete stale
+        existing_registry = db.query(EmployeeLocalRegistry).all()
+        for reg in existing_registry:
+            if reg.employee_id not in all_active_ids:
+                db.delete(reg)
+            else:
+                # Update status based on precedence
+                if reg.employee_id in excel_users:
+                    emp = excel_users[reg.employee_id]
+                    reg.emp_name = emp.emp_name
+                    reg.department = emp.department
+                    reg.group_name = emp.group
+                    reg.start_date = emp.start_date
+                    reg.shift = emp.shift
+                    reg.source_status = 'excel_synced'
+                elif reg.employee_id in machine_users:
+                    reg.source_status = 'machine_only'
+                elif reg.employee_id in log_users:
+                    reg.source_status = 'log_only'
+                    
         db.commit()
-
-        # 3. Update from Logs
-        log_users = db.query(AttendanceLog.employee_id).distinct().all()
-        for (emp_id,) in log_users:
-            registry_entry = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == emp_id).first()
-            if not registry_entry:
-                registry_entry = EmployeeLocalRegistry(
+        
+        # 3. Add new entries
+        existing_ids = {reg.employee_id for reg in db.query(EmployeeLocalRegistry.employee_id).all()}
+        new_ids = all_active_ids - existing_ids
+        
+        for emp_id in new_ids:
+            if emp_id in excel_users:
+                emp = excel_users[emp_id]
+                new_reg = EmployeeLocalRegistry(
                     employee_id=emp_id,
-                    source_status='log_only'
+                    emp_name=emp.emp_name,
+                    department=emp.department,
+                    group_name=emp.group,
+                    start_date=emp.start_date,
+                    shift=emp.shift,
+                    source_status='excel_synced'
                 )
-                db.add(registry_entry)
+            elif emp_id in machine_users:
+                new_reg = EmployeeLocalRegistry(employee_id=emp_id, source_status='machine_only')
+            else:
+                new_reg = EmployeeLocalRegistry(employee_id=emp_id, source_status='log_only')
+                
+            db.add(new_reg)
+            
         db.commit()
     except Exception as e:
         logger.error(f"Error updating registry: {e}")
@@ -106,3 +122,78 @@ def update_employee_info(employee_id: str, db_name: str, db: Session):
     db.commit()
     
     return {"status": "success", "message": "Updated in DB"}
+
+def export_employees_to_excel(db: Session, search: str = None, source_status: str = None):
+    query = db.query(EmployeeLocalRegistry)
+    
+    if search:
+        search = search.strip()
+        found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
+            EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
+            EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%") |
+            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{search}%")
+        ).all()
+        target_ids = {r[0] for r in found_ids} | {search}
+        query = query.filter(func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id)).in_(list(target_ids)))
+        
+    if source_status:
+        query = query.filter(EmployeeLocalRegistry.source_status == source_status)
+        
+    query = query.order_by(func.cast(EmployeeLocalRegistry.employee_id, Integer).asc())
+    employees = query.all()
+    
+    # Lấy thông tin chấm công gần nhất cho mỗi nhân viên
+    latest_logs = db.query(
+        AttendanceLog.employee_id, 
+        func.max(AttendanceLog.attendance_time).label('last_time')
+    ).group_by(AttendanceLog.employee_id).all()
+    latest_log_dict = {log.employee_id: log.last_time for log in latest_logs}
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Employees"
+    
+    headers = [
+        "Mã NV (Máy CC)", "Mã NV (Đầy đủ)", "Họ và Tên", "Phòng Ban", 
+        "Nhóm / Chuyền", "Ngày vào làm", "Ca làm việc", "Nguồn dữ liệu", "Lần chấm công gần nhất"
+    ]
+    ws.append(headers)
+    
+    for emp in employees:
+        last_time = latest_log_dict.get(emp.employee_id)
+        ws.append([
+            emp.employee_id,
+            emp.full_emp_id or "",
+            emp.emp_name or "",
+            emp.department or "",
+            emp.group_name or "",
+            emp.start_date if emp.start_date else "",
+            emp.shift or "",
+            emp.source_status or "",
+            last_time if last_time else ""
+        ])
+        
+        # Định dạng lại cột Ngày (cột 6) và cột Thời gian (cột 9) theo chuẩn Date/Time của Excel
+        current_row = ws.max_row
+        if emp.start_date:
+            ws.cell(row=current_row, column=6).number_format = 'yyyy-mm-dd'
+        if last_time:
+            ws.cell(row=current_row, column=9).number_format = 'yyyy-mm-dd hh:mm:ss'
+        
+    # Auto-adjust column widths
+    for col in ws.columns:
+        max_length = 0
+        col_letter = col[0].column_letter
+        for cell in col:
+            try:
+                if len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = (max_length + 2)
+        ws.column_dimensions[col_letter].width = adjusted_width
+        
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
