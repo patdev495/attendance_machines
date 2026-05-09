@@ -18,8 +18,29 @@
         </transition>
 
         <a :href="exportUrl" class="btn-secondary" style="text-decoration: none;">
-          <span class="icon">📊</span> {{ $t('biometric.export_fingerprints') || 'Xuất Excel' }}
+          <span class="icon">📊</span> Xuất Excel
         </a>
+
+        <button class="btn-secondary" @click="handleGlobalSync" :disabled="globalSyncStatus.is_running" style="border-color: #10b981; color: #10b981;">
+          <span class="icon" :class="{'spin': globalSyncStatus.is_running}">🔄</span> 
+          {{ globalSyncStatus.is_running ? 'Đang gom vân tay...' : 'Gom Vân Tay Từ Tất Cả Máy' }}
+        </button>
+
+        <button class="btn-secondary" @click="isBulkPushModalOpen = true">
+          <span class="icon">📤</span> Đẩy vân tay hàng loạt
+        </button>
+
+        <div class="dropdown-wrapper" style="position: relative;">
+          <button class="btn-secondary" @click="showClearDropdown = !showClearDropdown" style="border-color: #ef4444; color: #ef4444;">
+            <span class="icon">🗑️</span> Xóa vân tay máy
+          </button>
+          <div v-if="showClearDropdown" class="clear-dropdown">
+            <div class="clear-dropdown-header">→ Chọn máy cần xóa vân tay</div>
+            <button v-for="ip in clearMachineList" :key="ip" class="clear-dropdown-item" @click="handleClearMachine(ip)" :disabled="isClearingMachine">
+              {{ ip }}
+            </button>
+          </div>
+        </div>
 
         <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
           <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
@@ -27,12 +48,31 @@
       </div>
     </div>
     
-    <!-- Bulk Global Action Progress -->
     <div v-if="bulkActionStatus.is_running" class="status-banner animate-in bulk-banner">
       <div class="banner-content">
         <div class="spinner-small"></div>
         <span>
           {{ $t('employees.bulk_delete_progress', { current: bulkActionStatus.processed_count + 1, total: bulkActionStatus.total_machines, ip: bulkActionStatus.current_ip }) }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Global Sync Progress -->
+    <div v-if="globalSyncStatus.is_running" class="status-banner animate-in bulk-banner" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
+      <div class="banner-content">
+        <div class="spinner-small" style="border-top-color: #10b981;"></div>
+        <span style="color: #10b981;">
+          Đang thu thập vân tay: Máy {{ globalSyncStatus.processed_count + 1 }} / {{ globalSyncStatus.total_machines }} (Đang quét: {{ globalSyncStatus.current_ip }})
+        </span>
+      </div>
+    </div>
+
+    <!-- Clear Fingerprints Progress -->
+    <div v-if="clearFpStatus.is_running" class="status-banner animate-in bulk-banner" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3);">
+      <div class="banner-content">
+        <div class="spinner-small" style="border-top-color: #ef4444;"></div>
+        <span style="color: #ef4444;">
+          Đang xóa vân tay trên {{ clearFpStatus.ip }}: {{ clearFpStatus.processed_users }}/{{ clearFpStatus.total_users }} người dùng
         </span>
       </div>
     </div>
@@ -105,6 +145,12 @@
       :isOpen="isBulkDeleteModalOpen"
       @close="isBulkDeleteModalOpen = false"
     />
+
+    <BulkPushHardwareModal
+      :show="isBulkPushModalOpen"
+      @close="isBulkPushModalOpen = false"
+      @success="handleBulkPushSuccess"
+    />
   </div>
 </template>
 
@@ -116,6 +162,7 @@ import EditEmployeeModal from './components/EditEmployeeModal.vue'
 import EmployeeDetailsModal from './components/EmployeeDetailsModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
 import BulkDeleteHardwareModal from './components/BulkDeleteHardwareModal.vue'
+import BulkPushHardwareModal from './components/BulkPushHardwareModal.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
 import { useI18n } from 'vue-i18n'
@@ -128,6 +175,7 @@ const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
 
+const isBulkPushModalOpen = ref(false)
 
 const currentPage = ref(1)
 const totalCount = ref(0)
@@ -154,10 +202,115 @@ const exportUrl = computed(() => {
   return `/api/employees/export?${params.toString()}`
 })
 
-import { bulkDeleteGlobal, getBulkDeleteStatus } from '@/features/machines/api'
+import { bulkDeleteGlobal, getBulkDeleteStatus, triggerGlobalSync, getGlobalSyncStatus, getMachines, clearMachineFingerprints, getClearFpStatus } from '@/features/machines/api'
+
+const showClearDropdown = ref(false)
+const clearMachineList = ref([])
+const isClearingMachine = ref(false)
+const clearFpStatus = ref({ is_running: false, ip: '', total_users: 0, processed_users: 0, result: '' })
+let clearFpPollInterval = null
+
+// Load machine list for clear dropdown
+const loadClearMachines = async () => {
+  try {
+    clearMachineList.value = await getMachines() || []
+  } catch (e) { console.error(e) }
+}
+loadClearMachines()
+
+// Close dropdown on click outside
+const handleClickOutside = (e) => {
+  if (showClearDropdown.value && !e.target.closest('.dropdown-wrapper')) {
+    showClearDropdown.value = false
+  }
+}
+
+
+onMounted(() => document.addEventListener('click', handleClickOutside))
+onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+
+const handleClearMachine = async (ip) => {
+  if (!confirm(`❗ NGUY HIỂM: Thao tác này sẽ xóa TOÀN BỘ vân tay và dữ liệu người dùng trên máy ${ip}.\n\nLog chấm công sẽ ĐƯỢC GIỮ LẠI.\nSau khi xóa, anh có thể dùng "Đẩy vân tay hàng loạt" để nạp lại.\n\nTiếp tục?`)) return
+  
+  try {
+    showClearDropdown.value = false
+    await clearMachineFingerprints(ip)
+    clearFpStatus.value.is_running = true
+    clearFpStatus.value.ip = ip
+    
+    clearFpPollInterval = setInterval(async () => {
+      try {
+        const status = await getClearFpStatus()
+        clearFpStatus.value = status
+        if (!status.is_running) {
+          clearInterval(clearFpPollInterval)
+          clearFpPollInterval = null
+          if (status.result) {
+            notification.success(status.result)
+          }
+        }
+      } catch (e) { console.error(e) }
+    }, 1000)
+  } catch (err) {
+    notification.error(`Lỗi xóa vân tay trên ${ip}: ${err.message || err}`)
+  }
+}
+
+const globalSyncStatus = ref({
+  is_running: false,
+  total_machines: 0,
+  processed_count: 0,
+  current_ip: ''
+})
+
+let globalSyncPollInterval = null
+
+const handleGlobalSync = async () => {
+  if (!confirm('Thao tác này sẽ dọn dẹp vân tay cũ trong DB và thu thập lại TẤT CẢ vân tay từ các máy chấm công hiện có để làm chuẩn mới. Quá trình có thể mất vài phút.\n\nTiếp tục?')) return
+  
+  try {
+    await triggerGlobalSync()
+    notification.success('Đã bắt đầu tiến trình gom vân tay toàn cục')
+    globalSyncStatus.value.is_running = true
+    startGlobalSyncPoll()
+  } catch (err) {
+    notification.error('Lỗi khi bắt đầu gom vân tay: ' + err.message)
+  }
+}
+
+const startGlobalSyncPoll = () => {
+  if (globalSyncPollInterval) clearInterval(globalSyncPollInterval)
+  globalSyncPollInterval = setInterval(async () => {
+    try {
+      const status = await getGlobalSyncStatus()
+      globalSyncStatus.value = status
+      
+      if (!status.is_running && status.total_machines > 0) {
+        clearInterval(globalSyncPollInterval)
+        globalSyncPollInterval = null
+        
+        // Calculate total
+        let totalFp = 0
+        Object.values(status.results || {}).forEach(msg => {
+          const match = msg.match(/(\d+) vân tay/)
+          if (match) totalFp += parseInt(match[1])
+        })
+        
+        notification.success(`Hoàn tất! Đã gom thành công ${totalFp} vân tay từ ${status.total_machines} máy.`)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }, 1500)
+}
 
 const handleSelectionChange = (ids) => {
   selectedIds.value = ids
+}
+
+const handleBulkPushSuccess = () => {
+  isBulkPushModalOpen.value = false
+  fetchEmployees()
 }
 
 let bulkPollInterval = null
@@ -498,5 +651,52 @@ onUnmounted(() => {
 
 .filter-bar input:focus, .filter-bar select:focus {
   border-color: #3b82f6;
+}
+</style>
+<style scoped>
+.spin {
+  animation: spin 1.5s linear infinite;
+  display: inline-block;
+}
+.clear-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
+  padding: 0.5rem;
+  z-index: 100;
+  min-width: 200px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+}
+.clear-dropdown-header {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  padding: 0.25rem 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.clear-dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s;
+}
+.clear-dropdown-item:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.clear-dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

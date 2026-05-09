@@ -199,7 +199,6 @@
     "bulk_delete_confirm": "Are you sure you want to delete {count} selected employees from this machine?",
     "bulk_deleting": "Deleting {count} employees...",
     "bulk_delete_success": "Successfully deleted {count} employees (skipped if non-existent)",
-    "delete_success": "Successfully deleted employee {id}",
     "delete_success": "Successfully deleted employee {id}"
   },
   "machines": {

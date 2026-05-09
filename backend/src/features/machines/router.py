@@ -11,8 +11,11 @@ from .service import (
     bulk_download_fingerprints_from_machine, get_biometric_coverage,
     delete_status, delete_user_from_all_machines,
     bulk_delete_status, bulk_delete_users_from_all_machines,
-    sync_time_on_machine, bulk_sync_time_all_machines
+    sync_time_on_machine, bulk_sync_time_all_machines,
+    global_sync_status, global_sync_all_fingerprints,
+    clear_all_fingerprints_on_machine, clear_fp_status
 )
+
 from .biometric_service import BiometricExportService
 from pydantic import BaseModel
 
@@ -25,6 +28,13 @@ class FingerprintSyncRequest(BaseModel):
     employee_id: str
 
 class BulkDeleteRequest(BaseModel):
+    employee_ids: List[str]
+
+class BulkPushRequest(BaseModel):
+    employee_ids: List[str]
+    target_ips: List[str]
+
+class BulkPushPreviewRequest(BaseModel):
     employee_ids: List[str]
 
 class PushFingerprintsRequest(BaseModel):
@@ -152,6 +162,54 @@ def get_push_status():
     """Poll status of the fingerprint push operation."""
     from .service import push_status
     return push_status
+
+@router.post("/bulk-push-fingerprints")
+def trigger_bulk_push_fingerprints(data: BulkPushRequest, background_tasks: BackgroundTasks):
+    """Start background bulk fingerprint pushing."""
+    from .service import bulk_push_status, bulk_push_fingerprints_to_machines
+    if bulk_push_status["is_running"]:
+        raise HTTPException(status_code=400, detail="Another bulk push operation is in progress")
+    
+    background_tasks.add_task(bulk_push_fingerprints_to_machines, data.employee_ids, data.target_ips)
+    return {"status": "Started", "employees_count": len(data.employee_ids), "machines_count": len(data.target_ips)}
+
+@router.get("/bulk-push-status")
+def get_bulk_push_status():
+    """Poll status of the bulk fingerprint push operation."""
+    from .service import bulk_push_status
+    return bulk_push_status
+
+@router.post("/bulk-push-preview")
+def preview_bulk_push_endpoint(data: BulkPushPreviewRequest):
+    """Preview the data before pushing."""
+    from .service import preview_bulk_push
+    return preview_bulk_push(data.employee_ids)
+
+@router.post("/sync-all-fingerprints-global")
+def trigger_global_sync_all_fingerprints(background_tasks: BackgroundTasks):
+    """Start background process to sync all fingerprints from all machines to DB."""
+    if global_sync_status["is_running"]:
+        raise HTTPException(status_code=400, detail="Global sync is already running")
+    background_tasks.add_task(global_sync_all_fingerprints)
+    return {"status": "Started"}
+
+@router.get("/sync-all-fingerprints-global/status")
+def get_global_sync_status():
+    """Get status of the global sync operation."""
+    return global_sync_status
+
+@router.post("/{ip}/clear-fingerprints")
+def clear_machine_fingerprints(ip: str, background_tasks: BackgroundTasks):
+    """Clear all user data and fingerprints on a specific machine, keeping logs."""
+    if clear_fp_status["is_running"]:
+        raise HTTPException(status_code=400, detail="Clear operation already running")
+    background_tasks.add_task(clear_all_fingerprints_on_machine, ip)
+    return {"status": "Started"}
+
+@router.get("/clear-fingerprints-status")
+def get_clear_fingerprints_status():
+    """Get status of the clear fingerprints operation."""
+    return clear_fp_status
 
 @router.post("/sync-time-all")
 def sync_all_machines_time():

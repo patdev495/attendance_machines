@@ -81,6 +81,18 @@ export function getBulkDeleteStatus() {
   return apiFetch('/bulk-delete-status')
 }
 
+export function bulkPushFingerprints(employeeIds, targetIps) {
+  return apiFetch('/bulk-push-fingerprints', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_ids: employeeIds, target_ips: targetIps })
+  })
+}
+
+export function getBulkPushStatus() {
+  return apiFetch('/bulk-push-status')
+}
+
 export function pushFingerprints(employeeId, targetIps) {
   return apiFetch('/push-fingerprints', {
     method: 'POST',
@@ -89,8 +101,32 @@ export function pushFingerprints(employeeId, targetIps) {
   })
 }
 
+export function previewBulkPush(employeeIds) {
+  return apiFetch('/bulk-push-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_ids: employeeIds })
+  })
+}
+
 export function getPushStatus() {
   return apiFetch('/push-status')
+}
+
+export function triggerGlobalSync() {
+  return apiFetch('/sync-all-fingerprints-global', { method: 'POST' })
+}
+
+export function getGlobalSyncStatus() {
+  return apiFetch('/sync-all-fingerprints-global/status')
+}
+
+export function clearMachineFingerprints(ip) {
+  return apiFetch(`/${ip}/clear-fingerprints`, { method: 'POST' })
+}
+
+export function getClearFpStatus() {
+  return apiFetch('/clear-fingerprints-status')
 }
 
 export const EXPORT_FINGERPRINTS_URL = BASE + '/export-fingerprints'
