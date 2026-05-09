@@ -2,12 +2,12 @@
   <div class="shift-management-view">
     <div class="header">
       <div class="title-section">
-        <h1>Quản Lý Ca Làm Việc</h1>
-        <p class="subtitle">Định nghĩa giờ bắt đầu, kết thúc, giờ nghỉ và định mức công cho từng mã ca.</p>
+        <h1>{{ $t('employees.shifts.title') }}</h1>
+        <p class="subtitle">{{ $t('employees.shifts.subtitle') }}</p>
       </div>
       
       <button class="btn-add btn-primary shadow-lg" @click="handleAdd">
-        <span class="icon">+</span> Thêm Ca Mới
+        <span class="icon">+</span> {{ $t('employees.shifts.add_btn') }}
       </button>
     </div>
 
@@ -16,21 +16,21 @@
         <table class="shift-table">
           <thead>
             <tr>
-              <th>Mã Ca</th>
-              <th>Khung Giờ</th>
-              <th>Loại Ngày</th>
-              <th class="text-center">Công</th>
-              <th class="text-center">Nghỉ</th>
-              <th class="text-center" title="Nghỉ Phép">P</th>
-              <th class="text-center" title="Việc Riêng">R</th>
-              <th class="text-center" title="Ốm/Khác">O</th>
-              <th class="text-center" title="Nghỉ Tang">T</th>
-              <th class="text-center" title="Nghỉ Cưới">C</th>
-              <th class="text-center" title="Không Phép">K</th>
-              <th class="text-center" title="Định mức làm tròn">Tròn</th>
-              <th class="text-center" title="Định mức chia công">Chia</th>
-              <th>Mô Tả</th>
-              <th class="text-right">Thao Tác</th>
+              <th>{{ $t('employees.shifts.table.code') }}</th>
+              <th>{{ $t('employees.shifts.table.range') }}</th>
+              <th>{{ $t('employees.shifts.table.type') }}</th>
+              <th class="text-center">{{ $t('employees.shifts.table.work') }}</th>
+              <th class="text-center">{{ $t('employees.shifts.table.break') }}</th>
+              <th class="text-center" :title="$t('employees.shifts.leave_types.p')">P</th>
+              <th class="text-center" :title="$t('employees.shifts.leave_types.r')">R</th>
+              <th class="text-center" :title="$t('employees.shifts.leave_types.o')">O</th>
+              <th class="text-center" :title="$t('employees.shifts.leave_types.t')">T</th>
+              <th class="text-center" :title="$t('employees.shifts.leave_types.c')">C</th>
+              <th class="text-center" :title="$t('employees.shifts.leave_types.k')">K</th>
+              <th class="text-center" :title="$t('employees.shifts.table.round')">{{ $t('employees.shifts.table.round_short') }}</th>
+              <th class="text-center" :title="$t('employees.shifts.table.base')">{{ $t('employees.shifts.table.base_short') }}</th>
+              <th>{{ $t('employees.shifts.table.desc') }}</th>
+              <th class="text-right">{{ $t('employees.shifts.table.actions') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -45,11 +45,10 @@
                   <span class="time">{{ shift.start_time?.slice(0, 5) || '--:--' }}</span>
                   <span class="arrow">→</span>
                   <span class="time">{{ shift.end_time?.slice(0, 5) || '--:--' }}</span>
-                  <span v-if="shift.ot_start_time" class="ot-badge" :title="'Tăng ca tính từ ' + shift.ot_start_time">
+                  <span v-if="shift.ot_start_time" class="ot-badge" :title="$t('employees.shifts.ot_start') + ' ' + shift.ot_start_time">
                     OT: {{ shift.ot_start_time.slice(0, 5) }}
                   </span>
-                  <span v-if="shift.is_night_shift" class="tag-night">Đêm</span>
-
+                  <span v-if="shift.is_night_shift" class="tag-night">{{ $t('employees.shifts.night_tag') }}</span>
                 </div>
               </td>
               <td>
@@ -81,17 +80,17 @@
               <td class="text-center text-accent font-bold">{{ shift.workday_base.toFixed(1) }}</td>
               <td class="text-muted italic desc-col">{{ shift.description || '-' }}</td>
               <td class="text-right actions">
-                <button class="btn-icon" title="Sửa" @click="handleEdit(shift)">
+                <button class="btn-icon" :title="$t('common.edit')" @click="handleEdit(shift)">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-                <button class="btn-icon delete" title="Xóa" @click="handleDelete(shift)">
+                <button class="btn-icon delete" :title="$t('common.delete')" @click="handleDelete(shift)">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                 </button>
               </td>
             </tr>
             <tr v-if="shifts.length === 0">
-              <td colspan="9" class="empty-state">
-                Không có dữ liệu
+              <td colspan="15" class="empty-state">
+                {{ $t('attendance.table.no_records') }}
               </td>
             </tr>
           </tbody>
@@ -110,9 +109,12 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { shiftsApi } from './api'
 import EditShiftModal from './components/EditShiftModal.vue'
 import { useNotificationStore } from '@/stores/notification'
+
+const { t } = useI18n()
 
 const notification = useNotificationStore()
 
@@ -140,24 +142,24 @@ const handleEdit = (shift) => {
 
 const handleDelete = async (shift) => {
   const confirmed = await notification.confirm(
-    `Bạn có chắc muốn xóa mã ca ${shift.shift_code}?`,
-    'Xác nhận'
+    t('employees.shifts.delete_confirm', { code: shift.shift_code }),
+    t('common.confirm')
   )
   if (confirmed) {
     try {
       await shiftsApi.deleteShift(shift.shift_code)
-      notification.success('Thành công')
+      notification.success(t('employees.shifts.delete_success'))
       fetchShifts()
     } catch (err) {
-      notification.error('Lỗi khi xóa')
+      notification.error(t('employees.shifts.delete_error'))
     }
   }
 }
 
 const formatCategory = (cat) => {
-  if (cat === 'HOLIDAY') return 'Nghỉ Lễ';
-  if (cat === 'ROTATION') return 'Luân Phiên';
-  return 'Ngày Thường';
+  if (cat === 'HOLIDAY') return t('employees.shifts.cat_holiday');
+  if (cat === 'ROTATION') return t('employees.shifts.cat_rotation');
+  return t('employees.shifts.cat_normal');
 }
 
 const getCategoryClass = (cat) => {

@@ -82,7 +82,10 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue'
+import { useNotificationStore } from '@/stores/notification.js'
 import * as machinesApi from '../api'
+
+const notification = useNotificationStore()
 
 const props = defineProps({
   isOpen: Boolean,
@@ -143,7 +146,7 @@ async function startPush() {
     pushStatus.value.is_running = true
     startPolling()
   } catch (err) {
-    alert('Failed to start push: ' + err.message)
+    notification.error('Failed to start push: ' + err.message)
   }
 }
 

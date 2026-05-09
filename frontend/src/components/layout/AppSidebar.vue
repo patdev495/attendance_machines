@@ -62,7 +62,20 @@
         <div class="icon">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </div>
-        <span class="label">All Shift</span>
+        <span class="label">{{ $t('nav.shifts') }}</span>
+      </router-link>
+
+      <div class="nav-divider"></div>
+
+      <!-- Meal Kiosk -->
+      <router-link 
+        to="/meal-kiosk" 
+        :class="['nav-item', route.path === '/meal-kiosk' ? 'active' : '']"
+      >
+        <div class="icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>
+        </div>
+        <span class="label">{{ $t('meal.kiosk_title') }}</span>
       </router-link>
 
     </nav>

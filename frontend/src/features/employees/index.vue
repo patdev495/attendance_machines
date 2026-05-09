@@ -18,24 +18,24 @@
         </transition>
 
         <a :href="exportUrl" class="btn-secondary" style="text-decoration: none;">
-          <span class="icon">📊</span> Xuất Excel
+          <span class="icon">📊</span> {{ $t('employees.export_excel') }}
         </a>
 
         <button class="btn-secondary" @click="handleGlobalSync" :disabled="globalSyncStatus.is_running" style="border-color: #10b981; color: #10b981;">
           <span class="icon" :class="{'spin': globalSyncStatus.is_running}">🔄</span> 
-          {{ globalSyncStatus.is_running ? 'Đang gom vân tay...' : 'Gom Vân Tay Từ Tất Cả Máy' }}
+          {{ globalSyncStatus.is_running ? $t('employees.syncing_fingerprints') : $t('employees.collect_all_fingerprints') }}
         </button>
 
         <button class="btn-secondary" @click="isBulkPushModalOpen = true">
-          <span class="icon">📤</span> Đẩy vân tay hàng loạt
+          <span class="icon">📤</span> {{ $t('employees.bulk_push_fingerprints') }}
         </button>
 
         <div class="dropdown-wrapper" style="position: relative;">
           <button class="btn-secondary" @click="showClearDropdown = !showClearDropdown" style="border-color: #ef4444; color: #ef4444;">
-            <span class="icon">🗑️</span> Xóa vân tay máy
+            <span class="icon">🗑️</span> {{ $t('employees.clear_fingerprints_machine') }}
           </button>
           <div v-if="showClearDropdown" class="clear-dropdown">
-            <div class="clear-dropdown-header">→ Chọn máy cần xóa vân tay</div>
+            <div class="clear-dropdown-header">{{ $t('employees.select_machine_to_clear') }}</div>
             <button v-for="ip in clearMachineList" :key="ip" class="clear-dropdown-item" @click="handleClearMachine(ip)" :disabled="isClearingMachine">
               {{ ip }}
             </button>
@@ -62,7 +62,7 @@
       <div class="banner-content">
         <div class="spinner-small" style="border-top-color: #10b981;"></div>
         <span style="color: #10b981;">
-          Đang thu thập vân tay: Máy {{ globalSyncStatus.processed_count + 1 }} / {{ globalSyncStatus.total_machines }} (Đang quét: {{ globalSyncStatus.current_ip }})
+          {{ $t('employees.collect_progress', { current: globalSyncStatus.processed_count + 1, total: globalSyncStatus.total_machines, ip: globalSyncStatus.current_ip }) }}
         </span>
       </div>
     </div>
@@ -72,7 +72,7 @@
       <div class="banner-content">
         <div class="spinner-small" style="border-top-color: #ef4444;"></div>
         <span style="color: #ef4444;">
-          Đang xóa vân tay trên {{ clearFpStatus.ip }}: {{ clearFpStatus.processed_users }}/{{ clearFpStatus.total_users }} người dùng
+          {{ $t('employees.clear_progress', { ip: clearFpStatus.ip, processed: clearFpStatus.processed_users, total: clearFpStatus.total_users }) }}
         </span>
       </div>
     </div>
@@ -230,7 +230,8 @@ onMounted(() => document.addEventListener('click', handleClickOutside))
 onUnmounted(() => document.removeEventListener('click', handleClickOutside))
 
 const handleClearMachine = async (ip) => {
-  if (!confirm(`❗ NGUY HIỂM: Thao tác này sẽ xóa TOÀN BỘ vân tay và dữ liệu người dùng trên máy ${ip}.\n\nLog chấm công sẽ ĐƯỢC GIỮ LẠI.\nSau khi xóa, anh có thể dùng "Đẩy vân tay hàng loạt" để nạp lại.\n\nTiếp tục?`)) return
+  const confirmed = await notification.confirm(t('employees.clear_confirm', { ip }))
+  if (!confirmed) return
   
   try {
     showClearDropdown.value = false
@@ -266,11 +267,12 @@ const globalSyncStatus = ref({
 let globalSyncPollInterval = null
 
 const handleGlobalSync = async () => {
-  if (!confirm('Thao tác này sẽ dọn dẹp vân tay cũ trong DB và thu thập lại TẤT CẢ vân tay từ các máy chấm công hiện có để làm chuẩn mới. Quá trình có thể mất vài phút.\n\nTiếp tục?')) return
+  const confirmed = await notification.confirm(t('employees.collect_confirm'))
+  if (!confirmed) return
   
   try {
     await triggerGlobalSync()
-    notification.success('Đã bắt đầu tiến trình gom vân tay toàn cục')
+    notification.success(t('employees.collect_start_success'))
     globalSyncStatus.value.is_running = true
     startGlobalSyncPoll()
   } catch (err) {
@@ -296,7 +298,7 @@ const startGlobalSyncPoll = () => {
           if (match) totalFp += parseInt(match[1])
         })
         
-        notification.success(`Hoàn tất! Đã gom thành công ${totalFp} vân tay từ ${status.total_machines} máy.`)
+        notification.success(t('employees.collect_complete_success', { count: totalFp, machines: status.total_machines }))
       }
     } catch (e) {
       console.error(e)

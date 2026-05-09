@@ -27,12 +27,16 @@ class Config:
     DB_NAME = os.getenv("DB_NAME", "MIS")
     DB_USER = os.getenv("DB_USER", "mis01")
     DB_PASS = os.getenv("DB_PASS", "mis01")
+    DB_NAME_MEAL = os.getenv("DB_NAME_MEAL", "NY_VDS_DB")
     
-    # Connection String Template
+    # Connection String Templates
     @property
     def DATABASE_URL(self):
-        # We need to escape special characters if in connection string, but f-string is usually fine here
         return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no"
+
+    @property
+    def MEAL_DATABASE_URL(self):
+        return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME_MEAL}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no"
 
     # Directory settings
     BACKEND_DIR = INTERNAL_DIR / "backend"

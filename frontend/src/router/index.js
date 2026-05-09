@@ -8,6 +8,7 @@ import MachinesFeature from '@/features/machines/index.vue'
 import MachineListView from '@/features/machines/views/MachineListView.vue'
 import MachineDetailView from '@/features/machines/views/MachineDetailView.vue'
 import ShiftManagementView from '@/features/admin/ShiftManagementView.vue'
+import MealKiosk from '@/features/meal_tracking/MealKiosk.vue'
 
 
 const routes = [
@@ -51,6 +52,11 @@ const routes = [
     path: '/shifts',
     name: 'shifts',
     component: ShiftManagementView
+  },
+  {
+    path: '/meal-kiosk',
+    name: 'meal-kiosk',
+    component: MealKiosk
   },
 
   // Legacy Routes Disabled

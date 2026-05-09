@@ -114,6 +114,9 @@
 import { ref, onMounted } from 'vue'
 import { employeesApi } from '../api'
 import { getMachines, getBulkDeleteStatus } from '../../machines/api'
+import { useNotificationStore } from '@/stores/notification'
+
+const notification = useNotificationStore()
 
 // Add getBulkDeleteStatus to employeesApi if not there, or use it directly
 employeesApi.getBulkDeleteStatus = getBulkDeleteStatus
@@ -172,7 +175,7 @@ async function handleStart() {
     startPolling()
   } catch (e) {
     console.error('Bulk hardware delete failed', e)
-    alert(e.message)
+    notification.error(e.message)
     isLoading.value = false
   }
 }

@@ -188,7 +188,7 @@ async function handleBulkDelete() {
 }
 
 async function handleRename(user) {
-  const newName = prompt(t('device.rename_prompt', { id: user.user_id }), user.name || '')
+  const newName = await notification.prompt(t('device.rename_prompt', { id: user.user_id }), t('device.action.rename'), user.name || '')
   if (newName === null || newName === user.name) return
   
   const notifyId = notification.info(t('device.renaming', { name: newName }), 0)

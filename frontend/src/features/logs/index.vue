@@ -74,7 +74,7 @@ const activeFilters = ref({})
 const liveMode = ref(false)
 
 const { connect, disconnect } = useLiveLogs((payload) => {
-  if (payload.type === 'new_log' && liveMode.value) {
+  if ((payload.type === 'new_log' || payload.type === 'meal_event') && liveMode.value) {
     const newLog = payload.data
     
     // Always add to the raw source list

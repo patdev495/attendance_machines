@@ -3,14 +3,22 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from config import config
 
-# Using the connection string format from central config
+# Main Attendance Database Engine (MIS)
 engine = create_engine(
     config.DATABASE_URL, 
     pool_pre_ping=True, 
     pool_recycle=3600,
 )
-
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Meal Tracking Database Engine (NY_VDS_DB)
+meal_engine = create_engine(
+    config.MEAL_DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
+MealSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=meal_engine)
+
 Base = declarative_base()
 
 class ShiftRule(Base):
@@ -127,6 +135,24 @@ class ShiftDefinition(Base):
     shift_category  = Column(Unicode(50), nullable=True, default="NORMAL")
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# v4.0 NEW TABLE — MealTrackingHistory
+# Stores history of meal verification swipes on canteen machines.
+# ──────────────────────────────────────────────────────────────────────────────
+class MealTrackingHistory(Base):
+    __tablename__ = "MealTrackingHistory"
+    id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(String(50), nullable=False, index=True) # ID scanned (could be machine ID or EMP_NO)
+    emp_name = Column(Unicode(255), nullable=True)
+    department = Column(Unicode(255), nullable=True)
+    meal_code = Column(String(50), nullable=True)
+    meal_name = Column(Unicode(255), nullable=True)
+    machine_ip = Column(String(50), nullable=False, index=True)
+    swipe_time = Column(DateTime, nullable=False, index=True)
+    is_registered = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.current_timestamp())
+
+
 def init_db():
     # create_all is additive — it only creates tables that do not yet exist.
     # Existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata,
@@ -135,6 +161,13 @@ def init_db():
 
 def get_db():
     db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def get_meal_db():
+    db = MealSessionLocal()
     try:
         yield db
     finally:

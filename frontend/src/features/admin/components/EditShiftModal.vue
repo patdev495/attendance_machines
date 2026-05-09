@@ -5,7 +5,7 @@
         <Transition name="scale">
           <div v-if="isOpen" class="modal-content glass shadow-2xl">
             <div class="modal-header">
-              <h3>{{ isEdit ? 'Chỉnh Sửa Ca Làm Việc' : 'Thêm Ca Làm Việc Mới' }}</h3>
+              <h3>{{ isEdit ? $t('employees.shifts.modal.edit_title') : $t('employees.shifts.modal.add_title') }}</h3>
               <button class="btn-close" @click="close">×</button>
             </div>
 
@@ -13,36 +13,36 @@
               <form @submit.prevent="handleSave">
                 <!-- Shift Code -->
                 <div class="form-group">
-                  <label>Mã Ca Làm Việc (Ví dụ: N, D12, 4N4P)</label>
+                  <label>{{ $t('employees.shifts.modal.code_label') }}</label>
                   <input 
                     type="text" 
                     v-model="formData.shift_code" 
                     :disabled="isEdit"
                     :class="{ 'input-disabled': isEdit }"
-                    placeholder="Nhập mã ca..."
+                    :placeholder="$t('employees.shifts.modal.code_placeholder')"
                     required
                   />
                 </div>
 
                 <!-- Shift Category -->
                 <div class="form-group">
-                  <label>Phân Loại Ngày Làm Việc (Tính công/Tăng ca)</label>
+                  <label>{{ $t('employees.shifts.modal.cat_label') }}</label>
                   <select v-model="formData.shift_category" class="form-select">
-                    <option value="NORMAL">Ngày Thường (Tính công chuẩn/OT thường)</option>
-                    <option value="HOLIDAY">Nghỉ Lễ (Tính công/OT Lễ)</option>
-                    <option value="ROTATION">Nghỉ Luân Phiên (Tính công/OT Luân phiên)</option>
+                    <option value="NORMAL">{{ $t('employees.shifts.modal.cat_normal_hint') }}</option>
+                    <option value="HOLIDAY">{{ $t('employees.shifts.modal.cat_holiday_hint') }}</option>
+                    <option value="ROTATION">{{ $t('employees.shifts.modal.cat_rotation_hint') }}</option>
                   </select>
                 </div>
 
                 <div class="form-row">
                   <!-- Start Time -->
                   <div class="form-group flex-1">
-                    <label>Giờ Bắt Đầu</label>
+                    <label>{{ $t('employees.shifts.modal.start_time') }}</label>
                     <input type="time" v-model="formData.start_time" step="1" />
                   </div>
                   <!-- End Time -->
                   <div class="form-group flex-1">
-                    <label>Giờ Kết Thúc</label>
+                    <label>{{ $t('employees.shifts.modal.end_time') }}</label>
                     <input type="time" v-model="formData.end_time" step="1" />
                   </div>
                 </div>
@@ -51,43 +51,43 @@
                 <div class="form-group checkbox-group">
                   <label class="checkbox-label">
                     <input type="checkbox" v-model="formData.is_night_shift" />
-                    <span>Đây là ca đêm (Kết thúc vào sáng hôm sau)</span>
+                    <span>{{ $t('employees.shifts.modal.night_toggle') }}</span>
                   </label>
                 </div>
 
                 <!-- OT Start Time (Custom Anchor) -->
                 <div class="form-group">
-                  <label>Mốc Tính Tăng Ca <span class="text-xs text-muted">(Bỏ trống = Tính từ lúc kết thúc ca)</span></label>
-                  <input type="time" v-model="formData.ot_start_time" step="1" placeholder="Bỏ trống nếu tính từ lúc hết ca" />
+                  <label>{{ $t('employees.shifts.modal.ot_start_label') }} <span class="text-xs text-muted">{{ $t('employees.shifts.modal.ot_start_hint') }}</span></label>
+                  <input type="time" v-model="formData.ot_start_time" step="1" />
                 </div>
 
 
                 <div class="form-row">
                   <!-- Work Hours -->
                   <div class="form-group flex-1">
-                    <label>Số Giờ Làm Thực Tế</label>
+                    <label>{{ $t('employees.shifts.modal.work_hours') }}</label>
                     <input type="number" v-model.number="formData.work_hours" step="0.1" min="0" />
                   </div>
                   <!-- Break Hours -->
                   <div class="form-group flex-1">
-                    <label>Số Giờ Nghỉ Giữa Ca</label>
+                    <label>{{ $t('employees.shifts.modal.break_hours') }}</label>
                     <input type="number" v-model.number="formData.break_hours" step="0.1" min="0" />
                   </div>
                 </div>
                 <div class="form-row">
                   <!-- P -->
                   <div class="form-group flex-1">
-                    <label>Phép (P)</label>
+                    <label>P</label>
                     <input type="number" v-model.number="formData.leave_hours_p" step="0.1" min="0" />
                   </div>
                   <!-- R -->
                   <div class="form-group flex-1">
-                    <label>Việc Riêng (R)</label>
+                    <label>R</label>
                     <input type="number" v-model.number="formData.leave_hours_r" step="0.1" min="0" />
                   </div>
                   <!-- O -->
                   <div class="form-group flex-1">
-                    <label>Ốm (O)</label>
+                    <label>O</label>
                     <input type="number" v-model.number="formData.leave_hours_o" step="0.1" min="0" />
                   </div>
                 </div>
@@ -95,44 +95,44 @@
                 <div class="form-row">
                   <!-- T -->
                   <div class="form-group flex-1">
-                    <label>Tang (T)</label>
+                    <label>T</label>
                     <input type="number" v-model.number="formData.leave_hours_t" step="0.1" min="0" />
                   </div>
                   <!-- C -->
                   <div class="form-group flex-1">
-                    <label>Cưới (C)</label>
+                    <label>C</label>
                     <input type="number" v-model.number="formData.leave_hours_c" step="0.1" min="0" />
                   </div>
                   <!-- K -->
                   <div class="form-group flex-1">
-                    <label>Không Phép (K)</label>
+                    <label>K</label>
                     <input type="number" v-model.number="formData.leave_hours_k" step="0.1" min="0" />
                   </div>
                 </div>
 
                 <div class="form-row">
                   <div class="form-group flex-1">
-                    <label>Định Mức LÀM TRÒN (VD: 8.0, 12.0)</label>
+                    <label>{{ $t('employees.shifts.table.round') }}</label>
                     <input type="number" v-model.number="formData.standard_hours" step="0.1" min="0" />
                   </div>
                   <div class="form-group flex-1">
-                    <label>Định Mức CHIA CÔNG (VD: 8.0, 12.0)</label>
+                    <label>{{ $t('employees.shifts.table.base') }}</label>
                     <input type="number" v-model.number="formData.workday_base" step="0.1" min="0" />
                   </div>
                 </div>
 
                 <div class="form-group">
-                  <label>Mô Tả Ghi Chú</label>
-                  <input type="text" v-model="formData.description" placeholder="Nhập mô tả ca..." />
+                  <label>{{ $t('employees.shifts.modal.desc_label') }}</label>
+                  <input type="text" v-model="formData.description" :placeholder="$t('employees.shifts.modal.desc_placeholder')" />
                 </div>
               </form>
             </div>
 
             <div class="modal-footer">
-              <button class="btn-cancel" @click="close" :disabled="loading">Hủy Bỏ</button>
+              <button class="btn-cancel" @click="close" :disabled="loading">{{ $t('common.cancel') }}</button>
               <button class="btn-save" @click="handleSave" :disabled="loading">
-                <span v-if="loading">Đang lưu...</span>
-                <span v-else>Lưu Thông Tin</span>
+                <span v-if="loading">{{ $t('employees.shifts.modal.saving') }}</span>
+                <span v-else>{{ $t('employees.shifts.modal.save_btn') }}</span>
               </button>
             </div>
           </div>
@@ -144,9 +144,11 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { shiftsApi } from '../api.js'
 import { useNotificationStore } from '@/stores/notification'
 
+const { t } = useI18n()
 const notify = useNotificationStore()
 
 const props = defineProps({
@@ -222,12 +224,12 @@ const handleSave = async () => {
     } else {
       await shiftsApi.createShift(formData.value)
     }
-    notify.success('Cập nhật thành công')
+    notify.success(t('common.updated_success'))
     emit('saved')
     close()
   } catch (err) {
     console.error(err)
-    notify.error('Có lỗi xảy ra: ' + (err.response?.data?.detail || err.message))
+    notify.error(t('common.error') + ': ' + (err.response?.data?.detail || err.message))
   } finally {
     loading.value = false
   }

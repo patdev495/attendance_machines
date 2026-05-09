@@ -11,6 +11,14 @@ export const useNotificationStore = defineStore('notification', () => {
     resolve: null
   })
 
+  const promptState = ref({
+    isOpen: false,
+    title: '',
+    message: '',
+    defaultValue: '',
+    resolve: null
+  })
+
   function add(message, type = 'info', duration = 5000) {
     const id = Math.random().toString(36).substring(2, 11) + Date.now().toString(36)
     notifications.value.push({
@@ -65,8 +73,29 @@ export const useNotificationStore = defineStore('notification', () => {
     confirmState.value.isOpen = false
   }
 
+  function prompt(message, title, defaultValue = '') {
+    const defaultTitle = i18n.global.t('common.prompt')
+    return new Promise((resolve) => {
+      promptState.value = {
+        isOpen: true,
+        title: title || defaultTitle,
+        message,
+        defaultValue,
+        resolve
+      }
+    })
+  }
+
+  function resolvePrompt(value) {
+    if (promptState.value.resolve) {
+      promptState.value.resolve(value)
+    }
+    promptState.value.isOpen = false
+  }
+
   return { 
     notifications, add, remove, success, error, info, warn, clearByType,
-    confirmState, confirm, resolveConfirm
+    confirmState, confirm, resolveConfirm,
+    promptState, prompt, resolvePrompt
   }
 })

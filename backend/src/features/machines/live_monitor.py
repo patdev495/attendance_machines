@@ -17,6 +17,7 @@ class LiveMonitorManager:
         self.executor = ThreadPoolExecutor(max_workers=20)
         self.active_monitors = {} # ip -> thread/future
         self.meal_configs = {}    # ip -> meal_url
+        self.canteen_ips = set()  # IPs tagged as canteen
         self.is_running = False
         self._loop = None
 
@@ -42,6 +43,10 @@ class LiveMonitorManager:
                 for cfg in live_configs:
                     ip = cfg['ip']
                     self.meal_configs[ip] = cfg['meal_url']
+                    if cfg.get('is_canteen'):
+                        self.canteen_ips.add(ip)
+                    else:
+                        self.canteen_ips.discard(ip)
                     # Start monitor if it's new or the previous thread died
                     if ip not in self.active_monitors or not self.active_monitors[ip].is_alive():
                         print(f"DEBUG: Starting monitor thread for {ip}")
@@ -156,15 +161,34 @@ class LiveMonitorManager:
             ).first()
             emp_name = emp.emp_name if emp else f"ID: {user_id}"
 
-            # 3. Broadcast to WebSockets
+            # 3. Enrich with meal info if this is a canteen machine
+            meal_info = None
+            if ip in self.canteen_ips:
+                try:
+                    from features.meal_tracking.service import check_meal_by_machine_id, log_meal_swipe
+                    meal_info = check_meal_by_machine_id(user_id, timestamp.date())
+                    if meal_info:
+                        logger.info(f"MEAL FOUND for {user_id}: {meal_info.get('meal_name_vi', '?')}")
+                    else:
+                        logger.info(f"NO MEAL registered for {user_id} on {timestamp.date()}")
+                        
+                    # Log swipe to MealTrackingHistory
+                    log_meal_swipe(user_id, ip, timestamp, meal_info)
+                except Exception as e:
+                    logger.error(f"Error querying/logging meal info: {e}")
+
+            # 4. Broadcast to WebSockets
             payload = {
-                "type": "new_log",
+                "type": "meal_event" if ip in self.canteen_ips else "new_log",
                 "data": {
                     "employee_id": user_id,
                     "emp_name": emp_name,
+                    "department": emp.department if emp else "-",
                     "attendance_time": timestamp.isoformat(),
                     "machine_ip": ip,
-                    "is_live": True
+                    "is_live": True,
+                    "is_canteen": ip in self.canteen_ips,
+                    "meal_info": meal_info
                 }
             }
             self._broadcast_async(payload)

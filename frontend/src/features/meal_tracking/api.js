@@ -1,0 +1,23 @@
+import axios from 'axios'
+
+export const mealApi = {
+  checkMeal(empId, checkDate) {
+    let url = `/api/meal/check/${empId}`
+    if (checkDate) {
+      url += `?check_date=${checkDate}`
+    }
+    return axios.get(url)
+  },
+  
+  getMealList(params) {
+    return axios.get('/api/meal/list', { params })
+  },
+  
+  manualSwipe(empId, machineIp) {
+    return axios.post('/api/meal/manual_swipe', { emp_id: empId, machine_ip: machineIp })
+  },
+  
+  getCanteenMachines() {
+    return axios.get('/api/meal/canteen-machines')
+  }
+}

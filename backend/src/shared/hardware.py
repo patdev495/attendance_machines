@@ -18,7 +18,7 @@ def get_machine_list(file_path=config.MACHINES_FILE):
 def get_live_machine_list(file_path=config.MACHINES_FILE):
     """
     Returns a list of machine configurations that are NOT marked with # nolive.
-    Each item: {"ip": "...", "meal_url": "..." or None}
+    Each item: {"ip": "...", "meal_url": "..." or None, "is_canteen": bool}
     """
     try:
         live_configs = []
@@ -44,11 +44,21 @@ def get_live_machine_list(file_path=config.MACHINES_FILE):
                     if len(parts) > 1:
                         meal_url = parts[1].strip().split(' ')[0] # take first word after tag
 
+                # Check for canteen tag
+                is_canteen = '# canteen' in content.lower()
+
                 live_configs.append({
                     "ip": ip,
-                    "meal_url": meal_url
+                    "meal_url": meal_url,
+                    "is_canteen": is_canteen
                 })
         return live_configs
     except Exception as e:
         logger.error(f"Error filtering live machines: {e}")
         return []
+
+def get_canteen_machine_list(file_path=config.MACHINES_FILE):
+    """
+    Returns list of IPs marked with # canteen tag.
+    """
+    return [cfg['ip'] for cfg in get_live_machine_list(file_path) if cfg['is_canteen']]

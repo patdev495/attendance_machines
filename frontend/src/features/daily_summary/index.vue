@@ -182,7 +182,7 @@ const startExportPolling = () => {
             } else if (data.error) {
                 clearInterval(exportPoller)
                 exporting.value = false
-                alert(t('attendance.export.error_prefix') + ': ' + data.error)
+                notify.error(t('attendance.export.error_prefix') + ': ' + data.error)
             }
         } catch (e) {
             console.error('Export poll error', e)

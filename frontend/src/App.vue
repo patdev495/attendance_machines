@@ -5,6 +5,7 @@
       <AppHeader />
       <ToastNotification />
       <ConfirmModal />
+      <PromptModal />
       <main class="container">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -21,6 +22,7 @@ import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import ToastNotification from '@/components/shared/ToastNotification.vue'
 import ConfirmModal from '@/components/shared/ConfirmModal.vue'
+import PromptModal from '@/components/shared/PromptModal.vue'
 </script>
 
 <style scoped>
