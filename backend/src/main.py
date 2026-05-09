@@ -38,6 +38,15 @@ async def lifespan(app: FastAPI):
     live_monitor.stop()
 
 def create_app() -> FastAPI:
+    # Set up logging for the application
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Initializing Application...")
+    
     init_db()
     app = FastAPI(title="Time Attendance System", lifespan=lifespan)
 

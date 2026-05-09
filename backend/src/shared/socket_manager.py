@@ -20,13 +20,14 @@ class ConnectionManager:
 
     async def broadcast(self, message: dict):
         """Send message to all connected clients."""
+        print(f"DEBUG: WebSocket Broadcast starting for {len(self.active_connections)} clients")
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
+                print("DEBUG: WebSocket message sent successfully")
             except Exception as e:
                 logger.error(f"Error broadcasting to client: {e}")
-                # Connection might be dead, but we'll let disconnect handle it if possible
-                # or remove it here if it's clearly broken
+                print(f"DEBUG: WebSocket send error: {e}")
                 pass
 
 # Global instance
