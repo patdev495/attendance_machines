@@ -54,8 +54,8 @@ const routes = [
     component: ShiftManagementView
   },
   {
-    path: '/meal-kiosk',
-    name: 'meal-kiosk',
+    path: '/meal',
+    name: 'meal',
     component: MealKiosk
   },
 

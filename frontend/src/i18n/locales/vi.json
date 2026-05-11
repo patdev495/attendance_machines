@@ -1,5 +1,6 @@
 {
   "common": {
+    "home": "Trang chủ",
     "no_data": "Không có dữ liệu",
     "loading": "Đang tải...",
     "info": "Thông báo",
@@ -32,7 +33,6 @@
     "employees": "Nhân Viên",
     "shifts": "Quản Lý Ca"
   },
-
   "employees": {
     "title": "Quản Lý Nhân Viên",
     "upload_sync": "Tải lên & Đồng bộ Registry",
@@ -392,22 +392,34 @@
     }
   },
   "meal": {
-    "kiosk_title": "Canteen Kiosk",
+    "kiosk_title": "Kiosk Nhà ăn",
     "quick_search_placeholder": "Nhập Mã tay...",
+    "input_code_btn": "Nhập mã",
     "search_btn": "Tra cứu",
     "all_machines": "Tất cả máy nhà ăn",
     "machine_label": "Cửa / Máy:",
-    "status_valid": "HỢP LỆ - CÓ SUẤT ĂN",
-    "status_invalid": "KHÔNG CÓ ĐĂNG KÝ",
-    "unknown_name": "Không rõ tên",
+    "status_valid": "HỢP LỆ - MỜI NHẬN SUẤT",
+    "status_invalid": "KHÔNG HỢP LỆ",
+    "status_duplicate": "BẠN ĐÃ NHẬN SUẤT ĂN TRƯỚC ĐÓ RỒI",
+    "waiting": "Đang chờ người tiếp theo...",
     "emp_id_label": "Mã NV:",
     "dept_label": "Bộ phận:",
     "not_registered": "Không đăng ký",
+    "not_registered_msg": "Không tìm thấy đăng ký suất ăn",
     "time_label": "Thời gian:",
-    "waiting": "Đang chờ...",
     "history_title": "Lịch sử & Tra cứu",
+    "live_history_title": "Lịch sử quét (Live)",
+    "record_count": "{count} bản ghi",
+    "today_reg_msg": "Hôm nay bạn đăng ký {meal}",
     "search_placeholder": "Nhập Mã NV...",
     "find_btn": "Tìm",
+    "stats": {
+      "registered": "Đã đăng ký",
+      "picked_up": "Đã nhận",
+      "rice": "CƠM (RICE)",
+      "noodle": "MỲ (NOODLE)",
+      "bread": "BÁNH MÌ (BREAD)"
+    },
     "table": {
       "time": "Thời gian / Ngày",
       "emp_id": "Mã NV",

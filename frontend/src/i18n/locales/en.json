@@ -1,5 +1,6 @@
 {
   "common": {
+    "home": "Home",
     "no_data": "No Data",
     "loading": "Loading...",
     "info": "Information",
@@ -362,20 +363,33 @@
   "meal": {
     "kiosk_title": "Canteen Kiosk",
     "quick_search_placeholder": "Enter ID...",
+    "input_code_btn": "Input ID",
     "search_btn": "Search",
     "all_machines": "All Canteen Machines",
     "machine_label": "Door / Machine:",
-    "status_valid": "VALID - MEAL REGISTERED",
+    "status_valid": "VALID - PLEASE TAKE MEAL",
     "status_invalid": "NOT REGISTERED",
+    "status_duplicate": "ALREADY RECEIVED MEAL",
     "unknown_name": "Unknown Name",
     "emp_id_label": "EMP ID:",
     "dept_label": "Dept:",
     "not_registered": "Not Registered",
+    "not_registered_msg": "Meal registration not found",
     "time_label": "Time:",
-    "waiting": "Waiting...",
+    "waiting": "Waiting for next person...",
     "history_title": "History & Search",
+    "live_history_title": "Live Scan History",
+    "record_count": "{count} records",
+    "today_reg_msg": "You registered {meal} today",
     "search_placeholder": "Enter EMP ID...",
     "find_btn": "Find",
+    "stats": {
+      "registered": "Registered",
+      "picked_up": "Received",
+      "rice": "RICE",
+      "noodle": "NOODLE",
+      "bread": "BREAD"
+    },
     "table": {
       "time": "Time / Date",
       "emp_id": "EMP ID",

@@ -245,7 +245,7 @@ def log_meal_swipe(machine_user_id: str, machine_ip: str, swipe_time: datetime, 
         department = meal_info.get("department") if meal_info else None
         meal_code = meal_info.get("meal_code") if meal_info else None
         meal_name = meal_info.get("meal_name_vi") if meal_info else None
-        is_registered = bool(meal_info)
+        is_registered = meal_info.get("is_registered", False) if meal_info else False
 
         history = MealTrackingHistory(
             employee_id=machine_user_id,
@@ -262,6 +262,36 @@ def log_meal_swipe(machine_user_id: str, machine_ip: str, swipe_time: datetime, 
     except Exception as e:
         logger.error(f"Failed to log meal swipe: {e}")
         db.rollback()
+    finally:
+        db.close()
+
+def was_meal_already_received(machine_user_id: str, check_date: date) -> bool:
+    """
+    Check if the user has already successfully swiped for a meal today
+    by querying the external HR_MEAL_PICKUP_LOG table.
+    """
+    from database import MealSessionLocal
+    from sqlalchemy import text
+    
+    db = MealSessionLocal()
+    try:
+        mfg_day = check_date.strftime("%Y%m%d")
+        print(f">>> DEDUP CHECK: emp_no='{machine_user_id}', mfg_day='{mfg_day}'")
+        # Check HR_MEAL_PICKUP_LOG for this user on this date
+        result = db.execute(
+            text("""
+                SELECT COUNT(*) 
+                FROM HR_MEAL_PICKUP_LOG 
+                WHERE EMP_NO = :emp_no AND MFG_DAY = :mfg_day
+            """),
+            {"emp_no": machine_user_id, "mfg_day": mfg_day}
+        ).scalar()
+        
+        print(f">>> DEDUP CHECK: COUNT result = {result}, returning {result > 0}")
+        return result > 0
+    except Exception as e:
+        logger.error(f"Error checking duplicate meal in HR DB: {e}")
+        return False
     finally:
         db.close()
 
@@ -282,3 +312,135 @@ def check_meal_by_machine_id(machine_user_id: str, check_date: date = None) -> d
             return result
             
     return None
+
+def try_log_meal_pickup(meal_info: dict, machine_ip: str) -> bool:
+    """
+    Atomically check-and-insert a meal pickup record.
+    Uses INSERT ... WHERE NOT EXISTS to prevent race conditions.
+    
+    Returns:
+        True if this was a NEW pickup (first swipe) - record was inserted.
+        False if this was a DUPLICATE (already existed) - no insert happened.
+    """
+    if not meal_info or not meal_info.get('is_registered'):
+        return False
+
+    db = MealSessionLocal()
+    try:
+        emp_no = meal_info.get('emp_no')
+        emp_name = meal_info.get('emp_name')
+        department = meal_info.get('department')
+        mfg_day = meal_info.get('mfg_day')
+        area = meal_info.get('area') or "N/A"
+        meal_code = meal_info.get('meal_code')
+        meal_zh = meal_info.get('meal_name_zh')
+        meal_vi = meal_info.get('meal_name_vi')
+        pickup_time = datetime.now()
+        
+        from sqlalchemy.exc import IntegrityError
+        # Atomic INSERT using DB's Unique Constraint (MFG_DAY, AREA, EMP_NO)
+        db.execute(
+            text("""
+                INSERT INTO HR_MEAL_PICKUP_LOG 
+                (MFG_DAY, AREA, EMP_NO, EMP_NAME, MEAL_CODE, MEAL_NAME_ZH, MEAL_NAME_VI, 
+                 PICKUP_TIME, DEVICE_NAME, PICKUP_BY, DEPARTMENT)
+                VALUES 
+                (:mfg_day, :area, :emp_no, :emp_name, :meal_code, :meal_zh, :meal_vi, 
+                 :pickup_time, :device_name, :pickup_by, :dept)
+            """),
+            {
+                "mfg_day": mfg_day,
+                "area": area,
+                "emp_no": emp_no,
+                "emp_name": emp_name,
+                "meal_code": meal_code,
+                "meal_zh": meal_zh,
+                "meal_vi": meal_vi,
+                "pickup_time": pickup_time,
+                "device_name": machine_ip,
+                "pickup_by": "System",
+                "dept": department
+            }
+        )
+        db.commit()
+        
+        was_new = True
+        print(f">>> ATOMIC MEAL: emp_no='{emp_no}', mfg_day='{mfg_day}', was_new={was_new}")
+        logger.info(f"Successfully logged external meal pickup for {emp_no} on {machine_ip}")
+        return True
+        
+    except IntegrityError as ie:
+        # Handle race condition: Check if the record was JUST inserted (within last 60s)
+        # by another process/thread or a hardware retry.
+        db.rollback()
+        
+        import time
+        time.sleep(0.1) # Wait 100ms for parallel process to commit
+        
+        # Check the existing record's pickup time
+        db_check = MealSessionLocal()
+        try:
+            mfg_day = meal_info.get('mfg_day')
+            existing = db_check.execute(
+                text("SELECT PICKUP_TIME FROM HR_MEAL_PICKUP_LOG WHERE EMP_NO = :emp_no AND MFG_DAY = :mfg_day"),
+                {"emp_no": emp_no, "mfg_day": mfg_day}
+            ).fetchone()
+            
+            if existing:
+                pickup_time_db = existing[0]
+                if isinstance(pickup_time_db, str):
+                    pickup_time_db = datetime.fromisoformat(pickup_time_db)
+                
+                time_diff = (datetime.now() - pickup_time_db).total_seconds()
+                # If it happened within the last 5 seconds, it's a race condition or hardware replay.
+                # More than 5 seconds is treated as a genuine duplicate swipe.
+                if abs(time_diff) < 5:
+                    print(f">>> ATOMIC MEAL: emp_no='{emp_no}', mfg_day='{mfg_day}', was_new=True (Race condition success, diff={time_diff:.2f}s)")
+                    return True
+        except Exception as e2:
+            logger.error(f"Error checking race condition: {e2}")
+        finally:
+            db_check.close()
+
+        print(f">>> ATOMIC MEAL: emp_no='{emp_no}', mfg_day='{mfg_day}', was_new=False (IntegrityError: {ie})")
+        logger.info(f"Duplicate meal pickup skipped for {meal_info.get('emp_no')} (already in HR DB)")
+        return False
+    except Exception as e:
+        logger.error(f"Error in atomic meal pickup for {meal_info.get('emp_no')}: {e}")
+        db.rollback()
+        return False
+    finally:
+        db.close()
+
+def get_today_pickups() -> list:
+    """
+    Fetch all successful meal pickups for today from HR_MEAL_PICKUP_LOG.
+    Ordered by most recent first.
+    """
+    today_str = datetime.now().strftime("%Y%m%d")
+    db = MealSessionLocal()
+    try:
+        query = """
+            SELECT EMP_NO, EMP_NAME, DEPARTMENT, MEAL_CODE, MEAL_NAME_VI, PICKUP_TIME, DEVICE_NAME
+            FROM HR_MEAL_PICKUP_LOG
+            WHERE MFG_DAY = :today
+            ORDER BY PICKUP_TIME DESC
+        """
+        results = db.execute(text(query), {"today": today_str}).fetchall()
+        pickups = []
+        for r in results:
+            pickups.append({
+                "emp_no": r[0].strip() if r[0] else "",
+                "emp_name": r[1],
+                "department": r[2],
+                "meal_code": r[3],
+                "meal_name_vi": r[4],
+                "attendance_time": r[5].isoformat() if isinstance(r[5], datetime) else r[5],
+                "machine_ip": r[6]
+            })
+        return pickups
+    except Exception as e:
+        logger.error(f"Error fetching today pickups: {e}")
+        return []
+    finally:
+        db.close()

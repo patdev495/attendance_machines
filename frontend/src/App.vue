@@ -1,12 +1,12 @@
 <template>
   <div class="app-layout">
-    <AppSidebar />
-    <div class="main-content">
+    <AppSidebar v-if="route.name !== 'meal'" />
+    <div class="main-content" :style="route.name === 'meal' ? { padding: 0 } : {}">
       <AppHeader />
       <ToastNotification />
       <ConfirmModal />
       <PromptModal />
-      <main class="container">
+      <main :class="route.name === 'meal' ? 'kiosk-main-wrapper' : 'container'">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -18,11 +18,14 @@
 </template>
 
 <script setup>
+import { useRoute } from 'vue-router'
 import AppSidebar from '@/components/layout/AppSidebar.vue'
 import AppHeader from '@/components/layout/AppHeader.vue'
 import ToastNotification from '@/components/shared/ToastNotification.vue'
 import ConfirmModal from '@/components/shared/ConfirmModal.vue'
 import PromptModal from '@/components/shared/PromptModal.vue'
+
+const route = useRoute()
 </script>
 
 <style scoped>
@@ -46,6 +49,13 @@ import PromptModal from '@/components/shared/PromptModal.vue'
   padding: 0 40px;
   width: 100%;
   flex: 1;
+}
+
+.kiosk-main-wrapper {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .fade-enter-active,

@@ -1,5 +1,5 @@
 <template>
-  <header class="site-header">
+  <header class="site-header" v-if="route.name !== 'meal'">
     <div class="header-left">
       <a href="#" class="site-title" @click.prevent="goHome">{{ $t('nav.title') }}</a>
       <p class="tagline">{{ $t('layout.tagline') }}</p>
@@ -48,12 +48,13 @@ import { useExportStore } from '@/stores/export.js'
 import { useAttendanceStore } from '@/stores/attendance.js'
 import { useI18n } from 'vue-i18n'
 import { setLanguage } from '@/i18n/index.js'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const syncStore = useSyncStore()
 const exportStore = useExportStore()
 const attendanceStore = useAttendanceStore()
 const router = useRouter()
+const route = useRoute()
 
 const { locale } = useI18n()
 const currentLang = ref(locale.value)

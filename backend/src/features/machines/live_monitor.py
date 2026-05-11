@@ -20,6 +20,8 @@ class LiveMonitorManager:
         self.canteen_ips = set()  # IPs tagged as canteen
         self.is_running = False
         self._loop = None
+        self._recent_events = {}  # (user_id, ip) -> timestamp for dedup
+        self._dedup_lock = threading.Lock()
 
     def start(self):
         if self.is_running:
@@ -100,6 +102,9 @@ class LiveMonitorManager:
                 logger.info(f"Monitor connected to {ip}")
                 print(f"DEBUG: Monitor connected to {ip}. Entering live_capture...")
                 
+                # Ignore buffered/replayed events that arrive immediately upon connection
+                ignore_until = time.time() + 2
+                
                 # live_capture is a generator that yields attendance records
                 for event in conn.live_capture():
                     if not self.is_running or ip not in self.active_monitors:
@@ -107,6 +112,10 @@ class LiveMonitorManager:
                         break
                     if event is None:
                         # This happens on timeout, just keep waiting
+                        continue
+                        
+                    if time.time() < ignore_until:
+                        print(f"DEBUG: SKIPPING REPLAYED EVENT on connection from {ip}: {event}")
                         continue
                         
                     print(f"DEBUG: RECEIVED EVENT from {ip}: {event}")
@@ -132,6 +141,25 @@ class LiveMonitorManager:
             return
 
         timestamp = event.timestamp
+        
+        # Server-side dedup: ZKTeco devices often fire 2 events for a single finger press,
+        # or replay events 15-20 seconds later if the network lags.
+        # Skip if same user on same machine within 2 seconds.
+        dedup_key = (user_id, ip)
+        with self._dedup_lock:
+            last_time = self._recent_events.get(dedup_key)
+            if last_time and (timestamp - last_time).total_seconds() < 2:
+                logger.info(f"DEDUP SKIP: {user_id} on {ip} (last: {last_time}, now: {timestamp})")
+                return
+            self._recent_events[dedup_key] = timestamp
+            
+            # Cleanup old entries (older than 120 seconds)
+            cutoff = timestamp
+            expired = [k for k, v in self._recent_events.items() 
+                      if (cutoff - v).total_seconds() > 120]
+            for k in expired:
+                del self._recent_events[k]
+
         logger.info(f"LIVE EVENT: Machine {ip}, User {user_id}, Time {timestamp}")
 
         # 1. Save to DB
@@ -163,21 +191,39 @@ class LiveMonitorManager:
 
             # 3. Enrich with meal info if this is a canteen machine
             meal_info = None
+            is_duplicate = False
             if ip in self.canteen_ips:
                 try:
-                    from features.meal_tracking.service import check_meal_by_machine_id, log_meal_swipe
+                    from features.meal_tracking.service import check_meal_by_machine_id, log_meal_swipe, try_log_meal_pickup
+                    
+                    # 1. Look up meal info to get the canonical ID
                     meal_info = check_meal_by_machine_id(user_id, timestamp.date())
-                    if meal_info:
-                        logger.info(f"MEAL FOUND for {user_id}: {meal_info.get('meal_name_vi', '?')}")
+                    target_emp_id = meal_info.get("emp_no") if meal_info else user_id
+                    
+                    print(f">>> MEAL DEBUG: user_id={user_id}, target_emp_id='{target_emp_id}', timestamp.date()={timestamp.date()}")
+                    
+                    # 2. Atomic check-and-insert: try to log pickup, returns True if NEW
+                    if meal_info and meal_info.get('is_registered'):
+                        was_new = try_log_meal_pickup(meal_info, ip)
+                        is_duplicate = not was_new
                     else:
-                        logger.info(f"NO MEAL registered for {user_id} on {timestamp.date()}")
+                        is_duplicate = False  # Not registered = show as error, not duplicate
+                    
+                    print(f">>> MEAL DEBUG: is_duplicate={is_duplicate}")
+                    
+                    if meal_info:
+                        logger.info(f"MEAL FOUND for {target_emp_id}: {meal_info.get('meal_name_vi', '?')} (Duplicate: {is_duplicate})")
+                    else:
+                        logger.info(f"NO MEAL registered for {target_emp_id} on {timestamp.date()}")
                         
-                    # Log swipe to MealTrackingHistory
-                    log_meal_swipe(user_id, ip, timestamp, meal_info)
+                    # 3. Log swipe to Local MealTrackingHistory (always, for auditing)
+                    log_meal_swipe(target_emp_id, ip, timestamp, meal_info)
+
                 except Exception as e:
                     logger.error(f"Error querying/logging meal info: {e}")
 
             # 4. Broadcast to WebSockets
+            print(f">>> MEAL DEBUG: Broadcasting is_duplicate={is_duplicate} for {user_id}")
             payload = {
                 "type": "meal_event" if ip in self.canteen_ips else "new_log",
                 "data": {
@@ -188,7 +234,8 @@ class LiveMonitorManager:
                     "machine_ip": ip,
                     "is_live": True,
                     "is_canteen": ip in self.canteen_ips,
-                    "meal_info": meal_info
+                    "meal_info": meal_info,
+                    "is_duplicate": is_duplicate
                 }
             }
             self._broadcast_async(payload)

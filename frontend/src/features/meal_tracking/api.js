@@ -19,5 +19,13 @@ export const mealApi = {
   
   getCanteenMachines() {
     return axios.get('/api/meal/canteen-machines')
+  },
+  
+  getTodayStats() {
+    return axios.get(`/api/meal/today_stats?t=${Date.now()}`)
+  },
+  
+  getTodayPickups() {
+    return axios.get(`/api/meal/today_pickups?t=${Date.now()}`)
   }
 }
