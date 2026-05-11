@@ -39,16 +39,27 @@ export function useLiveLogs(onMessage) {
       isConnected.value = false
       isConnecting.value = false
       socket = null
-      console.log('Live Logs WebSocket disconnected')
+      console.log('Live Logs WebSocket disconnected. Retrying in 5s...')
+      
+      // Auto-reconnect logic
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      reconnectTimer = setTimeout(() => {
+        connect()
+      }, 5000)
     }
 
     socket.onerror = (err) => {
       error.value = 'WebSocket connection error'
       console.error('WebSocket Error:', err)
+      socket.close() // Trigger onclose to reconnect
     }
   }
 
   const disconnect = () => {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
     if (socket) {
       socket.close()
       socket = null
