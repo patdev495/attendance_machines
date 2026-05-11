@@ -14,6 +14,9 @@ services:
       - ./machines.txt:/app/machines.txt:ro
       - ./employee_work_shift.xlsx:/app/employee_work_shift.xlsx:ro
       
+      # Map the audio files so user can update recordings without rebuilding
+      - ./audio:/app/backend/static/audio:ro
+
       # Persist logs on the host machine
       - ./backend/logs:/app/backend/logs
       
@@ -28,6 +31,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: time_attendance_frontend
+    volumes:
+      # Map the audio files to Nginx as well
+      - ./audio:/usr/share/nginx/html/audio:ro
     ports:
       - "80:80" # Publish Nginx to port 80
     depends_on:

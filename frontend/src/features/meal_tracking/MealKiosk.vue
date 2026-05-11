@@ -25,6 +25,9 @@
           <option value="en">🇬🇧 EN</option>
           <option value="zh">🇨🇳 ZH</option>
         </select>
+        <button class="btn" :class="isMuted ? 'btn-danger' : 'btn-secondary'" @click="toggleMute" :title="isMuted ? 'Unmute' : 'Mute'">
+          {{ isMuted ? '🔇' : '🔊' }}
+        </button>
         <button class="btn fullscreen-btn" @click="enterFullscreen" title="Fullscreen">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
         </button>
@@ -202,6 +205,13 @@ const uiStore = useUIStore()
 const router = useRouter()
 
 const currentLang = ref(locale.value)
+const isMuted = ref(localStorage.getItem('meal_kiosk_muted') === 'true')
+
+function toggleMute() {
+  isMuted.value = !isMuted.value
+  localStorage.setItem('meal_kiosk_muted', isMuted.value)
+}
+
 function changeLanguage() {
   setLanguage(currentLang.value)
 }
@@ -318,9 +328,10 @@ const { connect, disconnect, isConnected } = useLiveLogs((payload) => {
       }
       
       if (data.is_duplicate) {
-        playSound('duplicate')
+        playSound('duplicate', data.meal_info)
       } else if (isSuccess) {
         playSound('success')
+        speakMeal(data.meal_info)
         fetchStats()
       } else {
         playSound('error')
@@ -447,9 +458,10 @@ function showHistoryItemOnScreen(item) {
     if (liveHistory.value.length > 50) liveHistory.value.pop()
   }
 
-  if (item.is_duplicate) playSound('duplicate')
+  if (item.is_duplicate) playSound('duplicate', mealInfo)
   else if (isSuccess) {
     playSound('success')
+    speakMeal(mealInfo)
     fetchStats()
   }
   else playSound('error')
@@ -475,43 +487,100 @@ function formatTime(isoStr) {
   return d.toLocaleTimeString(locale.value === 'vi' ? 'vi-VN' : 'en-US')
 }
 
-function playSound(type) {
+let audioContext = null;
+
+function playAudioFile(fileName) {
+  if (isMuted.value) return;
   try {
-    const AudioContext = window.AudioContext || window.webkitAudioContext
-    if (!AudioContext) return
-    const ctx = new AudioContext()
-    
-    const playTone = (freq, type, duration, startTime = 0, gainValue = 1.0) => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      
-      osc.type = type
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + startTime)
-      
-      gain.gain.setValueAtTime(0, ctx.currentTime + startTime)
-      gain.gain.linearRampToValueAtTime(gainValue, ctx.currentTime + startTime + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + startTime + duration)
-      
-      osc.start(ctx.currentTime + startTime)
-      osc.stop(ctx.currentTime + startTime + duration)
+    const audio = new Audio(`/audio/${fileName}`);
+    audio.volume = 1.0;
+    audio.play().catch(e => console.warn(`Audio file ${fileName} missing or failed:`, e));
+  } catch (e) {
+    console.error("Audio error:", e);
+  }
+}
+
+function playSound(type, mealInfo = null) {
+  if (isMuted.value) return;
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
     }
+    const ctx = audioContext;
+    
+    const playTone = (freq, t, duration, startTime = 0, gainValue = 1.0) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.type = t;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + startTime);
+      
+      gain.gain.setValueAtTime(0, ctx.currentTime + startTime);
+      gain.gain.linearRampToValueAtTime(gainValue, ctx.currentTime + startTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + startTime + duration);
+      
+      osc.start(ctx.currentTime + startTime);
+      osc.stop(ctx.currentTime + startTime + duration);
+    };
 
     if (type === 'success') {
-      playTone(1200, 'sine', 0.15, 0, 1.0)
-      playTone(1500, 'sine', 0.2, 0.1, 1.0)
+      playTone(1200, 'sine', 0.15, 0, 1.0);
+      playTone(1500, 'sine', 0.2, 0.1, 1.0);
     } else if (type === 'duplicate') {
-      playTone(600, 'triangle', 0.3, 0, 1.0)
-      playTone(400, 'triangle', 0.4, 0.2, 1.0)
+      playTone(600, 'triangle', 0.3, 0, 1.0);
+      playTone(400, 'triangle', 0.4, 0.2, 1.0);
+      
+      // Chọn file trung lặp theo món ăn
+      const code = mealInfo?.meal_code?.toLowerCase() || '';
+      let fileName = 'trung_lap.mp3';
+      if (code.includes('rice')) fileName = 'trung_lap_com.mp3';
+      else if (code.includes('noodle')) fileName = 'trung_lap_my.mp3';
+      else if (code.includes('bread')) fileName = 'trung_lap_banh_mi.mp3';
+      
+      setTimeout(() => playAudioFile(fileName), 500);
     } else {
-      playTone(150, 'sawtooth', 0.2, 0, 1.0)
-      playTone(150, 'sawtooth', 0.2, 0.15, 1.0)
-      playTone(100, 'sawtooth', 0.3, 0.3, 1.0)
+      playTone(150, 'sawtooth', 0.2, 0, 1.0);
+      playTone(150, 'sawtooth', 0.2, 0.15, 1.0);
+      playTone(100, 'sawtooth', 0.3, 0.3, 1.0);
+      setTimeout(() => playAudioFile('chua_dang_ky.mp3'), 500);
     }
   } catch (e) {
-    console.error('Audio error:', e)
+    console.error('Audio error:', e);
   }
+}
+
+let currentUtterance = null; // Prevent garbage collection
+
+function playMealAudio(mealInfo) {
+  if (isMuted.value || !mealInfo || !mealInfo.meal_code) return;
+  
+  const code = mealInfo.meal_code.toLowerCase();
+  let fileName = '';
+  
+  // Ánh xạ mã suất ăn sang tên file mp3
+  if (code.includes('rice')) fileName = 'com.mp3';
+  else if (code.includes('noodle')) fileName = 'my.mp3';
+  else if (code.includes('bread')) fileName = 'banh_mi.mp3';
+  else fileName = 'success.mp3'; // Fallback nếu không khớp
+
+  try {
+    const audio = new Audio(`/audio/${fileName}`);
+    audio.volume = 1.0;
+    
+    // Phát sau một khoảng nghỉ ngắn để không bị chồng lên tiếng bíp hệ thống
+    setTimeout(() => {
+      audio.play().catch(e => console.warn("Audio play failed (maybe file missing):", e));
+    }, 500);
+  } catch (e) {
+    console.error("Audio error:", e);
+  }
+}
+
+function speakMeal(mealInfo) {
+  // Giữ lại tên hàm cũ để không phải sửa nhiều chỗ, nhưng đổi ruột sang dùng playMealAudio
+  playMealAudio(mealInfo);
 }
 
 function enterFullscreen() {

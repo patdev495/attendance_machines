@@ -71,8 +71,13 @@ def create_app() -> FastAPI:
 
 
 
+    # Ensure static directories exist before mounting to avoid Starlette errors
+    (config.STATIC_DIR / "assets").mkdir(parents=True, exist_ok=True)
+    (config.STATIC_DIR / "audio").mkdir(parents=True, exist_ok=True)
+
     # Serve Vue 3 SPA
     app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")
+    app.mount("/audio", StaticFiles(directory=str(config.STATIC_DIR / "audio")), name="audio")
 
     @app.get("/", include_in_schema=False)
     async def serve_index():

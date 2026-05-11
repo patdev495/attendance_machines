@@ -22,9 +22,10 @@ Tạo một thư mục mới (ví dụ: `Time_Attendance_Deploy`). Bạn chỉ c
 1. `backend_image.tar` (File vừa tạo ở bước 1)
 2. `frontend_image.tar` (File vừa tạo ở bước 1)
 3. `docker-compose.yml` (File cấu hình chạy Docker)
-4. Thư mục `backend` (Bên trong chỉ cần chứa đúng file `.env` để cấu hình database. Bạn có thể xóa hết code bên trong thư mục này đi)
-5. `machines.txt` (Danh sách máy chấm công)
-6. `employee_work_shift.xlsx` (File Excel ca làm việc)
+4. Thư mục `audio` (Chứa các file .mp3 đọc món ăn)
+5. Thư mục `backend` (Bên trong chỉ cần chứa đúng file `.env` để cấu hình database)
+6. `machines.txt` (Danh sách máy chấm công)
+7. `employee_work_shift.xlsx` (File Excel ca làm việc)
 
 Copy thư mục `Time_Attendance_Deploy` này vào USB hoặc upload lên Server mới.
 
