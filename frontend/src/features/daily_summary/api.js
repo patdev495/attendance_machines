@@ -39,7 +39,9 @@ export const dailySummaryApi = {
   
   syncExcel(file) {
     const formData = new FormData()
-    formData.append('file', file)
+    if (file) {
+      formData.append('file', file)
+    }
     return axios.post(`${API_BASE}/sync-excel`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })

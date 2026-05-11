@@ -36,6 +36,7 @@
   "employees": {
     "title": "员工管理",
     "upload_sync": "上传并同步注册表",
+    "sync_machines_only": "仅从机器同步 (不使用 Excel)",
     "syncing": "正在同步...",
     "sync_complete": "同步完成。Excel: {excel}, 仅考勤机: {machine}。",
     "bulk_delete_all": "从所有设备中删除 {count} 名员工",
@@ -186,7 +187,11 @@
       "missing_checkout": "缺打卡 (下班)",
       "absent": "缺勤"
     },
-    "summary_subtitle": "分析每日出勤情况、管理班次并导出报告。",
+    "excel_sync": {
+      "title": "Excel & 考勤机同步",
+      "drag_drop": "将 Excel 文件 (.xlsx) 拖放到此处",
+      "select_file": "从计算机选择文件"
+    },
     "filters": {
       "emp_id": "员工编号或姓名",
       "machine_ip": "考勤机IP",
@@ -201,6 +206,9 @@
       "status_machine": "仅机器",
       "status_log": "仅原始日志",
       "unknown": "未知",
+      "all_privilege": "所有权限",
+      "privilege_user": "普通用户",
+      "privilege_admin": "管理员",
       "search": "搜索",
       "clear": "清除筛选项",
       "min_hours": "最少工时",

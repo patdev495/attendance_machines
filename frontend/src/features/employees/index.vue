@@ -4,47 +4,57 @@
       <h1>{{ $t('employees.title') }}</h1>
       
       <div class="header-actions">
-        <!-- Hidden file input for Excel -->
-        <input type="file" accept=".xlsx,.xls" hidden ref="fileInput" @change="handleFileSelect" />
-        
-        <button class="btn-primary" @click="$refs.fileInput.click()" :disabled="syncStatus.is_running">
-          <span class="icon">📥</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.upload_sync') }}
-        </button>
+        <!-- Group 1: Sync & Export -->
+        <div class="action-group">
+          <input type="file" accept=".xlsx,.xls" hidden ref="fileInput" @change="handleFileSelect" />
+          
+          <button class="btn-primary" @click="$refs.fileInput.click()" :disabled="syncStatus.is_running">
+            <span class="icon">📥</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.upload_sync') }}
+          </button>
 
+          <button class="btn-primary btn-purple" @click="handleMachineSyncOnly" :disabled="syncStatus.is_running">
+            <span class="icon">🔄</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.sync_machines_only') }}
+          </button>
+
+          <a :href="exportUrl" class="btn-secondary">
+            <span class="icon">📊</span> {{ $t('employees.export_excel') }}
+          </a>
+        </div>
+
+        <!-- Group 2: Biometric & Hardware Ops -->
+        <div class="action-group">
+          <button class="btn-secondary btn-green" @click="handleGlobalSync" :disabled="globalSyncStatus.is_running">
+            <span class="icon" :class="{'spin': globalSyncStatus.is_running}">🔄</span> 
+            {{ globalSyncStatus.is_running ? $t('employees.syncing_fingerprints') : $t('employees.collect_all_fingerprints') }}
+          </button>
+
+          <button class="btn-secondary" @click="isBulkPushModalOpen = true">
+            <span class="icon">📤</span> {{ $t('employees.bulk_push_fingerprints') }}
+          </button>
+
+          <div class="dropdown-wrapper" style="position: relative;">
+            <button class="btn-secondary btn-outline-danger" @click="showClearDropdown = !showClearDropdown">
+              <span class="icon">🗑️</span> {{ $t('employees.clear_fingerprints_machine') }}
+            </button>
+            <div v-if="showClearDropdown" class="clear-dropdown">
+              <div class="clear-dropdown-header">{{ $t('employees.select_machine_to_clear') }}</div>
+              <button v-for="ip in clearMachineList" :key="ip" class="clear-dropdown-item" @click="handleClearMachine(ip)" :disabled="isClearingMachine">
+                {{ ip }}
+              </button>
+            </div>
+          </div>
+
+          <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
+            <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
+          </button>
+        </div>
+
+        <!-- Bulk Delete (Selected) -->
         <transition name="fade">
           <button v-if="selectedIds.length > 0" class="btn-danger" @click="handleBulkDeleteGlobal" :disabled="bulkActionStatus.is_running">
             <span class="icon">🗑️</span> {{ $t('employees.bulk_delete_all', { count: selectedIds.length }) }}
           </button>
         </transition>
-
-        <a :href="exportUrl" class="btn-secondary" style="text-decoration: none;">
-          <span class="icon">📊</span> {{ $t('employees.export_excel') }}
-        </a>
-
-        <button class="btn-secondary" @click="handleGlobalSync" :disabled="globalSyncStatus.is_running" style="border-color: #10b981; color: #10b981;">
-          <span class="icon" :class="{'spin': globalSyncStatus.is_running}">🔄</span> 
-          {{ globalSyncStatus.is_running ? $t('employees.syncing_fingerprints') : $t('employees.collect_all_fingerprints') }}
-        </button>
-
-        <button class="btn-secondary" @click="isBulkPushModalOpen = true">
-          <span class="icon">📤</span> {{ $t('employees.bulk_push_fingerprints') }}
-        </button>
-
-        <div class="dropdown-wrapper" style="position: relative;">
-          <button class="btn-secondary" @click="showClearDropdown = !showClearDropdown" style="border-color: #ef4444; color: #ef4444;">
-            <span class="icon">🗑️</span> {{ $t('employees.clear_fingerprints_machine') }}
-          </button>
-          <div v-if="showClearDropdown" class="clear-dropdown">
-            <div class="clear-dropdown-header">{{ $t('employees.select_machine_to_clear') }}</div>
-            <button v-for="ip in clearMachineList" :key="ip" class="clear-dropdown-item" @click="handleClearMachine(ip)" :disabled="isClearingMachine">
-              {{ ip }}
-            </button>
-          </div>
-        </div>
-
-        <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
-          <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
-        </button>
       </div>
     </div>
     
@@ -399,6 +409,21 @@ const handleFileSelect = async (e) => {
   }
 }
 
+const handleMachineSyncOnly = async () => {
+  try {
+    syncStatus.value.is_running = true
+    syncStatus.value.progress = 0
+    syncStatus.value.current_step = t('sync.initiating')
+    syncStatus.value.error = null
+    
+    await dailySummaryApi.syncExcel(null)
+    startSyncPolling()
+  } catch (err) {
+    syncStatus.value.is_running = false
+    syncStatus.value.error = err.response?.data?.detail || t('common.error')
+  }
+}
+
 const startSyncPolling = () => {
   if (syncPollInterval) clearInterval(syncPollInterval)
   syncPollInterval = setInterval(async () => {
@@ -562,10 +587,48 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+  text-decoration: none;
 }
 
 .btn-secondary:hover:not(:disabled) {
   background-color: #64748b;
+}
+
+.btn-purple {
+  background-color: #8b5cf6 !important;
+}
+.btn-purple:hover:not(:disabled) {
+  background-color: #7c3aed !important;
+}
+
+.btn-green {
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+}
+.btn-green:hover:not(:disabled) {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+.btn-outline-danger {
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+}
+.btn-outline-danger:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .btn-danger {

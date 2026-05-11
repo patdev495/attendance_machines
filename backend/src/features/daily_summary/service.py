@@ -1,6 +1,7 @@
 import logging
 import pandas as pd
 import threading
+import io
 from typing import List, Dict, Any, Optional
 from datetime import date
 from sqlalchemy.orm import Session
@@ -189,10 +190,10 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
     return summary_items
 
-def sync_employees_full(file_bytes: bytes):
+def sync_employees_full(file_bytes: Optional[io.BytesIO] = None):
     """
     Upgraded Sync:
-    1. Sync Excel to EmployeeMetadata.
+    1. Sync Excel to EmployeeMetadata (if file provided).
     2. Upsert Excel users into EmployeeLocalRegistry (source_status=excel_synced).
     3. Scan all machines for users.
     4. Upsert machine-only users into EmployeeLocalRegistry (source_status=machine_only) if not already synced from Excel.
@@ -204,155 +205,161 @@ def sync_employees_full(file_bytes: bytes):
             return
         sync_status.update({
             "is_running": True, "progress": 0, "total": 0, 
-            "current_step": "Reading Excel...", "error": None,
+            "current_step": "Initializing sync...", "error": None,
             "excel_count": 0, "machine_only_count": 0
         })
 
     db = SessionLocal()
     try:
-        # 1. Process Excel
-        df = pd.read_excel(file_bytes)
-        df.columns = df.columns.str.strip()
-        
-        emp_col = 'FULL_EMP_ID' if 'FULL_EMP_ID' in df.columns else 'EMP_ID'
-        if emp_col not in df.columns:
-            raise ValueError("Excel file missing required column: EMP_ID or FULL_EMP_ID")
-
-        total_rows = len(df)
-        with status_lock:
-            sync_status["total"] = total_rows
-            sync_status["current_step"] = f"Processing {total_rows} Excel records..."
-
-        existing_meta = {e.employee_id: e for e in db.query(EmployeeMetadata).all()}
-        
-        excel_synced_ids = set()
-        
-        for idx, row in df.iterrows():
-            # ID mappings based on user's final logic: EMP_ID is the PK, FULL_EMP_ID is display
-            emp_id_raw = str(row.get('EMP_ID', '')).strip()
-            full_id_raw = str(row.get('FULL_EMP_ID', '')).strip()
-            
-            # Clean .0 from Excel numbers
-            if emp_id_raw.endswith('.0'): emp_id_raw = emp_id_raw[:-2]
-            if full_id_raw.endswith('.0'): full_id_raw = full_id_raw[:-2]
-
-            # PK is ALWAYS EMP_ID
-            emp_id = emp_id_raw
-            if not emp_id or emp_id.lower() == 'nan':
-                continue
-            
-            f_id = full_id_raw if (full_id_raw and full_id_raw.lower() != 'nan') else None
-            
-            excel_synced_ids.add(emp_id)
-            
-            # Update EmployeeMetadata
-            meta = existing_meta.get(emp_id)
-            if not meta:
-                meta = EmployeeMetadata(employee_id=emp_id)
-                db.add(meta)
-                existing_meta[emp_id] = meta
-            
-            meta.full_emp_id = f_id
-            
-            if 'SHIFT' in row and pd.notna(row['SHIFT']):
-                val = str(row['SHIFT']).strip().upper()
-                meta.shift = val
-                meta.status = 'TV' if val == 'TV' else 'Active'
-            
-            if 'EMP_NAME' in df.columns and pd.notna(row['EMP_NAME']): meta.emp_name = str(row['EMP_NAME'])
-            if 'DEPARTMENT' in df.columns and pd.notna(row['DEPARTMENT']): meta.department = str(row['DEPARTMENT'])
-            if 'GROUP' in df.columns and pd.notna(row['GROUP']): meta.group = str(row['GROUP'])
-            # Phase 13: Robust hired date mapping
-            start_date_aliases = ['START_DATE', 'NGÀY VÀO LÀM', 'NGAY VAO LAM', 'HIRED DATE', 'DATE HIRED']
-            hired_date_val = None
-            for alias in start_date_aliases:
-                if alias in df.columns:
-                    hired_date_val = row[alias]
-                    break
-            
-            if hired_date_val and pd.notna(hired_date_val):
-                try:
-                    meta.start_date = pd.to_datetime(hired_date_val).date()
-                except:
-                    pass
-
+        if file_bytes is not None:
+            # 1. Process Excel
             with status_lock:
-                sync_status["progress"] = int((len(excel_synced_ids) / total_rows) * 40)
+                sync_status["current_step"] = "Reading Excel..."
 
-        # Xóa metadata của những nhân viên không còn trong file Excel
-        for e_id, meta in existing_meta.items():
-            if e_id not in excel_synced_ids:
-                db.delete(meta)
-                
-        db.commit()
+            df = pd.read_excel(file_bytes)
+            df.columns = df.columns.str.strip()
+            
+            emp_col = 'FULL_EMP_ID' if 'FULL_EMP_ID' in df.columns else 'EMP_ID'
+            if emp_col not in df.columns:
+                raise ValueError("Excel file missing required column: EMP_ID or FULL_EMP_ID")
 
-        # ── Phase 13: Parse daily shift columns (e.g. "1/4", "2/4", "15/4") ──
-        with status_lock:
-            sync_status["current_step"] = "Parsing daily shift assignments..."
-            sync_status["progress"] = 45
+            total_rows = len(df)
+            with status_lock:
+                sync_status["total"] = total_rows
+                sync_status["current_step"] = f"Processing {total_rows} Excel records..."
 
-        import re
-        from datetime import date as date_type
-
-        date_columns = {}  # col_name -> (day, month)
-        for col in df.columns:
-            col_str = str(col).strip()
-            # Match patterns like "1/4", "01/04", "15/4"
-            m = re.match(r'^(\d{1,2})/(\d{1,2})$', col_str)
-            if m:
-                day_val, month_val = int(m.group(1)), int(m.group(2))
-                if 1 <= day_val <= 31 and 1 <= month_val <= 12:
-                    date_columns[col] = (day_val, month_val)
-
-        if date_columns:
-            logger.info(f"Found {len(date_columns)} date columns for daily shifts")
-            # Determine the year from the data (use current year as default)
-            from datetime import datetime as dt_class
-            current_year = dt_class.now().year
-
-            # Load existing daily shifts for bulk upsert
-            existing_shifts = {}
-            for shift in db.query(EmployeeDailyShifts).all():
-                key = (shift.employee_id, shift.work_date)
-                existing_shifts[key] = shift
-
-            daily_shift_count = 0
+            existing_meta = {e.employee_id: e for e in db.query(EmployeeMetadata).all()}
+            
+            excel_synced_ids = set()
+            
             for idx, row in df.iterrows():
-                emp_id = str(row.get('EMP_ID', '')).strip()
-                if emp_id.endswith('.0'): emp_id = emp_id[:-2]
+                # ID mappings based on user's final logic: EMP_ID is the PK, FULL_EMP_ID is display
+                emp_id_raw = str(row.get('EMP_ID', '')).strip()
+                full_id_raw = str(row.get('FULL_EMP_ID', '')).strip()
+                
+                # Clean .0 from Excel numbers
+                if emp_id_raw.endswith('.0'): emp_id_raw = emp_id_raw[:-2]
+                if full_id_raw.endswith('.0'): full_id_raw = full_id_raw[:-2]
+
+                # PK is ALWAYS EMP_ID
+                emp_id = emp_id_raw
                 if not emp_id or emp_id.lower() == 'nan':
                     continue
                 
-                for col_name, (day_val, month_val) in date_columns.items():
-                    cell_val = row.get(col_name)
-                    # If cell is empty, interpret as 'NA' shift so it appears in reports
-                    if pd.isna(cell_val) or str(cell_val).strip() == '':
-                        shift_code = 'NA'
-                    else:
-                        shift_code = str(cell_val).strip().upper()
+                f_id = full_id_raw if (full_id_raw and full_id_raw.lower() != 'nan') else None
+                
+                excel_synced_ids.add(emp_id)
+                
+                # Update EmployeeMetadata
+                meta = existing_meta.get(emp_id)
+                if not meta:
+                    meta = EmployeeMetadata(employee_id=emp_id)
+                    db.add(meta)
+                    existing_meta[emp_id] = meta
+                
+                meta.full_emp_id = f_id
+                
+                if 'SHIFT' in row and pd.notna(row['SHIFT']):
+                    val = str(row['SHIFT']).strip().upper()
+                    meta.shift = val
+                    meta.status = 'TV' if val == 'TV' else 'Active'
+                
+                if 'EMP_NAME' in df.columns and pd.notna(row['EMP_NAME']): meta.emp_name = str(row['EMP_NAME'])
+                if 'DEPARTMENT' in df.columns and pd.notna(row['DEPARTMENT']): meta.department = str(row['DEPARTMENT'])
+                if 'GROUP' in df.columns and pd.notna(row['GROUP']): meta.group = str(row['GROUP'])
+                # Phase 13: Robust hired date mapping
+                start_date_aliases = ['START_DATE', 'NGÀY VÀO LÀM', 'NGAY VAO LAM', 'HIRED DATE', 'DATE HIRED']
+                hired_date_val = None
+                for alias in start_date_aliases:
+                    if alias in df.columns:
+                        hired_date_val = row[alias]
+                        break
+                
+                if hired_date_val and pd.notna(hired_date_val):
                     try:
-                        w_date = date_type(current_year, month_val, day_val)
-                    except ValueError:
-                        continue  # Skip invalid dates like Feb 30
+                        meta.start_date = pd.to_datetime(hired_date_val).date()
+                    except:
+                        pass
 
-                    # Upsert: check if record exists in memory
-                    key = (emp_id, w_date)
-                    existing = existing_shifts.get(key)
-                    if existing:
-                        existing.shift_code = shift_code
-                    else:
-                        new_shift = EmployeeDailyShifts(
-                            employee_id=emp_id, work_date=w_date, shift_code=shift_code
-                        )
-                        db.add(new_shift)
-                        existing_shifts[key] = new_shift
-                        
-                    daily_shift_count += 1
+                with status_lock:
+                    sync_status["progress"] = int((len(excel_synced_ids) / total_rows) * 40)
 
+            # Xóa metadata của những nhân viên không còn trong file Excel
+            for e_id, meta in existing_meta.items():
+                if e_id not in excel_synced_ids:
+                    db.delete(meta)
+                    
             db.commit()
-            logger.info(f"Upserted {daily_shift_count} daily shift assignments")
+
+            # ── Phase 13: Parse daily shift columns (e.g. "1/4", "2/4", "15/4") ──
+            with status_lock:
+                sync_status["current_step"] = "Parsing daily shift assignments..."
+                sync_status["progress"] = 45
+
+            import re
+            from datetime import date as date_type
+
+            date_columns = {}  # col_name -> (day, month)
+            for col in df.columns:
+                col_str = str(col).strip()
+                # Match patterns like "1/4", "01/04", "15/4"
+                m = re.match(r'^(\d{1,2})/(\d{1,2})$', col_str)
+                if m:
+                    day_val, month_val = int(m.group(1)), int(m.group(2))
+                    if 1 <= day_val <= 31 and 1 <= month_val <= 12:
+                        date_columns[col] = (day_val, month_val)
+
+            if date_columns:
+                logger.info(f"Found {len(date_columns)} date columns for daily shifts")
+                # Determine the year from the data (use current year as default)
+                from datetime import datetime as dt_class
+                current_year = dt_class.now().year
+
+                # Load existing daily shifts for bulk upsert
+                existing_shifts = {}
+                for shift in db.query(EmployeeDailyShifts).all():
+                    key = (shift.employee_id, shift.work_date)
+                    existing_shifts[key] = shift
+
+                daily_shift_count = 0
+                for idx, row in df.iterrows():
+                    emp_id = str(row.get('EMP_ID', '')).strip()
+                    if emp_id.endswith('.0'): emp_id = emp_id[:-2]
+                    if not emp_id or emp_id.lower() == 'nan':
+                        continue
+                    
+                    for col_name, (day_val, month_val) in date_columns.items():
+                        cell_val = row.get(col_name)
+                        # If cell is empty, interpret as 'NA' shift so it appears in reports
+                        if pd.isna(cell_val) or str(cell_val).strip() == '':
+                            shift_code = 'NA'
+                        else:
+                            shift_code = str(cell_val).strip().upper()
+                        try:
+                            w_date = date_type(current_year, month_val, day_val)
+                        except ValueError:
+                            continue  # Skip invalid dates like Feb 30
+
+                        # Upsert: check if record exists in memory
+                        key = (emp_id, w_date)
+                        existing = existing_shifts.get(key)
+                        if existing:
+                            existing.shift_code = shift_code
+                        else:
+                            new_shift = EmployeeDailyShifts(
+                                employee_id=emp_id, work_date=w_date, shift_code=shift_code
+                            )
+                            db.add(new_shift)
+                            existing_shifts[key] = new_shift
+                            
+                        daily_shift_count += 1
+
+                db.commit()
+                logger.info(f"Upserted {daily_shift_count} daily shift assignments")
+            else:
+                logger.info("No date columns found in Excel — skipping daily shift sync")
         else:
-            logger.info("No date columns found in Excel — skipping daily shift sync")
+            logger.info("No Excel file provided — skipping Excel processing and daily shift sync")
 
         # 2. Call centralized update_registry
         with status_lock:

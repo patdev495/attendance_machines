@@ -36,6 +36,7 @@
   "employees": {
     "title": "Quản Lý Nhân Viên",
     "upload_sync": "Tải lên & Đồng bộ Registry",
+    "sync_machines_only": "Đồng bộ từ Máy (không Excel)",
     "syncing": "Đang đồng bộ...",
     "sync_complete": "Đồng bộ hoàn tất. Excel: {excel}, Chỉ trên máy: {machine}.",
     "bulk_delete_all": "Xoá {count} khỏi tất cả thiết bị",

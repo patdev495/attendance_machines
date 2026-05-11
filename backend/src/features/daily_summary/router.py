@@ -337,9 +337,12 @@ def cancel_export():
         return {"message": "Export not running"}
 
 @router.post("/sync-excel")
-async def sync_excel(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-    content = await file.read()
-    background_tasks.add_task(sync_employees_full, io.BytesIO(content))
+async def sync_excel(background_tasks: BackgroundTasks, file: Optional[UploadFile] = File(None)):
+    content = None
+    if file:
+        file_content = await file.read()
+        content = io.BytesIO(file_content)
+    background_tasks.add_task(sync_employees_full, content)
     return {"status": "Started"}
 
 @router.get("/sync-excel/status")

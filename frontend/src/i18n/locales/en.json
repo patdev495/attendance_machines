@@ -36,6 +36,7 @@
   "employees": {
     "title": "Employee Management",
     "upload_sync": "Upload & Sync Registry",
+    "sync_machines_only": "Sync from Machines (No Excel)",
     "syncing": "Syncing...",
     "sync_complete": "Sync Complete. Excel: {excel}, Machine Only: {machine}.",
     "bulk_delete_all": "Delete {count} from all devices",
@@ -206,6 +207,9 @@
       "status_machine": "Machine Only",
       "status_log": "Log Only",
       "unknown": "Unknown (Not in DB)",
+      "all_privilege": "All Privileges",
+      "privilege_user": "Standard User",
+      "privilege_admin": "Admin",
       "search": "Search",
       "clear": "Clear Filters",
       "min_hours": "Min Hours",

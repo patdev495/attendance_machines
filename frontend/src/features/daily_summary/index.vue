@@ -5,20 +5,24 @@
         <h1>{{ $t('attendance.summary_title') }}</h1>
         <p class="subtitle">{{ $t('attendance.summary_subtitle') }}</p>
       </div>
-      <div class="header-actions">
-        <div class="export-group">
-          <select v-model="exportMode" class="export-select" :disabled="exporting">
-            <option value="both">{{ $t('export.both') }}</option>
-            <option value="time">{{ $t('export.time') }}</option>
-            <option value="hours">{{ $t('export.hours') }}</option>
-          </select>
-          <button class="btn btn-primary export-btn" :disabled="exporting" @click="triggerExport">
-            <span class="icon" v-if="!exporting">📊</span>
-            <div class="spinner-small" v-else></div>
-            {{ exporting ? $t('attendance.export.exporting') : $t('attendance.export.btn') }}
+        <div class="header-actions">
+          <button class="btn btn-primary btn-purple sync-btn" @click="handleMachineSyncOnly" :disabled="syncStatus.is_running">
+            <span class="icon">🔄</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.sync_machines_only') }}
           </button>
+
+          <div class="export-group">
+            <select v-model="exportMode" class="export-select" :disabled="exporting">
+              <option value="both">{{ $t('export.both') }}</option>
+              <option value="time">{{ $t('export.time') }}</option>
+              <option value="hours">{{ $t('export.hours') }}</option>
+            </select>
+            <button class="btn btn-primary export-btn" :disabled="exporting" @click="triggerExport">
+              <span class="icon" v-if="!exporting">📊</span>
+              <div class="spinner-small" v-else></div>
+              {{ exporting ? $t('attendance.export.exporting') : $t('attendance.export.btn') }}
+            </button>
+          </div>
         </div>
-      </div>
     </div>
 
     <!-- Export Loading Banner -->
@@ -87,6 +91,15 @@ const exportStatus = ref({})
 const selectedDetail = ref(null)
 const detailLogs = ref([])
 const detailLoading = ref(false)
+
+const syncStatus = ref({
+  is_running: false,
+  progress: 0,
+  current_step: '',
+  error: null
+})
+
+let syncPollInterval = null
 
 const filters = reactive({
   employee_id: '',
@@ -190,6 +203,39 @@ const startExportPolling = () => {
     }, 1500)
 }
 
+const handleMachineSyncOnly = async () => {
+  try {
+    syncStatus.value.is_running = true
+    syncStatus.value.progress = 0
+    syncStatus.value.current_step = t('sync.initiating')
+    syncStatus.value.error = null
+    
+    await dailySummaryApi.syncExcel(null)
+    startSyncPolling()
+  } catch (err) {
+    syncStatus.value.is_running = false
+    syncStatus.value.error = err.response?.data?.detail || t('common.error')
+  }
+}
+
+const startSyncPolling = () => {
+  if (syncPollInterval) clearInterval(syncPollInterval)
+  syncPollInterval = setInterval(async () => {
+    try {
+      const { data } = await dailySummaryApi.getSyncStatus()
+      syncStatus.value = data
+      if (!data.is_running) {
+        clearInterval(syncPollInterval)
+        if (!data.error) {
+          fetchData() // Refresh report data
+        }
+      }
+    } catch (err) {
+      console.error('Sync poll error', err)
+    }
+  }, 2000)
+}
+
 const formatDateTime = (timeStr) => {
   if (!timeStr) return '-'
   const d = new Date(timeStr)
@@ -219,6 +265,7 @@ onMounted(() => {
 
 onUnmounted(() => {
     if (exportPoller) clearInterval(exportPoller)
+    if (syncPollInterval) clearInterval(syncPollInterval)
 })
 </script>
 
@@ -266,6 +313,22 @@ onUnmounted(() => {
   overflow: hidden;
   transition: all 0.2s;
   height: 42px;
+}
+
+.sync-btn {
+  height: 42px;
+  padding: 0 16px !important;
+  font-size: 0.9rem !important;
+  border-radius: 10px !important;
+}
+
+.btn-purple {
+  background-color: #8b5cf6 !important;
+  border: none !important;
+  color: white !important;
+}
+.btn-purple:hover:not(:disabled) {
+  background-color: #7c3aed !important;
 }
 
 .export-group:focus-within {
