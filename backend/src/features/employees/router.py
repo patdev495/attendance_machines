@@ -53,8 +53,8 @@ def list_employees(
     page_size: int = 50,
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
+    privilege: Optional[int] = None,
     order: str = 'asc',
-
     db: Session = Depends(get_db)
 ):
     query = db.query(EmployeeLocalRegistry)
@@ -72,6 +72,9 @@ def list_employees(
         
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
+
+    if privilege is not None:
+        query = query.filter(EmployeeLocalRegistry.privilege == privilege)
 
 
     # Apply sorting (Numeric sort for employee_id)
@@ -106,10 +109,11 @@ def trigger_update_registry(background_tasks: BackgroundTasks, db: Session = Dep
 def export_employees(
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
+    privilege: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     from datetime import datetime
-    output = export_employees_to_excel(db, search, source_status)
+    output = export_employees_to_excel(db, search, source_status, privilege)
     filename = f"Employees_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return StreamingResponse(
         output,

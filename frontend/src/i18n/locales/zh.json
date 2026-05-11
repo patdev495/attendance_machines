@@ -255,7 +255,10 @@
     "action": {
       "sync_finger": "同步指纹",
       "rename": "重命名",
-      "delete": "从机器删除"
+      "delete": "从机器删除",
+      "change_privilege": "修改权限",
+      "promote_to_admin": "设为管理员",
+      "demote_to_user": "设为普通用户"
     },
     "table": {
       "emp_id": "员工编号",
@@ -286,7 +289,7 @@
     "bulk_deleting": "正在删除 {count} 名员工...",
     "bulk_delete_success": "成功删除 {count} 名员工（如果不存在则跳过）",
     "delete_success": "成功删除员工 {id}",
-    "delete_success": "成功删除员工 {id}"
+    "privilege_confirm": "您确定要为该机器上的员工 {id} {action} 吗？"
   },
   "machines": {
     "list_title": "设备列表",

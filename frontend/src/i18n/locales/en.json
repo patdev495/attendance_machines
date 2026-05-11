@@ -264,7 +264,10 @@
     "action": {
       "sync_finger": "Sync Fingerprint",
       "rename": "Rename",
-      "delete": "Delete from machine"
+      "delete": "Delete from machine",
+      "change_privilege": "Change Privilege",
+      "promote_to_admin": "Promote to Admin",
+      "demote_to_user": "Demote to User"
     },
     "table": {
       "emp_id": "Employee ID",
@@ -296,7 +299,8 @@
     "bulk_delete_confirm": "Are you sure you want to delete {count} selected employees from this machine?",
     "bulk_deleting": "Deleting {count} employees...",
     "bulk_delete_success": "Successfully deleted {count} employees (skipped if non-existent)",
-    "delete_success": "Successfully deleted employee {id}"
+    "delete_success": "Successfully deleted employee {id}",
+    "privilege_confirm": "Are you sure you want to {action} for employee {id} on this machine?"
   },
   "machines": {
     "list_title": "List",

@@ -100,6 +100,12 @@
         <option value="machine_only">{{ $t('attendance.filters.status_machine') }}</option>
         <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
       </select>
+
+      <select v-model="privilegeFilter" @change="resetAndFetch">
+        <option value="">{{ $t('attendance.filters.all_privilege') }}</option>
+        <option value="0">{{ $t('attendance.filters.privilege_user') }}</option>
+        <option value="14">{{ $t('attendance.filters.privilege_admin') }}</option>
+      </select>
     </div>
 
 
@@ -174,6 +180,7 @@ const notification = useNotificationStore()
 const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
+const privilegeFilter = ref('')
 
 const isBulkPushModalOpen = ref(false)
 
@@ -199,6 +206,7 @@ const exportUrl = computed(() => {
   const params = new URLSearchParams()
   if (searchQuery.value) params.append('search', searchQuery.value)
   if (statusFilter.value) params.append('source_status', statusFilter.value)
+  if (privilegeFilter.value !== '') params.append('privilege', privilegeFilter.value)
   return `/api/employees/export?${params.toString()}`
 })
 
@@ -415,7 +423,8 @@ const fetchEmployees = async () => {
     const filters = {}
     if (searchQuery.value) filters.search = searchQuery.value
     if (statusFilter.value) filters.source_status = statusFilter.value
-
+    if (privilegeFilter.value !== '') filters.privilege = parseInt(privilegeFilter.value)
+    
     filters.order = idSortOrder.value
     
     const result = await employeesApi.getEmployees(filters, currentPage.value, PAGE_SIZE)

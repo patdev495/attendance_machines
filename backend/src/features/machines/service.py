@@ -232,6 +232,14 @@ def download_fingerprints_from_machine(ip: str, employee_id: str):
                 )
                 db.add(new_f)
                 count += 1
+            
+            # Update privilege in registry/metadata
+            from database import EmployeeLocalRegistry, EmployeeMetadata
+            for model in [EmployeeLocalRegistry, EmployeeMetadata]:
+                emp = db.query(model).filter(model.employee_id == employee_id).first()
+                if emp:
+                    emp.privilege = target.privilege
+
             db.commit()
         except Exception as e:
             db.rollback()
@@ -278,6 +286,16 @@ def bulk_download_fingerprints_from_machine(ip: str):
                 )
                 db.add(new_f)
                 count += 1
+            
+            # Update privileges for all users found on machine
+            from database import EmployeeLocalRegistry, EmployeeMetadata
+            for user in users:
+                eid = str(user.user_id)
+                for model in [EmployeeLocalRegistry, EmployeeMetadata]:
+                    emp = db.query(model).filter(model.employee_id == eid).first()
+                    if emp:
+                        emp.privilege = user.privilege
+
             db.commit()
         except Exception as e:
             db.rollback()
@@ -518,6 +536,7 @@ def push_fingerprints_to_machines(employee_id: str, target_ips: list):
         from database import EmployeeLocalRegistry
         emp_info = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == employee_id).first()
         emp_name = emp_info.emp_name if emp_info and emp_info.emp_name else employee_id
+        emp_privilege = emp_info.privilege if emp_info and emp_info.privilege is not None else 0
 
         for ip in target_ips:
             with push_status_lock:
@@ -536,7 +555,11 @@ def push_fingerprints_to_machines(employee_id: str, target_ips: list):
                 if not target_user:
                     # Determine a new UID (some machines need unique UID)
                     new_uid = max([u.uid for u in users] + [0]) + 1
-                    target_user = User(uid=new_uid, name=emp_name, privilege=0, user_id=str(employee_id))
+                    target_user = User(uid=new_uid, name=emp_name, privilege=emp_privilege, user_id=str(employee_id))
+                    conn.set_user(uid=target_user.uid, name=target_user.name, privilege=target_user.privilege, user_id=target_user.user_id)
+                elif target_user.privilege != emp_privilege:
+                    # Update existing user privilege
+                    target_user.privilege = emp_privilege
                     conn.set_user(uid=target_user.uid, name=target_user.name, privilege=target_user.privilege, user_id=target_user.user_id)
                 
                 # Push each fingerprint
@@ -582,7 +605,7 @@ bulk_push_status = {
 
 bulk_push_lock = threading.Lock()
 
-def _push_to_single_machine(ip, pushable_ids, fp_map, emp_map):
+def _push_to_single_machine(ip, pushable_ids, fp_map, emp_map, emp_priv_map):
     """Push fingerprints to a single machine with delta sync. Runs in a thread."""
     global bulk_push_status
     
@@ -612,7 +635,25 @@ def _push_to_single_machine(ip, pushable_ids, fp_map, emp_map):
         error_count = 0
         
         for idx, eid in enumerate(pushable_ids):
-            # Check which fingerprints this employee is missing on this machine
+            # 1. Ensure User object and Privilege are correct first
+            target_user = user_dict.get(str(eid))
+            stored_priv = emp_priv_map.get(eid, 0)
+            
+            user_was_created_or_updated = False
+            if not target_user:
+                new_uid = max([u.uid for u in users] + [0]) + 1
+                target_user = User(uid=new_uid, name=emp_map.get(eid, eid), privilege=stored_priv, user_id=str(eid))
+                conn.set_user(uid=target_user.uid, name=target_user.name, privilege=target_user.privilege, user_id=target_user.user_id)
+                users.append(target_user)
+                user_dict[str(eid)] = target_user
+                user_was_created_or_updated = True
+            elif target_user.privilege != stored_priv:
+                # Update privilege if it has changed in our DB
+                target_user.privilege = stored_priv
+                conn.set_user(uid=target_user.uid, name=target_user.name, privilege=target_user.privilege, user_id=target_user.user_id)
+                user_was_created_or_updated = True
+
+            # 2. Check which fingerprints this employee is missing on this machine
             needed_fps = []
             for f in fp_map[eid]:
                 if (eid, f.template_id) not in existing_fp_keys:
@@ -621,18 +662,10 @@ def _push_to_single_machine(ip, pushable_ids, fp_map, emp_map):
             if not needed_fps:
                 # All fingerprints already exist on this machine
                 skip_count += 1
+                # If we updated privilege, we count it as a partial success/activity even if no FPs
                 with bulk_push_lock:
                     bulk_push_status["processed_employees_total"] += 1
                 continue
-            
-            target_user = user_dict.get(str(eid))
-            
-            if not target_user:
-                new_uid = max([u.uid for u in users] + [0]) + 1
-                target_user = User(uid=new_uid, name=emp_map.get(eid, eid), privilege=0, user_id=str(eid))
-                conn.set_user(uid=target_user.uid, name=target_user.name, privilege=target_user.privilege, user_id=target_user.user_id)
-                users.append(target_user)
-                user_dict[str(eid)] = target_user
             
             finger_objs = []
             for f in needed_fps:
@@ -694,9 +727,12 @@ def bulk_push_fingerprints_to_machines(employee_ids: list, target_ips: list):
         
         emp_infos = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id.in_(employee_ids)).all()
         emp_map = {e.employee_id: (e.emp_name if e.emp_name else e.employee_id) for e in emp_infos}
+        emp_priv_map = {e.employee_id: (e.privilege if e.privilege is not None else 0) for e in emp_infos}
         for eid in employee_ids:
             if eid not in emp_map:
                 emp_map[eid] = eid
+            if eid not in emp_priv_map:
+                emp_priv_map[eid] = 0
 
         with bulk_push_lock:
             # Total work = employees × machines (since each machine gets all employees)
@@ -705,7 +741,7 @@ def bulk_push_fingerprints_to_machines(employee_ids: list, target_ips: list):
         # Push to ALL machines in parallel
         with ThreadPoolExecutor(max_workers=max(1, len(target_ips))) as executor:
             futures = {
-                executor.submit(_push_to_single_machine, ip, pushable_ids, fp_map, emp_map): ip 
+                executor.submit(_push_to_single_machine, ip, pushable_ids, fp_map, emp_map, emp_priv_map): ip 
                 for ip in target_ips
             }
             for future in concurrent.futures.as_completed(futures):
@@ -802,6 +838,43 @@ def sync_time_on_machine(ip: str):
             try: conn.disconnect()
             except: pass
 
+def set_user_privilege_on_machine(ip: str, employee_id: str, privilege: int):
+    """Sets a user's privilege on a specific machine and updates local DB."""
+    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.disable_device()
+        users = conn.get_users()
+        target_user = next((u for u in users if u.user_id == str(employee_id)), None)
+        
+        if not target_user:
+             return "User not found on device"
+             
+        # Update on device
+        conn.set_user(uid=target_user.uid, name=target_user.name, privilege=privilege, user_id=target_user.user_id)
+        conn.enable_device()
+        
+        # Sync to local DB
+        db = SessionLocal()
+        try:
+             from database import EmployeeLocalRegistry, EmployeeMetadata
+             for model in [EmployeeLocalRegistry, EmployeeMetadata]:
+                 emp = db.query(model).filter(model.employee_id == employee_id).first()
+                 if emp:
+                     emp.privilege = privilege
+             db.commit()
+        finally: db.close()
+        
+        return "Success"
+    except Exception as e:
+        logger.error(f"Error setting privilege on machine {ip}: {e}")
+        return str(e)
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
 def global_sync_all_fingerprints():
     global global_sync_status
     with global_sync_lock:
@@ -853,6 +926,18 @@ def global_sync_all_fingerprints():
                         source_ip=ip
                     )
                     success_count += 1
+                
+                # Update privileges in Registry/Metadata (capture highest privilege across all machines)
+                from database import EmployeeLocalRegistry, EmployeeMetadata
+                for user in users:
+                    eid = str(user.user_id)
+                    for model in [EmployeeLocalRegistry, EmployeeMetadata]:
+                        emp = db.query(model).filter(model.employee_id == eid).first()
+                        if emp:
+                            # Only update if machine has higher privilege (e.g. Admin > User)
+                            if emp.privilege is None or user.privilege > emp.privilege:
+                                emp.privilege = user.privilege
+                db.commit()
                 
                 conn.enable_device()
                 with global_sync_lock:

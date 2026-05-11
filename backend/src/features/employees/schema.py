@@ -13,6 +13,7 @@ class EmployeeOut(EmployeeBase):
     start_date: Optional[date] = None
     shift: Optional[str] = None
     source_status: str
+    privilege: Optional[int] = 0
     updated_at: Optional[datetime] = None
 
     class Config:

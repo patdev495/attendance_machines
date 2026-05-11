@@ -58,6 +58,7 @@
     "save_changes": "Lưu Thay Đổi",
     "updated_success": "Cập nhật nhân viên thành công",
     "export_excel": "Xuất thông tin nhân viên",
+    "privilege": "Quyền hạn",
     "collect_all_fingerprints": "Gom Vân Tay Từ Tất Cả Máy",
     "syncing_fingerprints": "Đang gom vân tay...",
     "bulk_push_fingerprints": "Đẩy vân tay hàng loạt",
@@ -205,6 +206,9 @@
       "status_excel": "Đồng bộ từ Excel",
       "status_machine": "Chỉ có trên máy",
       "status_log": "Chỉ có log thô",
+      "all_privilege": "Tất cả quyền hạn",
+      "privilege_user": "User thường",
+      "privilege_admin": "Admin",
       "search": "Tìm kiếm",
       "clear": "Xóa Lọc",
       "min_hours": "Giờ Tối Thiểu",
@@ -263,7 +267,10 @@
     "action": {
       "sync_finger": "Đồng bộ vân tay",
       "rename": "Đổi tên",
-      "delete": "Xóa khỏi máy"
+      "delete": "Xóa khỏi máy",
+      "change_privilege": "Đổi quyền",
+      "promote_to_admin": "Nâng lên Admin",
+      "demote_to_user": "Hạ xuống User"
     },
     "table": {
       "emp_id": "Mã NV",
@@ -295,7 +302,8 @@
     "bulk_delete_confirm": "Bạn có chắc chắn muốn xóa {count} nhân viên đã chọn khỏi thiết bị này?",
     "bulk_deleting": "Đang xóa {count} nhân viên...",
     "bulk_delete_success": "Đã xóa thành công {count} nhân viên (bỏ qua nếu không tồn tại)",
-    "delete_success": "Đã xóa thành công nhân viên {id} khỏi thiết bị"
+    "delete_success": "Đã xóa thành công nhân viên {id} khỏi thiết bị",
+    "privilege_confirm": "Bạn có chắc chắn muốn {action} cho nhân viên {id} trên thiết bị này không?"
   },
   "machines": {
     "list_title": "Danh Sách Máy",

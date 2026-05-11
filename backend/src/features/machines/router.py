@@ -41,6 +41,9 @@ class PushFingerprintsRequest(BaseModel):
     employee_id: str
     target_ips: List[str]
 
+class PrivilegeUpdateRequest(BaseModel):
+    privilege: int
+
 router = APIRouter(prefix="/api/machines", tags=["Machines"])
 
 @router.get("")
@@ -217,10 +220,15 @@ def sync_all_machines_time():
     results = bulk_sync_time_all_machines()
     return {"results": results}
 
-@router.post("/{ip}/sync-time")
-def sync_machine_time(ip: str):
-    """Sync time for a specific machine."""
-    status = sync_time_on_machine(ip)
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)
     return {"status": status}
+
+@router.post("/{ip}/users/{employee_id}/privilege")
+def update_user_privilege_endpoint(ip: str, employee_id: str, req: PrivilegeUpdateRequest):
+    """Sets a user's privilege on a specific machine and updates local DB."""
+    from .service import set_user_privilege_on_machine
+    result = set_user_privilege_on_machine(ip, employee_id, req.privilege)
+    if result != "Success":
+        raise HTTPException(status_code=500, detail=result)
+    return {"status": "Success"}

@@ -123,7 +123,7 @@ def update_employee_info(employee_id: str, db_name: str, db: Session):
     
     return {"status": "success", "message": "Updated in DB"}
 
-def export_employees_to_excel(db: Session, search: str = None, source_status: str = None):
+def export_employees_to_excel(db: Session, search: str = None, source_status: str = None, privilege: int = None):
     query = db.query(EmployeeLocalRegistry)
     
     if search:
@@ -138,6 +138,9 @@ def export_employees_to_excel(db: Session, search: str = None, source_status: st
         
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
+        
+    if privilege is not None:
+        query = query.filter(EmployeeLocalRegistry.privilege == privilege)
         
     query = query.order_by(func.cast(EmployeeLocalRegistry.employee_id, Integer).asc())
     employees = query.all()

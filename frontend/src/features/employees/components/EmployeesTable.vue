@@ -17,6 +17,7 @@
           <th>{{ $t('device.table.department') }}</th>
           <th>{{ $t('device.table.group') }}</th>
           <th>{{ $t('attendance.table.shift') }}</th>
+          <th>{{ $t('employees.privilege') || 'Quyền' }}</th>
           <th>{{ $t('device.table.status') }}</th>
           <th>{{ $t('attendance.table.action') }}</th>
         </tr>
@@ -31,6 +32,11 @@
           <td>{{ emp.department || '—' }}</td>
           <td>{{ emp.group_name || '—' }}</td>
           <td>{{ emp.shift || '—' }}</td>
+          <td>
+            <span v-if="emp.privilege === 14" class="badge badge-admin">Admin</span>
+            <span v-else-if="emp.privilege > 0" class="badge badge-other">Special</span>
+            <span v-else class="privilege-user">User</span>
+          </td>
           <td>
             <span :class="['badge', getStatusClass(emp.source_status)]">
               {{ formatStatus(emp.source_status) }}
@@ -185,6 +191,19 @@ const formatStatus = (status) => {
 .badge-log {
   background-color: rgba(148, 163, 184, 0.2);
   color: #cbd5e1;
+}
+.badge-admin {
+  background-color: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.badge-other {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: #a78bfa;
+}
+.privilege-user {
+  color: #94a3b8;
+  font-size: 0.85rem;
 }
 
 .actions {

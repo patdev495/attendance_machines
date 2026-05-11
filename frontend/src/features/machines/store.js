@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { 
   getMachinesCapacity, getMachineEmployees, deleteMachineEmployee, bulkDeleteMachineEmployees,
   updateEmployeeName, syncFingerprints, syncAllMachineFingerprints,
-  EXPORT_FINGERPRINTS_URL
+  updateUserPrivilege, EXPORT_FINGERPRINTS_URL
 } from './api.js'
 
 export const useMachineStore = defineStore('machines', () => {
@@ -131,12 +131,20 @@ export const useMachineStore = defineStore('machines', () => {
     return await syncAllMachineFingerprints(currentIp.value)
   }
 
+  async function updatePrivilege(employeeId, privilege) {
+    await updateUserPrivilege(currentIp.value, employeeId, privilege)
+    const emp = allEmployees.value.find(u => u.user_id === employeeId)
+    if (emp) {
+      emp.privilege = privilege
+    }
+  }
+
   return {
     machines, machinesLoading,
     currentIp, allEmployees, filteredEmployees, employeesLoading, employeeError,
     searchTerm, sourceStatusFilter, shiftFilter, idSortOrder, exportUrl, filteredExportUrl,
     empPage, empPageSize, empTotalPages, pagedEmployees,
     fetchMachines, loadMachineEmployees, applyFilter, deleteEmployee, bulkDeleteEmployees,
-    renameEmployee, syncEmployeeFingerprints, bulkSyncFingerprints
+    renameEmployee, syncEmployeeFingerprints, bulkSyncFingerprints, updatePrivilege
   }
 })

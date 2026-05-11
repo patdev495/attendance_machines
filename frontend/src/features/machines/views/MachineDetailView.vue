@@ -71,6 +71,7 @@
       <MachineEmployeeTable 
         :employees="store.pagedEmployees" 
         @view="handleView"
+        @change-privilege="handleChangePrivilege"
         @delete="handleDelete" 
         @rename="handleRename"
         @sync-finger="handleSyncFinger"
@@ -220,6 +221,28 @@ async function handleSyncFinger(employeeId) {
   } finally {
     notification.remove(notifyId)
     setTimeout(() => notification.clearByType('info'), 500)
+  }
+}
+
+async function handleChangePrivilege(user) {
+  const isCurrentlyAdmin = user.privilege === 14
+  const targetPrivilege = isCurrentlyAdmin ? 0 : 14
+  const actionKey = isCurrentlyAdmin ? 'device.action.demote_to_user' : 'device.action.promote_to_admin'
+  
+  const confirmed = await notification.confirm(
+    t('device.privilege_confirm', { id: user.user_id, action: t(actionKey) }),
+    t('actions.confirm')
+  )
+  if (!confirmed) return
+
+  const notifyId = notification.info(t('common.processing'), 0)
+  try {
+    await store.updatePrivilege(user.user_id, targetPrivilege)
+    notification.success(t('common.success'))
+  } catch (e) {
+    notification.error(t('common.error') + ': ' + e.message)
+  } finally {
+    notification.remove(notifyId)
   }
 }
 

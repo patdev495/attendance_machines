@@ -129,4 +129,12 @@ export function getClearFpStatus() {
   return apiFetch('/clear-fingerprints-status')
 }
 
+export function updateUserPrivilege(ip, employeeId, privilege) {
+  return apiFetch(`/${encodeURIComponent(ip)}/users/${employeeId}/privilege`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ privilege })
+  })
+}
+
 export const EXPORT_FINGERPRINTS_URL = BASE + '/export-fingerprints'
