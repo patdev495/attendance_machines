@@ -2,6 +2,7 @@ import threading
 import time
 import socket
 import requests
+from requests.adapters import HTTPAdapter
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from zk import ZK
@@ -24,7 +25,7 @@ class LiveMonitorManager:
         self._recent_events = {}  # (user_id, ip) -> timestamp for dedup
         self._dedup_lock = threading.Lock()
         self._session = requests.Session() # Reuse connections for hooks
-        self._session.mount('http://', requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20))
+        self._session.mount('http://', HTTPAdapter(pool_connections=10, pool_maxsize=20))
         self._last_activity = {} # ip -> timestamp of last seen packet (including None)
         self._status = {}        # ip -> "connected" | "stuck" | "disconnected"
 

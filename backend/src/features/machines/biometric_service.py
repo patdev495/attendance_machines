@@ -1,5 +1,6 @@
 import pandas as pd
 import io
+from typing import Optional
 from sqlalchemy.orm import Session
 from database import EmployeeMetadata, EmployeeFingerprint
 from datetime import datetime
@@ -7,7 +8,7 @@ from .service import get_users_from_machine
 
 class BiometricExportService:
     @staticmethod
-    def generate_excel_from_db(db: Session, ip: str = None) -> io.BytesIO:
+    def generate_excel_from_db(db: Session, ip: Optional[str] = None) -> io.BytesIO:
         """
         Generates an Excel file containing fingerprints.
         If IP is provided, it only exports fingerprints for employees currently on that machine.

@@ -71,7 +71,7 @@ def get_machine_employees(ip: str, db: Session = Depends(get_db)):
     
     # Enrich with Consolidated Registry metadata (Phase 4 table)
     from database import EmployeeLocalRegistry
-    registry_map = {r.employee_id: r for r in db.query(EmployeeLocalRegistry).all()}
+    registry_map = {str(r.employee_id): r for r in db.query(EmployeeLocalRegistry).all()}
     enriched = []
     for u in users:
         emp_id = str(u['user_id'])
@@ -225,10 +225,6 @@ def sync_all_machines_time():
     """Sync time for all connected machines."""
     results = bulk_sync_time_all_machines()
     return {"results": results}
-
-    if status != "Success":
-        raise HTTPException(status_code=500, detail=status)
-    return {"status": status}
 
 @router.post("/{ip}/users/{employee_id}/privilege")
 def update_user_privilege_endpoint(ip: str, employee_id: str, req: PrivilegeUpdateRequest):
