@@ -56,6 +56,12 @@ def get_machines_capacity():
     """Get health and capacity info for all machines."""
     return get_devices_capacity_info()
 
+@router.get("/live-status")
+def get_live_machines_status():
+    """Get the current connection status of all live monitor threads."""
+    from .live_monitor import live_monitor
+    return live_monitor.get_status()
+
 @router.get("/{ip}/employees")
 def get_machine_employees(ip: str, db: Session = Depends(get_db)):
     """List employees currently on a specific machine, enriched with DB names."""

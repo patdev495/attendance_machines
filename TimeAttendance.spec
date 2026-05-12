@@ -5,8 +5,10 @@ a = Analysis(
     ['backend\\src\\main.py'],
     pathex=['backend/src'],
     binaries=[],
-    datas=[],
-    hiddenimports=['pyodbc', 'pyzk'],
+    datas=[
+        ('backend/static', 'backend/static'),
+    ],
+    hiddenimports=['pyodbc', 'zk', 'uvicorn.logging', 'uvicorn.loops', 'uvicorn.loops.auto', 'uvicorn.protocols', 'uvicorn.protocols.http', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan', 'uvicorn.lifespan.on', 'websockets.legacy', 'websockets.legacy.server'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -32,6 +34,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='frontend/public/favicon.ico' if os.path.exists('frontend/public/favicon.ico') else None,
 )
 coll = COLLECT(
     exe,

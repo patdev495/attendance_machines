@@ -31,12 +31,24 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    import logging as _log
+    _logger = _log.getLogger("lifespan")
+    
     loop = asyncio.get_running_loop()
+    _logger.info(f"[STARTUP] asyncio loop acquired: {loop}")
+    
     live_monitor.set_loop(loop)
+    _logger.info(f"[STARTUP] Loop injected into LiveMonitorManager")
+    
     live_monitor.start()
+    _logger.info(f"[STARTUP] LiveMonitorManager started — monitoring active")
+    
     yield
+    
     # Shutdown
+    _logger.info("[SHUTDOWN] Stopping LiveMonitorManager...")
     live_monitor.stop()
+    _logger.info("[SHUTDOWN] LiveMonitorManager stopped")
 
 def create_app() -> FastAPI:
     # Set up logging for the application
@@ -73,11 +85,11 @@ def create_app() -> FastAPI:
 
     # Ensure static directories exist before mounting to avoid Starlette errors
     (config.STATIC_DIR / "assets").mkdir(parents=True, exist_ok=True)
-    (config.STATIC_DIR / "audio").mkdir(parents=True, exist_ok=True)
+    config.AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
     # Serve Vue 3 SPA
     app.mount("/assets", StaticFiles(directory=str(config.STATIC_DIR / "assets")), name="assets")
-    app.mount("/audio", StaticFiles(directory=str(config.STATIC_DIR / "audio")), name="audio")
+    app.mount("/audio", StaticFiles(directory=str(config.AUDIO_DIR)), name="audio")
 
     @app.get("/", include_in_schema=False)
     async def serve_index():

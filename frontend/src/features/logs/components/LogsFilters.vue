@@ -15,7 +15,7 @@
         <select id="machineSelect" v-model="filters.machineIp" @change="emitChange">
           <option value="">{{ $t('attendance.filters.all_machines') }}</option>
           <option v-for="m in machines" :key="m.ip || m" :value="m.ip || m">
-            {{ m.ip || m }}
+            {{ getMachineStatusIcon(m.ip || m) }} {{ m.ip || m }}
           </option>
         </select>
       </div>
@@ -35,7 +35,8 @@
 </template>
 
 <script setup>
-import { reactive, defineProps, defineEmits } from 'vue'
+import { reactive, defineProps, defineEmits, ref, onMounted, onUnmounted } from 'vue'
+import { getLiveStatus } from '@/features/machines/api'
 
 const props = defineProps({
   machines: {
@@ -93,6 +94,36 @@ function resetFilters() {
   filters.endDate = ''
   emitChange()
 }
+
+const machineStatus = ref({})
+let statusInterval = null
+
+async function fetchLiveStatus() {
+  try {
+    const data = await getLiveStatus()
+    machineStatus.value = data || {}
+  } catch (e) {
+    console.error('Error fetching machine status:', e)
+  }
+}
+
+function getMachineStatusIcon(ip) {
+  const status = machineStatus.value[ip]
+  if (!status) return '' // Only show icon for machines that HAVE a live monitor
+  if (status === 'connected') return '🟢'
+  if (status === 'stuck') return '🟡'
+  if (status === 'disconnected') return '🔴'
+  return '⚪'
+}
+
+onMounted(() => {
+  fetchLiveStatus()
+  statusInterval = setInterval(fetchLiveStatus, 10000)
+})
+
+onUnmounted(() => {
+  if (statusInterval) clearInterval(statusInterval)
+})
 </script>
 
 <style scoped>

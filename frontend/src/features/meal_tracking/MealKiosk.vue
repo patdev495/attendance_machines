@@ -11,7 +11,9 @@
         </button>
         <select v-model="selectedMachine" class="machine-select">
           <option value="all">{{ $t('meal.all_machines') }}</option>
-          <option v-for="ip in canteenMachines" :key="ip" :value="ip">{{ ip }}</option>
+          <option v-for="ip in canteenMachines" :key="ip" :value="ip">
+            {{ getMachineStatusIcon(ip) }} {{ ip }}
+          </option>
         </select>
         <button 
           class="btn live-btn" 
@@ -196,6 +198,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { mealApi } from './api'
+import { getLiveStatus } from '@/features/machines/api'
 import { useLiveLogs } from '@/features/logs/composables/useLiveLogs'
 import { useUIStore } from '@/stores/ui'
 import { setLanguage } from '@/i18n/index.js'
@@ -251,7 +254,7 @@ const stats = ref({
   NOODLE: { registered: 0, picked_up: 0 },
   BREAD: { registered: 0, picked_up: 0 }
 })
-
+const machineStatus = ref({})
 const showHistory = ref(false)
 
 const searchInput = ref(null)
@@ -364,9 +367,27 @@ async function fetchCanteenMachines() {
   try {
     const { data } = await mealApi.getCanteenMachines()
     canteenMachines.value = data.machines || []
+    fetchLiveStatus()
   } catch (e) {
     console.error('Error fetching canteen machines:', e)
   }
+}
+
+async function fetchLiveStatus() {
+  try {
+    const data = await getLiveStatus()
+    machineStatus.value = data || {}
+  } catch (e) {
+    console.error('Error fetching machine status:', e)
+  }
+}
+
+function getMachineStatusIcon(ip) {
+  const status = machineStatus.value[ip]
+  if (status === 'connected') return '🟢'
+  if (status === 'stuck') return '🟡'
+  if (status === 'disconnected') return '🔴'
+  return '⚪'
 }
 
 async function handleSearch() {
@@ -642,6 +663,7 @@ onMounted(() => {
   fetchStats()
   loadTodayPickups()
   setInterval(fetchStats, 60000) 
+  setInterval(fetchLiveStatus, 10000) 
   
   fetchCanteenMachines().then(() => {
     if (showHistory.value) handleSearch()

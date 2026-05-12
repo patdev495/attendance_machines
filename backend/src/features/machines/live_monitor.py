@@ -1,5 +1,6 @@
 import threading
 import time
+import socket
 import requests
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -22,12 +23,42 @@ class LiveMonitorManager:
         self._loop = None
         self._recent_events = {}  # (user_id, ip) -> timestamp for dedup
         self._dedup_lock = threading.Lock()
+        self._session = requests.Session() # Reuse connections for hooks
+        self._session.mount('http://', requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20))
+        self._last_activity = {} # ip -> timestamp of last seen packet (including None)
+        self._status = {}        # ip -> "connected" | "stuck" | "disconnected"
+
+    @staticmethod
+    def _test_network_reach(ip, port=4370, timeout=3):
+        """Quick TCP reachability test — returns (ok, error_msg)."""
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(timeout)
+            s.connect((ip, port))
+            s.close()
+            return True, None
+        except Exception as e:
+            return False, str(e)
 
     def start(self):
         if self.is_running:
             return
         self.is_running = True
-        logger.info("Starting Live Monitor Manager...")
+        logger.info("="*60)
+        logger.info("LIVE MONITOR STARTUP DIAGNOSTICS")
+        logger.info("="*60)
+        logger.info(f"asyncio loop set: {self._loop is not None}")
+        
+        # Run a quick network reachability test for all machines
+        live_configs = get_live_machine_list()
+        logger.info(f"machines.txt returned {len(live_configs)} live machines")
+        for cfg in live_configs:
+            ip = cfg['ip']
+            ok, err = self._test_network_reach(ip)
+            status = "✓ REACHABLE" if ok else f"✗ UNREACHABLE ({err})"
+            tag = " [CANTEEN]" if cfg.get('is_canteen') else ""
+            logger.info(f"  {ip}{tag}: {status}")
+        logger.info("="*60)
         
         # Start management loop in a background thread
         management_thread = threading.Thread(target=self._management_loop, daemon=True)
@@ -35,12 +66,26 @@ class LiveMonitorManager:
 
     def _management_loop(self):
         """Periodically checks machine list and ensures only permitted monitors are active."""
+        loop_count = 0
         while self.is_running:
+            loop_count += 1
             try:
                 # Use the new filtered list for Live Mode
                 live_configs = get_live_machine_list()
                 live_ips_set = set(cfg['ip'] for cfg in live_configs)
-                print(f"DEBUG: Live Monitor Manager found {len(live_configs)} machines to monitor.")
+                
+                # Log detailed state every 30 iterations (~5 min) or on first run
+                verbose = (loop_count == 1 or loop_count % 30 == 0)
+                if verbose:
+                    alive = {ip for ip, t in self.active_monitors.items() if t.is_alive()}
+                    dead = {ip for ip, t in self.active_monitors.items() if not t.is_alive()}
+                    logger.info(
+                        f"[MGMT #{loop_count}] configs={len(live_configs)} | "
+                        f"active_threads={len(alive)} | dead_threads={len(dead)} | "
+                        f"canteen={self.canteen_ips} | loop_ok={self._loop is not None and self._loop.is_running()}"
+                    )
+                    if dead:
+                        logger.warning(f"[MGMT] Dead threads will be restarted: {dead}")
 
                 for cfg in live_configs:
                     ip = cfg['ip']
@@ -51,7 +96,7 @@ class LiveMonitorManager:
                         self.canteen_ips.discard(ip)
                     # Start monitor if it's new or the previous thread died
                     if ip not in self.active_monitors or not self.active_monitors[ip].is_alive():
-                        print(f"DEBUG: Starting monitor thread for {ip}")
+                        logger.info(f"[MGMT] Starting monitor thread for {ip} (canteen={cfg.get('is_canteen', False)})")
                         self._start_monitor(ip)
                 
                 # Stop monitors for IPs that are no longer marked as live
@@ -66,9 +111,21 @@ class LiveMonitorManager:
                         del self.active_monitors[ip]
                         if ip in self.meal_configs:
                             del self.meal_configs[ip]
+                        if ip in self._last_activity:
+                            del self._last_activity[ip]
+
+                # Watchdog: If a thread is alive but hasn't seen any activity for > 60s,
+                # it's likely stuck in a blocking read. We should restart it.
+                now = time.time()
+                for ip, last_ts in list(self._last_activity.items()):
+                    if ip in self.active_monitors and self.active_monitors[ip].is_alive():
+                        if now - last_ts > 60: # 6x the 10s timeout
+                            logger.warning(f"[WATCHDOG] Machine {ip} seems stuck (no activity for {int(now-last_ts)}s). Restarting thread.")
+                            self._status[ip] = "stuck"
+                            del self.active_monitors[ip] 
                            
             except Exception as e:
-                logger.error(f"Error in Live Monitor management loop: {e}")
+                logger.error(f"Error in Live Monitor management loop: {e}", exc_info=True)
             
             # Wait 10 seconds before next check for machines.txt changes
             for _ in range(10):
@@ -91,46 +148,64 @@ class LiveMonitorManager:
 
     def _monitor_loop(self, ip):
         """Background loop for a single machine."""
-        print(f"DEBUG: Starting monitor loop for {ip}")
+        retry_count = 0
+        logger.info(f"[MONITOR {ip}] Thread started")
         # Thread exits if manager stops OR if this IP is no longer in active_monitors
         while self.is_running and ip in self.active_monitors:
-            print(f"DEBUG: Attempting connection to {ip}")
+            retry_count += 1
+            
+            # Quick network reachability test before attempting ZK connection
+            ok, err = self._test_network_reach(ip)
+            if not ok:
+                logger.error(f"[MONITOR {ip}] Network unreachable (attempt #{retry_count}): {err}")
+                time.sleep(10)  # Back off longer when network is down
+                continue
+            
+            logger.info(f"[MONITOR {ip}] Connecting (attempt #{retry_count})...")
             zk = ZK(ip, port=4370, timeout=10, force_udp=False)
             conn = None
             try:
                 conn = zk.connect()
-                logger.info(f"Monitor connected to {ip}")
-                print(f"DEBUG: Monitor connected to {ip}. Entering live_capture...")
+                retry_count = 0  # Reset on successful connect
+                self._status[ip] = "connected"
+                self._last_activity[ip] = time.time()
+                logger.info(f"[MONITOR {ip}] Connected OK — entering live_capture")
                 
                 # Ignore buffered/replayed events that arrive immediately upon connection
                 ignore_until = time.time() + 2
                 
                 # live_capture is a generator that yields attendance records
                 for event in conn.live_capture():
+                    # Update activity timestamp every time we get something (even None on timeout)
+                    self._last_activity[ip] = time.time()
+
                     if not self.is_running or ip not in self.active_monitors:
-                        print(f"DEBUG: Monitor loop for {ip} stopping (manager stopped or IP removed)")
+                        logger.info(f"[MONITOR {ip}] Stopping (manager stopped or IP removed)")
                         break
+                    
                     if event is None:
-                        # This happens on timeout, just keep waiting
+                        # This happens on timeout (10s), just keep waiting
                         continue
                         
                     if time.time() < ignore_until:
-                        print(f"DEBUG: SKIPPING REPLAYED EVENT on connection from {ip}: {event}")
+                        logger.debug(f"[MONITOR {ip}] Skipping replayed event: {event}")
                         continue
                         
-                    print(f"DEBUG: RECEIVED EVENT from {ip}: {event}")
+                    logger.info(f"[MONITOR {ip}] EVENT: user_id={event.user_id}, time={event.timestamp}")
                     self._process_event(ip, event)
                     
             except Exception as e:
                 if self.is_running:
-                    logger.error(f"Monitor error on {ip}: {e}. Retrying in 5s...")
-                    print(f"DEBUG: Monitor ERROR on {ip}: {e}")
+                    self._status[ip] = "disconnected"
+                    logger.error(f"[MONITOR {ip}] Error (attempt #{retry_count}): {e}")
                     time.sleep(5)
             finally:
                 if conn:
-                    try: conn.disconnect()
+                    try: 
+                        # Ensure we really clear the SDK state
+                        conn.disconnect()
                     except: pass
-                print(f"DEBUG: Monitor loop for {ip} disconnected/restarting in 5s")
+                logger.info(f"[MONITOR {ip}] Disconnected — cooldown 5s before reconnect")
                 time.sleep(5) # Cooldown before reconnect
 
     def _process_event(self, ip, event):
@@ -198,9 +273,9 @@ class LiveMonitorManager:
                     
                     # 1. Look up meal info to get the canonical ID
                     meal_info = check_meal_by_machine_id(user_id, timestamp.date())
-                    target_emp_id = meal_info.get("emp_no") if meal_info else user_id
+                    target_emp_id = str(meal_info.get("emp_no") or user_id) if meal_info else user_id
                     
-                    print(f">>> MEAL DEBUG: user_id={user_id}, target_emp_id='{target_emp_id}', timestamp.date()={timestamp.date()}")
+                    logger.info(f"[MEAL {ip}] user_id={user_id}, target_emp_id='{target_emp_id}', date={timestamp.date()}")
                     
                     # 2. Atomic check-and-insert: try to log pickup, returns True if NEW
                     if meal_info and meal_info.get('is_registered'):
@@ -209,7 +284,7 @@ class LiveMonitorManager:
                     else:
                         is_duplicate = False  # Not registered = show as error, not duplicate
                     
-                    print(f">>> MEAL DEBUG: is_duplicate={is_duplicate}")
+                    logger.info(f"[MEAL {ip}] is_duplicate={is_duplicate}")
                     
                     if meal_info:
                         logger.info(f"MEAL FOUND for {target_emp_id}: {meal_info.get('meal_name_vi', '?')} (Duplicate: {is_duplicate})")
@@ -223,7 +298,7 @@ class LiveMonitorManager:
                     logger.error(f"Error querying/logging meal info: {e}")
 
             # 4. Broadcast to WebSockets
-            print(f">>> MEAL DEBUG: Broadcasting is_duplicate={is_duplicate} for {user_id}")
+            logger.info(f"[EVENT {ip}] Broadcasting type={'meal_event' if ip in self.canteen_ips else 'new_log'} for {user_id} (duplicate={is_duplicate})")
             payload = {
                 "type": "meal_event" if ip in self.canteen_ips else "new_log",
                 "data": {
@@ -243,26 +318,27 @@ class LiveMonitorManager:
             # 4. Meal Ticket Webhook (Target API)
             meal_url = self.meal_configs.get(ip)
             if meal_url:
-                def send_meal_hook():
+                def send_meal_hook(url, data):
                     try:
-                        # Fetch extra info if possible (department)
-                        dept = emp.department if emp else "-"
-                        hook_data = {
-                            "employee_id": user_id,
-                            "emp_name": emp_name,
-                            "department": dept,
-                            "timestamp": timestamp.isoformat(),
-                            "machine_ip": ip
-                        }
-                        logger.info(f"Sending meal ticket hook to {meal_url} for {user_id}")
-                        resp = requests.post(meal_url, json=hook_data, timeout=5)
+                        logger.info(f"Sending meal ticket hook to {url} for {data['employee_id']}")
+                        resp = self._session.post(url, json=data, timeout=5)
                         if resp.status_code >= 400:
                             logger.error(f"Meal hook error {resp.status_code}: {resp.text}")
                     except Exception as ex:
-                        logger.error(f"Failed to send meal hook: {ex}")
+                        logger.error(f"Failed to send meal hook to {url}: {ex}")
                 
-                # Run in a separate thread to avoid blocking the monitor loop
-                threading.Thread(target=send_meal_hook, daemon=True).start()
+                # Fetch extra info
+                dept = emp.department if emp else "-"
+                hook_payload = {
+                    "employee_id": user_id,
+                    "emp_name": emp_name,
+                    "department": dept,
+                    "timestamp": timestamp.isoformat(),
+                    "machine_ip": ip
+                }
+                
+                # Run in thread pool to avoid thread explosion
+                self.executor.submit(send_meal_hook, meal_url, hook_payload)
 
 
         except Exception as e:
@@ -276,11 +352,21 @@ class LiveMonitorManager:
 
     def _broadcast_async(self, payload):
         if self._loop and self._loop.is_running():
-            print(f"DEBUG: Broadcasting event to WebSockets: {payload['data']['employee_id']}")
+            ws_count = len(manager.active_connections)
+            logger.info(
+                f"[BROADCAST] Sending to {ws_count} WebSocket client(s): "
+                f"type={payload.get('type')} emp={payload['data']['employee_id']}"
+            )
             asyncio.run_coroutine_threadsafe(manager.broadcast(payload), self._loop)
         else:
-            print("DEBUG: Cannot broadcast - loop not running or not set")
-            pass
+            logger.warning(
+                f"[BROADCAST] FAILED — loop_set={self._loop is not None}, "
+                f"loop_running={self._loop.is_running() if self._loop else 'N/A'}"
+            )
+
+    def get_status(self):
+        """Returns the current connection status of all monitored machines."""
+        return self._status
 
 # Global instance
 live_monitor = LiveMonitorManager()

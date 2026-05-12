@@ -21,6 +21,10 @@ export function getMachinesCapacity() {
   return apiFetch('/capacity')
 }
 
+export function getLiveStatus() {
+  return apiFetch('/live-status')
+}
+
 export function getMachineEmployees(ip) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`)
 }

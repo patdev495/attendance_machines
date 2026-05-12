@@ -46,5 +46,6 @@ class Config:
     # Data Files (in Root, as requested)
     MACHINES_FILE = BASE_DIR / "machines.txt"
     EXCEL_FILE = BASE_DIR / "employee_work_shift.xlsx"
+    AUDIO_DIR = BASE_DIR / "audio"
 
 config = Config()
