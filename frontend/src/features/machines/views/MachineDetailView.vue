@@ -30,6 +30,10 @@
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-.08-7.49"/></svg>
           {{ $t('device.refresh') }}
         </button>
+        <button class="btn btn-primary" @click="handleAddAndEnroll" style="background: linear-gradient(135deg, #6366f1, #8b5cf6); border: none; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/></svg>
+          {{ $t('device.add_and_enroll') }}
+        </button>
       </div>
     </div>
 
@@ -98,6 +102,13 @@
       :sourceIp="ip"
       @close="isCloneModalOpen = false"
     />
+
+    <RemoteEnrollModal
+      :isOpen="isEnrollModalOpen"
+      :ip="ip"
+      @close="isEnrollModalOpen = false"
+      @success="store.loadMachineEmployees(ip)"
+    />
   </div>
 </template>
 
@@ -111,7 +122,8 @@ import PaginationBar from '@/components/shared/PaginationBar.vue'
 import MachineEmployeeTable from '../components/MachineEmployeeTable.vue'
 import EmployeeDetailsModal from '@/features/employees/components/EmployeeDetailsModal.vue'
 import FingerprintCloneModal from '../components/FingerprintCloneModal.vue'
-import { syncMachineTime } from '../api.js'
+import RemoteEnrollModal from '../components/RemoteEnrollModal.vue'
+import { syncMachineTime, enrollUser } from '../api.js'
 
 const props = defineProps({ ip: { type: String, required: true } })
 const store = useMachineStore()
@@ -124,6 +136,7 @@ const isDetailsModalOpen = ref(false)
 
 const isCloneModalOpen = ref(false)
 const selectedIdForClone = ref('')
+const isEnrollModalOpen = ref(false)
 
 onMounted(() => {
   store.loadMachineEmployees(props.ip)
@@ -263,6 +276,10 @@ async function handleBulkSyncFinger() {
     notification.remove(notifyId)
     setTimeout(() => notification.clearByType('info'), 500)
   }
+}
+
+async function handleAddAndEnroll() {
+  isEnrollModalOpen.value = true
 }
 </script>
 

@@ -11,6 +11,8 @@ import threading
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 import base64
+import time
+from typing import List, Optional, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,11 @@ global_sync_status = {
     "current_ip": "",
     "results": {}
 }
+
+# Global state for enrollment progress
+# { "ip": { "status": "waiting|success|failed|cancelled", "message": "...", "timestamp": 123 } }
+enrollment_sessions: Dict[str, dict] = {}
+enrollment_lock = threading.Lock()
 
 status_lock = threading.Lock()
 global_sync_lock = threading.Lock()
@@ -999,3 +1006,160 @@ def bulk_sync_time_all_machines():
             except Exception as e:
                 results[ip] = f"Error: {str(e)}"
     return results
+
+def enroll_user_remote(ip: str, employee_id: str, temp_id: int = 0):
+    """
+    Triggers the remote enrollment mode on a ZKTeco machine.
+    Now updates enrollment_sessions for progress tracking.
+    """
+    with enrollment_lock:
+        enrollment_sessions[ip] = {
+            "status": "initiating",
+            "message": "Connecting to machine...",
+            "timestamp": time.time()
+        }
+
+    # Use a very long timeout (e.g., 30 minutes) to effectively "disable" the auto-timeout from software side
+    zk = ZK(ip, port=4370, timeout=1800, verbose=False) 
+    conn = None
+    try:
+        conn = zk.connect()
+        
+        with enrollment_lock:
+            enrollment_sessions[ip].update({
+                "status": "waiting",
+                "message": "Machine screen active. Waiting for worker..."
+            })
+
+        # 1. Ensure user exists
+        users = conn.get_users()
+        target = next((u for u in users if u.user_id == str(employee_id)), None)
+        
+        if not target:
+            db = SessionLocal()
+            try:
+                from database import EmployeeLocalRegistry
+                emp_info = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == employee_id).first()
+                emp_name = emp_info.emp_name if emp_info and emp_info.emp_name else employee_id
+                new_uid = max([u.uid for u in users] + [0]) + 1
+                conn.set_user(uid=new_uid, name=emp_name, privilege=0, user_id=str(employee_id))
+                target_uid = new_uid
+            finally:
+                db.close()
+        else:
+            target_uid = target.uid
+
+        # 2. Trigger enrollment using low-level commands to avoid hardcoded 60s timeout
+        # Reference: pyzk base.py lines 1189-1193
+        from zk import const
+        from struct import pack, unpack
+        import codecs
+
+        if zk.tcp:
+            command_string = pack('<24sbb', str(employee_id).encode(), temp_id, 1)
+        else:
+            command_string = pack('<Ib', int(employee_id), temp_id)
+        
+        conn.cancel_capture()
+        # Send STARTENROLL
+        res = conn._ZK__send_command(const.CMD_STARTENROLL, command_string)
+        if not res.get('status'):
+            raise Exception(f"Machine rejected enrollment command: {res.get('code')}")
+
+        # 3. Custom wait loop
+        # We use a loop with short timeouts on the socket to check if 'cancelled' was set in global state
+        success = False
+        start_time = time.time()
+        
+        # Set a short socket timeout just for the recv calls so we can loop and check cancellation
+        conn._ZK__sock.settimeout(2.0) 
+        
+        attempts = 3
+        while attempts > 0:
+            # Check if user cancelled via web UI
+            with enrollment_lock:
+                if ip in enrollment_sessions and enrollment_sessions[ip]["status"] == "cancelled":
+                    logger.info(f"Enrollment on {ip} aborted by user.")
+                    return {"status": "cancelled", "ip": ip}
+
+            try:
+                # Wait for progress data from machine
+                data_recv = conn._ZK__sock.recv(1032)
+                conn._ZK__ack_ok()
+                
+                # Logic to detect successful scans (simplified from pyzk)
+                # res 0x64 (100) means a successful partial scan
+                if len(data_recv) > 16:
+                    res_code = unpack("H", data_recv.ljust(24, b"\x00")[16:18])[0]
+                    if res_code == 0x64:
+                        attempts -= 1
+                        logger.info(f"Scan {3-attempts}/3 received for {ip}")
+                    elif res_code == 0: # 0 often means final success
+                        success = True
+                        break
+                    elif res_code in [4, 6]: # Failed or timeout codes
+                        # We ignore internal machine timeouts if we want to stay in loop,
+                        # but usually the machine exits the screen. 
+                        # To be safe, we break if the machine says it failed.
+                        break
+            except Exception:
+                # Timeout on recv (2.0s) - just loop and check cancellation
+                continue
+
+        # 4. Final Verification
+        if not success:
+            templates = conn.get_templates()
+            success = any(t for t in templates if t.uid == target_uid and t.fid == temp_id)
+
+        with enrollment_lock:
+            if success:
+                enrollment_sessions[ip].update({"status": "success", "message": "Enrollment successful!"})
+            elif enrollment_sessions[ip]["status"] != "cancelled":
+                enrollment_sessions[ip].update({"status": "failed", "message": "Enrollment failed or machine timed out."})
+
+        return {"status": "success" if success else "failed", "ip": ip}
+        
+    except Exception as e:
+        logger.error(f"Enrollment thread error for {ip}: {e}")
+        with enrollment_lock:
+            if ip in enrollment_sessions and enrollment_sessions[ip]["status"] != "cancelled":
+                enrollment_sessions[ip].update({
+                    "status": "failed",
+                    "message": str(e)
+                })
+        return {"status": "error", "message": str(e)}
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def cancel_enroll_remote(ip: str):
+    """
+    Cancels the enrollment on the machine by sending CMD_CANCELCAPTURE via a new connection.
+    """
+    with enrollment_lock:
+        if ip in enrollment_sessions:
+            enrollment_sessions[ip]["status"] = "cancelled"
+            enrollment_sessions[ip]["message"] = "Operation cancelled by user."
+
+    # Send actual cancel command to hardware
+    zk = ZK(ip, port=4370, timeout=5)
+    conn = None
+    try:
+        conn = zk.connect()
+        conn.cancel_capture()
+        conn.enable_device() # Returns to standby
+        return {"status": "cancelled", "ip": ip}
+    except Exception as e:
+        logger.error(f"Error cancelling enrollment on {ip}: {e}")
+        return {"status": "error", "message": str(e)}
+    finally:
+        if conn:
+            try: conn.disconnect()
+            except: pass
+
+def get_enroll_status(ip: str):
+    """
+    Returns the current enrollment status for an IP.
+    """
+    return enrollment_sessions.get(ip, {"status": "idle", "message": "No active session."})

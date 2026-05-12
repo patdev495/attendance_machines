@@ -13,6 +13,7 @@
     "cancel": "Hủy",
     "error": "Lỗi",
     "success": "Thành công",
+    "retry": "Thử lại",
     "prev": "Trước",
     "next": "Tiếp",
     "goto": "Đến trang",
@@ -265,6 +266,8 @@
     "syncing_time": "Đang đồng bộ giờ...",
     "sync_time_success": "Đồng bộ giờ thành công",
     "sync_time_failed": "Đồng bộ giờ thất bại: {err}",
+    "add_and_enroll": "Thêm & Lấy vân tay",
+    "enroll_id_prompt": "Nhập Mã nhân viên cần đăng ký vân tay (ID):",
     "action": {
       "sync_finger": "Đồng bộ vân tay",
       "rename": "Đổi tên",
@@ -344,7 +347,12 @@
     "selected_count": "Đã chọn {count} / {total}",
     "processing_machines": "Đang xử lý {current} / {total} máy...",
     "cloning_action": "Đang sao chép...",
-    "push_action": "Đẩy sang {count} máy"
+    "push_action": "Đẩy sang {count} máy",
+    "start_enroll": "Bắt đầu lấy vân tay từ xa",
+    "overwrite_enroll": "Ghi đè/Lấy lại vân tay từ xa",
+    "finger_slot": "Vị trí ngón tay (0-9)",
+    "slot_name": "Ngón tay {n}",
+    "enroll_help": "Lưu ý: Nếu ID đã tồn tại, vân tay tại vị trí này sẽ bị ghi đè."
   },
   "export": {
     "progress_label": "Xuất file",

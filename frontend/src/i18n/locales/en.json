@@ -13,6 +13,7 @@
     "cancel": "Cancel",
     "error": "Error",
     "success": "Success",
+    "retry": "Retry",
     "prev": "Prev",
     "next": "Next",
     "goto": "Go to",
@@ -265,6 +266,8 @@
     "syncing_time": "Syncing time...",
     "sync_time_success": "Time synced successfully",
     "sync_time_failed": "Failed to sync time: {err}",
+    "add_and_enroll": "Add & Enroll",
+    "enroll_id_prompt": "Enter Employee ID to start enrollment:",
     "action": {
       "sync_finger": "Sync Fingerprint",
       "rename": "Rename",
@@ -344,7 +347,12 @@
     "selected_count": "{count} / {total} selected",
     "processing_machines": "Processing {current} / {total} machines...",
     "cloning_action": "Cloning...",
-    "push_action": "Push to {count} Machines"
+    "push_action": "Push to {count} Machines",
+    "start_enroll": "Start Remote Enrollment",
+    "overwrite_enroll": "Overwrite/Re-enroll Remotely",
+    "finger_slot": "Finger Slot (0-9)",
+    "slot_name": "Finger {n}",
+    "enroll_help": "Note: If the ID exists, the fingerprint at this slot will be overwritten."
   },
   "export": {
     "progress_label": "Export",

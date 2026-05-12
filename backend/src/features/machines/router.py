@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from . import service
+
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -13,7 +15,8 @@ from .service import (
     bulk_delete_status, bulk_delete_users_from_all_machines,
     sync_time_on_machine, bulk_sync_time_all_machines,
     global_sync_status, global_sync_all_fingerprints,
-    clear_all_fingerprints_on_machine, clear_fp_status
+    clear_all_fingerprints_on_machine, clear_fp_status,
+    enroll_user_remote
 )
 
 from .biometric_service import BiometricExportService
@@ -43,6 +46,10 @@ class PushFingerprintsRequest(BaseModel):
 
 class PrivilegeUpdateRequest(BaseModel):
     privilege: int
+
+class EnrollmentRequest(BaseModel):
+    employee_id: str
+    finger_index: int = 0
 
 router = APIRouter(prefix="/api/machines", tags=["Machines"])
 
@@ -234,3 +241,25 @@ def update_user_privilege_endpoint(ip: str, employee_id: str, req: PrivilegeUpda
     if result != "Success":
         raise HTTPException(status_code=500, detail=result)
     return {"status": "Success"}
+
+@router.post("/{ip}/enroll")
+async def enroll_machine_user(ip: str, request: EnrollmentRequest, background_tasks: BackgroundTasks):
+    """
+    Kích hoạt chế độ đăng ký vân tay từ xa (chạy ngầm).
+    """
+    background_tasks.add_task(service.enroll_user_remote, ip, request.employee_id, request.finger_index)
+    return {"status": "started", "message": "Enrollment process initiated."}
+
+@router.get("/{ip}/enroll/status")
+async def get_enroll_status(ip: str):
+    """
+    Lấy trạng thái tiến trình đăng ký vân tay.
+    """
+    return service.get_enroll_status(ip)
+
+@router.post("/{ip}/enroll/cancel")
+async def cancel_enroll(ip: str):
+    """
+    Hủy bỏ tiến trình đăng ký vân tay trên máy.
+    """
+    return service.cancel_enroll_remote(ip)

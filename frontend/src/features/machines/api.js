@@ -141,4 +141,20 @@ export function updateUserPrivilege(ip, employeeId, privilege) {
   })
 }
 
+export function enrollUser(ip, employeeId, fingerIndex = 0) {
+  return apiFetch(`/${encodeURIComponent(ip)}/enroll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_id: employeeId, finger_index: fingerIndex })
+  })
+}
+
+export function getEnrollStatus(ip) {
+  return apiFetch(`/${encodeURIComponent(ip)}/enroll/status`)
+}
+
+export function cancelEnroll(ip) {
+  return apiFetch(`/${encodeURIComponent(ip)}/enroll/cancel`, { method: 'POST' })
+}
+
 export const EXPORT_FINGERPRINTS_URL = BASE + '/export-fingerprints'

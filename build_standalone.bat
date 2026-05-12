@@ -51,7 +51,11 @@ if not exist %DIST_PATH%\backend mkdir %DIST_PATH%\backend
 if not exist %DIST_PATH%\backend\.env copy backend\.env %DIST_PATH%\backend\.env
 
 echo Ensuring required data files exist...
-if not exist %DIST_PATH%\audio mkdir %DIST_PATH%\audio
+echo Copying audio files...
+if exist audio (
+    if not exist %DIST_PATH%\audio mkdir %DIST_PATH%\audio
+    xcopy /y /e audio\* %DIST_PATH%\audio\
+)
 
 echo.
 echo ============================================================

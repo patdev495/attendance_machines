@@ -260,6 +260,8 @@
     "machine": "设备：",
     "employee_count": "{filtered} / {total} 员工",
     "connecting": "正在连接...",
+    "add_and_enroll": "新增并采集指纹",
+    "enroll_id_prompt": "输入需要采集指纹的员工 ID:",
     "action": {
       "sync_finger": "同步指纹",
       "rename": "重命名",
@@ -337,7 +339,9 @@
     "selected_count": "已选择 {count} / {total}",
     "processing_machines": "正在处理 {current} / {total} 台机器...",
     "cloning_action": "正在克隆...",
-    "push_action": "推送到 {count} 台机器"
+    "push_action": "推送到 {count} 台机器",
+    "start_enroll": "开始远程采集指纹",
+    "overwrite_enroll": "重新远程采集指纹"
   },
   "export": {
     "progress_label": "导出",
