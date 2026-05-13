@@ -149,11 +149,13 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         
         if not (count > 1 and first != last and not is_double_checkin):
             note = determine_missing_tap(first, w_date, calculation_shift, department, rules_pool)
-            # Single tap: suppress the metric we cannot know
+            # Single tap: suppress the metric we cannot know and set the missing tap to None for UI
             if note == "Missing Check-out":
                 minutes_early_lv = 0   # don't know when they left
+                last = None            # Hide the duplicate time on UI
             elif note == "Missing Check-in":
                 minutes_late = 0       # don't know when they arrived
+                first = None           # Hide the duplicate time on UI
 
         emp_name = getattr(row, "emp_name", None)
         if not emp_name:
@@ -232,6 +234,10 @@ def sync_employees_full(file_bytes: Optional[io.BytesIO] = None):
             
             excel_synced_ids = set()
             
+            # Case-insensitive column matching
+            cols_upper = {str(c).strip().upper(): c for c in df.columns}
+            logger.info(f"Excel Columns detected: {list(cols_upper.keys())}")
+            
             for idx, row in df.iterrows():
                 # ID mappings based on user's final logic: EMP_ID is the PK, FULL_EMP_ID is display
                 emp_id_raw = str(row.get('EMP_ID', '')).strip()
@@ -264,22 +270,51 @@ def sync_employees_full(file_bytes: Optional[io.BytesIO] = None):
                     meta.shift = val
                     meta.status = 'TV' if val == 'TV' else 'Active'
                 
-                if 'EMP_NAME' in df.columns and pd.notna(row['EMP_NAME']): meta.emp_name = str(row['EMP_NAME'])
-                if 'DEPARTMENT' in df.columns and pd.notna(row['DEPARTMENT']): meta.department = str(row['DEPARTMENT'])
-                if 'GROUP' in df.columns and pd.notna(row['GROUP']): meta.group = str(row['GROUP'])
+                if 'EMP_NAME' in cols_upper and pd.notna(row[cols_upper['EMP_NAME']]): 
+                    meta.emp_name = str(row[cols_upper['EMP_NAME']])
+                if 'DEPARTMENT' in cols_upper and pd.notna(row[cols_upper['DEPARTMENT']]): 
+                    meta.department = str(row[cols_upper['DEPARTMENT']])
+                if 'GROUP' in cols_upper and pd.notna(row[cols_upper['GROUP']]): 
+                    meta.group = str(row[cols_upper['GROUP']])
+                
                 # Phase 13: Robust hired date mapping
-                start_date_aliases = ['START_DATE', 'NGÀY VÀO LÀM', 'NGAY VAO LAM', 'HIRED DATE', 'DATE HIRED']
+                start_date_aliases = ['START_DATE', 'NGÀY VÀO LÀM', 'NGAY VAO LAM', 'NGÀY VÀO', 'HIRED DATE', 'DATE HIRED', 'START DATE']
                 hired_date_val = None
+                
+                found_alias = None
                 for alias in start_date_aliases:
-                    if alias in df.columns:
-                        hired_date_val = row[alias]
+                    if alias.upper() in cols_upper:
+                        hired_date_val = row[cols_upper[alias.upper()]]
+                        found_alias = alias
                         break
                 
-                if hired_date_val and pd.notna(hired_date_val):
+                if hired_date_val is not None and pd.notna(hired_date_val):
+                    if idx < 5:
+                        logger.info(f"Row {idx} [{emp_id}] - Raw hired_date_val: {hired_date_val} (Type: {type(hired_date_val)})")
                     try:
-                        meta.start_date = pd.to_datetime(hired_date_val).date()
-                    except:
-                        pass
+                        # Handle Excel numeric dates (e.g. 44409)
+                        if isinstance(hired_date_val, (int, float)) and not isinstance(hired_date_val, bool):
+                            dt = pd.to_datetime(hired_date_val, unit='D', origin='1899-12-30')
+                        else:
+                            dt = pd.to_datetime(hired_date_val)
+                            
+                        if dt.year > 1900: # Use 1900 as more realistic bound for birth/hire dates
+                            meta.start_date = dt.date()
+                        else:
+                            meta.start_date = None
+                            if idx < 5: logger.info(f"Row {idx} skipped: year too low ({dt.year})")
+                    except Exception as e:
+                        meta.start_date = None
+                        if idx < 5: logger.error(f"Row {idx} error: {e}")
+                else:
+                    meta.start_date = None
+
+                # Force updated_at refresh to show sync happened
+                from sqlalchemy import func
+                meta.updated_at = func.now()
+
+                if idx % 100 == 0:
+                    logger.info(f"Syncing Excel row {idx}/{total_rows} (Last Match: {found_alias or 'None'})")
 
                 with status_lock:
                     sync_status["progress"] = int((len(excel_synced_ids) / total_rows) * 40)

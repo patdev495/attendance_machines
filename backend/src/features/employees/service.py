@@ -170,7 +170,7 @@ def export_employees_to_excel(db: Session, search: str = None, source_status: st
             emp.emp_name or "",
             emp.department or "",
             emp.group_name or "",
-            emp.start_date if emp.start_date else "",
+            (emp.start_date if emp.start_date and emp.start_date.year > 1970 else ""),
             emp.shift or "",
             emp.source_status or "",
             last_time if last_time else ""

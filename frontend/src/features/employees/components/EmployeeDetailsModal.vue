@@ -98,6 +98,8 @@ const close = () => {
 
 const formatValue = (val) => {
   if (val === null || val === undefined || val === '') return '-'
+  // Handle epoch date strings commonly sent by backends or placeholder values
+  if (val === '1970-01-01' || val === '01/01/1970') return '-'
   return val
 }
 
