@@ -38,13 +38,13 @@
                 <label class="toggle-switch">
                   <input type="checkbox" v-model="m.is_canteen" @change="toggleMachineConfig(m)">
                   <span class="slider"></span>
-                  <span class="label">Canteen</span>
+                  <span class="label">{{ $t('meal.toggle_canteen') || 'Canteen' }}</span>
                 </label>
               </div>
             </div>
           </div>
           <div class="modal-note">
-            * Thay đổi sẽ được hệ thống cập nhật sau tối đa 10 giây.
+            {{ $t('meal.config_note') || '* Thay đổi sẽ được hệ thống cập nhật sau tối đa 10 giây.' }}
           </div>
         </div>
       </div>

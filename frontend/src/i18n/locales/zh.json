@@ -405,6 +405,10 @@
       "no_dk": "未登记",
       "database": "数据库"
     },
-    "history_record": "历史记录"
+    "history_record": "历史记录",
+    "machine_settings": "考勤机配置",
+    "toggle_live": "实时监控",
+    "toggle_canteen": "餐厅机",
+    "config_note": "* 系统将在10秒内更新更改。"
   }
 }

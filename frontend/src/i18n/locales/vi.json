@@ -450,6 +450,7 @@
     "history_record": "Dữ liệu lịch sử",
     "machine_settings": "Cấu hình máy chấm công",
     "toggle_live": "Theo dõi trực tiếp",
-    "toggle_canteen": "Máy nhà ăn"
+    "toggle_canteen": "Máy nhà ăn",
+    "config_note": "* Thay đổi sẽ được hệ thống cập nhật sau tối đa 10 giây."
   }
 }

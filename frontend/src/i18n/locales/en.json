@@ -416,6 +416,10 @@
       "no_dk": "No Reg",
       "database": "Database"
     },
-    "history_record": "History Record"
+    "history_record": "History Record",
+    "machine_settings": "Machine Configuration",
+    "toggle_live": "Live Monitor",
+    "toggle_canteen": "Canteen Machine",
+    "config_note": "* Changes will be updated by the system within 10 seconds."
   }
 }
