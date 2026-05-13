@@ -19,11 +19,11 @@
           </option>
         </select>
       </div>
-      <div class="filter-group">
+      <div class="filter-group" v-if="!liveMode">
         <label for="startDateInput">{{ $t('attendance.filters.date_from') }}</label>
         <input id="startDateInput" type="date" v-model="filters.startDate" @change="emitChange" />
       </div>
-      <div class="filter-group">
+      <div class="filter-group" v-if="!liveMode">
         <label for="endDateInput">{{ $t('attendance.filters.date_to') }}</label>
         <input id="endDateInput" type="date" v-model="filters.endDate" @change="emitChange" />
       </div>
@@ -46,6 +46,10 @@ const props = defineProps({
   initialFilters: {
     type: Object,
     default: () => ({})
+  },
+  liveMode: {
+    type: Boolean,
+    default: false
   }
 })
 

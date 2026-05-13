@@ -36,6 +36,7 @@
     <LogsFilters 
       :machines="attendanceStore.machines" 
       :initial-filters="activeFilters"
+      :live-mode="liveMode"
       @change="handleFilterChange" 
     />
 
