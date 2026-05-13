@@ -6,11 +6,13 @@ export function useLiveLogs(onMessage) {
   const error = ref(null)
   let socket = null
   let reconnectTimer = null
+  let manuallyClosed = false
 
   const connect = () => {
     if (socket || isConnecting.value) return
 
     isConnecting.value = true
+    manuallyClosed = false
     error.value = null
 
     // Determine WebSocket URL
@@ -39,6 +41,12 @@ export function useLiveLogs(onMessage) {
       isConnected.value = false
       isConnecting.value = false
       socket = null
+      
+      if (manuallyClosed) {
+        console.log('Live Logs WebSocket closed manually')
+        return
+      }
+
       console.log('Live Logs WebSocket disconnected. Retrying in 5s...')
       
       // Auto-reconnect logic
@@ -56,6 +64,7 @@ export function useLiveLogs(onMessage) {
   }
 
   const disconnect = () => {
+    manuallyClosed = true
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null

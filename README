@@ -21,3 +21,23 @@ C:\Windows\System32>wsl hostname -I
 
 C:\Windows\System32>netsh interface portproxy add v4tov4 listenport=8001 listenaddress=0.0.0.0 connectport=8001 connectaddress=172.25.82.150
 
+# --- SQL TEST COMMANDS FOR MEAL PICKUP LOG ---
+
+-- 1. Thêm 20 dòng dữ liệu test (Dùng vòng lặp SQL Server)
+DECLARE @i INT = 1;
+WHILE @i <= 20
+BEGIN
+    INSERT INTO HR_MEAL_PICKUP_LOG 
+        (MFG_DAY, AREA, EMP_NO, EMP_NAME, MEAL_CODE, MEAL_NAME_VI, PICKUP_TIME, DEVICE_NAME, PICKUP_BY, DEPARTMENT)
+    VALUES 
+        (CONVERT(VARCHAR(8), GETDATE(), 112), 'Canteen', 
+         'TEST' + CAST(@i AS VARCHAR), 
+         N'User Test ' + CAST(@i AS VARCHAR), 
+         CASE WHEN @i % 3 = 0 THEN 'RICE' WHEN @i % 3 = 1 THEN 'NOODLE' ELSE 'BREAD' END,
+         CASE WHEN @i % 3 = 0 THEN N'Cơm' WHEN @i % 3 = 1 THEN N'Mỳ' ELSE N'Bánh mì' END,
+         GETDATE(), '192.168.209.60', 'TEST_BOT', N'Phòng Kiểm Thử');
+    SET @i = @i + 1;
+END
+
+-- 2. Xoá dữ liệu test
+DELETE FROM HR_MEAL_PICKUP_LOG WHERE PICKUP_BY = 'TEST_BOT';

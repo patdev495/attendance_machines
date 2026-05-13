@@ -300,11 +300,11 @@ async function fetchStats() {
 }
 
 const { connect, disconnect, isConnected } = useLiveLogs((payload) => {
-  if (payload.type === 'meal_event' || payload.type === 'new_log') {
+  if (payload.type === 'meal_event') {
     const data = payload.data
     const ip = data.machine_ip || 'Manual Entry'
     
-    if (activeMachines.value.includes(ip) || selectedMachine.value === 'all') {
+    if (activeMachines.value.includes(ip)) {
       const currentEmpId = data.emp_no || data.employee_id;
       
       // Debounce rapid duplicate swipes (e.g. holding finger on scanner)
@@ -679,7 +679,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.kiosk-container { display: flex; flex-direction: column; flex: 1; height: 100%; min-height: calc(100vh - 60px); background-color: var(--bg-color); color: var(--text-color); font-family: 'Inter', sans-serif; overflow: hidden; }
+.kiosk-container { display: flex; flex-direction: column; height: 100vh; background-color: var(--bg-color); color: var(--text-color); font-family: 'Inter', sans-serif; overflow: hidden; }
 .kiosk-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 24px; background: var(--card-bg); border-bottom: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 10; }
 .logo-area { display: flex; align-items: center; gap: 20px; }
 .logo-area h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: white; }
