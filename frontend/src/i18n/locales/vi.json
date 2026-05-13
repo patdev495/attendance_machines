@@ -447,6 +447,9 @@
       "no_dk": "Không ĐK",
       "database": "Database"
     },
-    "history_record": "Dữ liệu lịch sử"
+    "history_record": "Dữ liệu lịch sử",
+    "machine_settings": "Cấu hình máy chấm công",
+    "toggle_live": "Theo dõi trực tiếp",
+    "toggle_canteen": "Máy nhà ăn"
   }
 }

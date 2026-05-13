@@ -16,7 +16,7 @@ from .service import (
     sync_time_on_machine, bulk_sync_time_all_machines,
     global_sync_status, global_sync_all_fingerprints,
     clear_all_fingerprints_on_machine, clear_fp_status,
-    enroll_user_remote
+    enroll_user_remote, update_machine_tags, get_all_machine_configs
 )
 
 from .biometric_service import BiometricExportService
@@ -57,6 +57,11 @@ router = APIRouter(prefix="/api/machines", tags=["Machines"])
 def get_machines():
     """List all configured machine IPs."""
     return get_machine_list()
+
+@router.get("/configs")
+def get_machines_full_configs():
+    """List all machines with their live/canteen tags."""
+    return get_all_machine_configs()
 
 @router.get("/capacity")
 def get_machines_capacity():
@@ -192,7 +197,6 @@ def trigger_bulk_push_fingerprints(data: BulkPushRequest, background_tasks: Back
 @router.get("/bulk-push-status")
 def get_bulk_push_status():
     """Poll status of the bulk fingerprint push operation."""
-    from .service import bulk_push_status
     return bulk_push_status
 
 @router.post("/bulk-push-preview")
@@ -263,3 +267,15 @@ async def cancel_enroll(ip: str):
     Hủy bỏ tiến trình đăng ký vân tay trên máy.
     """
     return service.cancel_enroll_remote(ip)
+
+class MachineConfigUpdate(BaseModel):
+    is_live: bool
+    is_canteen: bool
+
+@router.post("/{ip}/config")
+def update_machine_cfg(ip: str, req: MachineConfigUpdate):
+    """Update machine configuration (live/canteen tags)."""
+    success, msg = update_machine_tags(ip, req.is_live, req.is_canteen)
+    if not success:
+        raise HTTPException(status_code=500, detail=msg)
+    return {"status": "success"}

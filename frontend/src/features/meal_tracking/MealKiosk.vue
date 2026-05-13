@@ -36,8 +36,45 @@
         <button class="btn btn-secondary home-btn" @click="goHome">
           🏠 {{ $t('common.home') }}
         </button>
+        <button class="btn btn-secondary settings-btn" @click="openMachineSettings" title="Cấu hình máy">
+          ⚙️
+        </button>
       </div>
     </header>
+
+    <!-- Machine Settings Modal -->
+    <teleport to="body">
+      <div v-if="showMachineSettings" class="modal-overlay" @click.self="showMachineSettings = false">
+        <div class="modal-content machine-settings-modal">
+          <div class="modal-header">
+            <h3>⚙️ {{ $t('meal.machine_settings') || 'Cấu hình máy chấm công' }}</h3>
+            <button class="close-btn" @click="showMachineSettings = false">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="machine-config-list">
+              <div v-for="m in allMachineConfigs" :key="m.ip" class="machine-config-item">
+                <div class="m-ip">{{ m.ip }}</div>
+                <div class="m-toggles">
+                  <label class="toggle-switch" :title="$t('meal.toggle_live') || 'Bật/Tắt theo dõi trực tiếp'">
+                    <input type="checkbox" v-model="m.is_live" @change="toggleMachineConfig(m)">
+                    <span class="slider"></span>
+                    <span class="label">Live</span>
+                  </label>
+                  <label class="toggle-switch" :title="$t('meal.toggle_canteen') || 'Đánh dấu là máy nhà ăn'">
+                    <input type="checkbox" v-model="m.is_canteen" @change="toggleMachineConfig(m)">
+                    <span class="slider"></span>
+                    <span class="label">Canteen</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="modal-note">
+              * Thay đổi sẽ được hệ thống cập nhật sau tối đa 10 giây.
+            </div>
+          </div>
+        </div>
+      </div>
+    </teleport>
 
     <main class="kiosk-main split-layout">
       <!-- Left Panel -->
@@ -298,6 +335,9 @@ async function fetchStats() {
     console.error("Failed to fetch stats", e)
   }
 }
+
+const showMachineSettings = ref(false)
+const allMachineConfigs = ref([])
 
 const { connect, disconnect, isConnected } = useLiveLogs((payload) => {
   if (payload.type === 'meal_event') {
@@ -604,6 +644,36 @@ function speakMeal(mealInfo) {
   playMealAudio(mealInfo);
 }
 
+async function openMachineSettings() {
+  try {
+    const { data } = await mealApi.getAllMachineConfigs()
+    if (!data || data.length === 0) {
+       alert('Không tìm thấy danh sách máy hoặc tệp cấu hình trống.');
+    }
+    allMachineConfigs.value = data
+    showMachineSettings.value = true
+  } catch (e) {
+    console.error('Error fetching machine configs:', e)
+    alert('Không thể tải cấu hình máy: ' + (e.message || 'Lỗi không xác định'));
+  }
+}
+
+async function toggleMachineConfig(machine) {
+  try {
+    await mealApi.updateMachineConfig(machine.ip, {
+      is_live: machine.is_live,
+      is_canteen: machine.is_canteen
+    })
+    // Refresh canteen machines list to update the dropdown and UI
+    await fetchCanteenMachines()
+  } catch (e) {
+    console.error('Error updating machine config:', e)
+    alert('Lỗi khi cập nhật cấu hình máy')
+    // Re-fetch to sync UI with server state
+    openMachineSettings()
+  }
+}
+
 function enterFullscreen() {
   const elem = document.querySelector('.kiosk-container') || document.documentElement;
   if (elem.requestFullscreen) {
@@ -868,4 +938,159 @@ onUnmounted(() => {
 @keyframes pop-in { 0% { opacity: 0; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1); } }
 @keyframes pop-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.98); } }
 @keyframes spin { 100% { transform: rotate(360deg); } }
+/* Machine Settings Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.machine-settings-modal {
+  width: 500px;
+  max-width: 90vw;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.machine-settings-modal .modal-header {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.machine-settings-modal .modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: white;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: white;
+}
+
+.machine-config-list {
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.machine-config-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+}
+
+.m-ip {
+  font-family: monospace;
+  font-weight: 600;
+  color: #60a5fa;
+  font-size: 1rem;
+}
+
+.m-toggles {
+  display: flex;
+  gap: 20px;
+}
+
+/* Toggle Switch Styling */
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-switch .slider {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  background: #334155;
+  border-radius: 20px;
+  transition: 0.3s;
+}
+
+.toggle-switch .slider:before {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 3px;
+  bottom: 3px;
+  background: #94a3b8;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+
+.toggle-switch input:checked + .slider {
+  background: #10b981;
+}
+
+.toggle-switch input:checked + .slider:before {
+  transform: translateX(20px);
+  background: white;
+}
+
+.toggle-switch .label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.toggle-switch input:checked ~ .label {
+  color: #10b981;
+}
+
+.modal-note {
+  padding: 15px 20px;
+  font-size: 0.8rem;
+  color: #64748b;
+  font-style: italic;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.settings-btn {
+  margin-left: 5px;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.settings-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
 </style>

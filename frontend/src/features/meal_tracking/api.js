@@ -27,5 +27,13 @@ export const mealApi = {
   
   getTodayPickups() {
     return axios.get(`/api/meal/today_pickups?t=${Date.now()}`)
+  },
+
+  getAllMachineConfigs() {
+    return axios.get('/api/machines/configs')
+  },
+
+  updateMachineConfig(ip, config) {
+    return axios.post(`/api/machines/${ip}/config`, config)
   }
 }
