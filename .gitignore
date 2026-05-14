@@ -27,7 +27,7 @@ temp_*
 !employee_work_shift.xlsx
 *.log
 backend/logs/
-backend/static/
+# backend/static/ (Removed to allow pushing build artifacts to Render)
 backend/__pycache__/
 scratch/
 *.tar
