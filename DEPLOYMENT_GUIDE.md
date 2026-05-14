@@ -39,10 +39,20 @@ Trước khi push code lên GitHub, bạn cần tạo một bản sao (snapshot)
 
 ### Bước 2: Tạo Service trên Render
 1. Đăng nhập vào [Render.com](https://render.com/).
-2. Chọn **New** -> **Blueprints**.
-3. Kết nối với GitHub Repository của bạn.
-4. Render sẽ tự động đọc file `render.yaml` và tạo ra Web Service tên là `attendance-demo`.
-5. Chọn **Apply** để bắt đầu quá trình deploy.
+2. Tại bảng điều khiển (Dashboard), chọn nút **New Web Service** (hoặc click vào thẻ **Web Services** như trên hình bạn thấy).
+3. Kết nối với GitHub Repository của bạn (`attendance_machines`).
+4. Tại bước thiết lập cấu hình:
+   - **Name**: `attendance-demo`
+   - **Environment / Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements_render.txt`
+   - **Start Command**: `python backend/src/main.py --host 0.0.0.0 --port $PORT`
+   - **Instance Type**: `Free` (Miễn phí)
+5. Cuộn xuống phần **Environment Variables** (Biến môi trường), thêm 2 biến sau:
+   - `DEMO_MODE` = `true`
+   - `PYTHON_VERSION` = `3.12.0`
+6. Chọn **Create Web Service** để bắt đầu quá trình deploy.
+
+*(Lưu ý: Nếu bạn có file `render.yaml` trong thư mục gốc, Render có thể sẽ tự động nhận diện cấu hình này mà không cần bạn gõ tay)*
 
 ### Quá trình Render Build diễn ra như thế nào?
 Theo file `render.yaml`, Render sẽ tự động chạy:

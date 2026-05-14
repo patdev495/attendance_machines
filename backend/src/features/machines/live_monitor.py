@@ -4,8 +4,11 @@ import socket
 import requests
 from requests.adapters import HTTPAdapter
 import logging
+from config import DEMO_MODE
+if not DEMO_MODE:
+    from zk import ZK
+
 from concurrent.futures import ThreadPoolExecutor
-from zk import ZK
 from sqlalchemy import func
 from database import SessionLocal, AttendanceLog, EmployeeLocalRegistry
 from shared.hardware import get_machine_list, get_live_machine_list
