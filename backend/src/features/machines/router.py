@@ -1,25 +1,31 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from . import service
-
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 from database import get_db, EmployeeMetadata
-from .service import (
-    get_machine_list, get_devices_capacity_info, get_users_from_machine,
-    delete_user_from_machine, bulk_delete_users_from_machine,
-    update_user_name_all_machines, download_fingerprints_from_machine,
-    bulk_download_fingerprints_from_machine, get_biometric_coverage,
-    delete_status, delete_user_from_all_machines,
-    bulk_delete_status, bulk_delete_users_from_all_machines,
-    sync_time_on_machine, bulk_sync_time_all_machines,
-    global_sync_status, global_sync_all_fingerprints,
-    clear_all_fingerprints_on_machine, clear_fp_status,
-    enroll_user_remote, update_machine_tags, get_all_machine_configs
-)
+from config import DEMO_MODE
 
-from .biometric_service import BiometricExportService
+if not DEMO_MODE:
+    from . import service
+    from .service import (
+        get_machine_list, get_devices_capacity_info, get_users_from_machine,
+        delete_user_from_machine, bulk_delete_users_from_machine,
+        update_user_name_all_machines, download_fingerprints_from_machine,
+        bulk_download_fingerprints_from_machine, get_biometric_coverage,
+        delete_status, delete_user_from_all_machines,
+        bulk_delete_status, bulk_delete_users_from_all_machines,
+        sync_time_on_machine, bulk_sync_time_all_machines,
+        global_sync_status, global_sync_all_fingerprints,
+        clear_all_fingerprints_on_machine, clear_fp_status,
+        enroll_user_remote, update_machine_tags, get_all_machine_configs
+    )
+else:
+    # In DEMO_MODE, hardware service is not available
+    from shared.hardware import get_machine_list, get_all_machine_configs, update_machine_tags
+
+if not DEMO_MODE:
+    from .biometric_service import BiometricExportService
 from pydantic import BaseModel
 
 class NameUpdate(BaseModel):
@@ -66,23 +72,59 @@ def get_machines_full_configs():
 @router.get("/capacity")
 def get_machines_capacity():
     """Get health and capacity info for all machines."""
+    if DEMO_MODE:
+        # Return simulated capacity data for demo machines
+        configs = get_all_machine_configs()
+        return [{
+            "ip": c["ip"], 
+            "status": "Online",
+            "users": 200, "users_cap": 3000, 
+            "fingers": 400, "fingers_cap": 3000, 
+            "records": 5000, "records_cap": 100000
+        } for c in configs]
     return get_devices_capacity_info()
 
 @router.get("/live-status")
 def get_live_machines_status():
     """Get the current connection status of all live monitor threads."""
+    if DEMO_MODE:
+        from .demo_simulator import demo_simulator
+        return demo_simulator.get_status()
     from .live_monitor import live_monitor
     return live_monitor.get_status()
 
 @router.get("/{ip}/employees")
 def get_machine_employees(ip: str, db: Session = Depends(get_db)):
     """List employees currently on a specific machine, enriched with DB names."""
+    from database import EmployeeLocalRegistry
+    
+    if DEMO_MODE:
+        # In demo mode, return all employees as if they're on every machine
+        registry = db.query(EmployeeLocalRegistry).all()
+        enriched = []
+        for reg in registry:
+            enriched.append({
+                "uid": int(reg.employee_id) if reg.employee_id.isdigit() else 0,
+                "user_id": reg.employee_id,
+                "name": reg.emp_name or "",
+                "privilege": reg.privilege or 0,
+                "password": "",
+                "group_id": "",
+                "card": 0,
+                "db_name": reg.emp_name,
+                "status": reg.shift if reg.shift else "Unknown",
+                "department": reg.department,
+                "group_name": reg.group_name,
+                "shift": reg.shift,
+                "source_status": reg.source_status or "excel_synced",
+            })
+        return {"items": enriched, "total": len(enriched), "status": "Success (Demo)"}
+    
     users, status = get_users_from_machine(ip)
     if status != "Success" and not users:
         raise HTTPException(status_code=500, detail=status)
     
     # Enrich with Consolidated Registry metadata (Phase 4 table)
-    from database import EmployeeLocalRegistry
     registry_map = {str(r.employee_id): r for r in db.query(EmployeeLocalRegistry).all()}
     enriched = []
     for u in users:

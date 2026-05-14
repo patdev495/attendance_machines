@@ -10,6 +10,7 @@ from typing import List, Optional
 from datetime import date, datetime, time, timedelta
 
 from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftDefinition, EmployeeDailyShifts
+from compat import safe_ilike
 
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
 from .export_service import export_status, export_lock, run_export_task
@@ -175,12 +176,12 @@ def get_daily_summary(
         id_match_q = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
             EmployeeLocalRegistry.full_emp_id.ilike(f"%{employee_id}%") |
-            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
+            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{employee_id}%")
         )
         id_match_meta_q = db.query(EmployeeMetadata.employee_id).filter(
             EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
             EmployeeMetadata.full_emp_id.ilike(f"%{employee_id}%") |
-            EmployeeMetadata.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
+            safe_ilike(EmployeeMetadata.emp_name, f"%{employee_id}%")
         )
         
         query = query.filter(

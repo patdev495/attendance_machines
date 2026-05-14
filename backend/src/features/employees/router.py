@@ -3,6 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, Integer
 from database import get_db, EmployeeLocalRegistry
+from compat import safe_ilike
 from typing import List, Optional
 import threading
 
@@ -63,7 +64,7 @@ def list_employees(
         found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
             EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%") |
-            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{search}%")
+            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{search}%")
         ).all()
         
         target_ids = {r[0] for r in found_ids} | {search}

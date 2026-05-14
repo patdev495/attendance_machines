@@ -1,4 +1,8 @@
-from zk import ZK
+from config import DEMO_MODE
+
+if not DEMO_MODE:
+    from zk import ZK
+
 from database import SessionLocal, AttendanceLog
 from config import config
 import logging
@@ -24,6 +28,14 @@ status_lock = threading.Lock()
 
 def sync_all_machines():
     global sync_status
+    
+    if DEMO_MODE:
+        logger.info("[DEMO] sync_all_machines skipped — no hardware in demo mode")
+        with status_lock:
+            sync_status["is_running"] = False
+            sync_status["total_added"] = 0
+        return 0
+    
     machine_ips = get_machine_list()
     
     with status_lock:

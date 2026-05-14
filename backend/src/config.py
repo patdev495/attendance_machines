@@ -21,6 +21,12 @@ else:
 # Load .env from the backend directory
 load_dotenv(BASE_DIR / "backend" / ".env")
 
+# ── Demo Mode ──
+# When DEMO_MODE=true, the app uses SQLite instead of MSSQL,
+# disables ZKTeco hardware connections, and optionally runs a
+# live-event simulator for demonstration purposes.
+DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+
 class Config:
     # DB Settings
     DB_SERVER = os.getenv("DB_SERVER", "192.168.209.18")
@@ -32,10 +38,17 @@ class Config:
     # Connection String Templates
     @property
     def DATABASE_URL(self):
+        if DEMO_MODE:
+            db_path = INTERNAL_DIR / "demo_data" / "attendance.db"
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            return f"sqlite:///{db_path}"
         return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no"
 
     @property
     def MEAL_DATABASE_URL(self):
+        if DEMO_MODE:
+            # In demo mode, meal data lives in the same SQLite DB
+            return self.DATABASE_URL
         return f"mssql+pyodbc://{self.DB_USER}:{self.DB_PASS}@{self.DB_SERVER}/{self.DB_NAME_MEAL}?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes&Encrypt=no"
 
     # Directory settings

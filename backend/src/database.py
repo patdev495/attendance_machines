@@ -1,22 +1,34 @@
 from sqlalchemy import create_engine, Column, Integer, String, Unicode, DateTime, Date, Time, Boolean, Float, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from config import config
+from config import config, DEMO_MODE
 
-# Main Attendance Database Engine (MIS)
-engine = create_engine(
-    config.DATABASE_URL, 
-    pool_pre_ping=True, 
-    pool_recycle=3600,
-)
+# ── Activate MSSQL ↔ SQLite compiler extensions ──
+import compat  # noqa: F401  — registers @compiles hooks on import
+
+# ── Engine Setup ──
+if DEMO_MODE:
+    engine = create_engine(
+        config.DATABASE_URL,
+        connect_args={"check_same_thread": False},
+    )
+    # In demo mode, meal DB is the same as main DB
+    meal_engine = engine
+else:
+    # Main Attendance Database Engine (MIS)
+    engine = create_engine(
+        config.DATABASE_URL, 
+        pool_pre_ping=True, 
+        pool_recycle=3600,
+    )
+    # Meal Tracking Database Engine (NY_VDS_DB)
+    meal_engine = create_engine(
+        config.MEAL_DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=3600,
+    )
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Meal Tracking Database Engine (NY_VDS_DB)
-meal_engine = create_engine(
-    config.MEAL_DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-)
 MealSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=meal_engine)
 
 Base = declarative_base()
@@ -153,6 +165,39 @@ class MealTrackingHistory(Base):
     swipe_time = Column(DateTime, nullable=False, index=True)
     is_registered = Column(Boolean, default=False)
     created_at = Column(DateTime, server_default=func.current_timestamp())
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Demo-only tables — Meal order/pickup stored locally in SQLite
+# (In production these live in the external NY_VDS_DB MSSQL server)
+# ──────────────────────────────────────────────────────────────────────────────
+if DEMO_MODE:
+    class DemoMealOrder(Base):
+        __tablename__ = "HR_MEAL_ORDER"
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        EMP_NO = Column(String(50), nullable=False, index=True)
+        EMP_NAME = Column(Unicode(255), nullable=True)
+        DEPARTMENT = Column(Unicode(255), nullable=True)
+        AREA = Column(Unicode(100), nullable=True)
+        MEAL_CODE = Column(String(50), nullable=True)
+        MEAL_NAME_VI = Column(Unicode(255), nullable=True)
+        MEAL_NAME_ZH = Column(Unicode(255), nullable=True)
+        MFG_DAY = Column(String(8), nullable=False, index=True)
+
+    class DemoMealPickupLog(Base):
+        __tablename__ = "HR_MEAL_PICKUP_LOG"
+        id = Column(Integer, primary_key=True, autoincrement=True)
+        MFG_DAY = Column(String(8), nullable=False, index=True)
+        AREA = Column(Unicode(100), nullable=True)
+        EMP_NO = Column(String(50), nullable=False, index=True)
+        EMP_NAME = Column(Unicode(255), nullable=True)
+        MEAL_CODE = Column(String(50), nullable=True)
+        MEAL_NAME_ZH = Column(Unicode(255), nullable=True)
+        MEAL_NAME_VI = Column(Unicode(255), nullable=True)
+        PICKUP_TIME = Column(DateTime, nullable=True)
+        DEVICE_NAME = Column(String(50), nullable=True)
+        PICKUP_BY = Column(String(50), nullable=True)
+        DEPARTMENT = Column(Unicode(255), nullable=True)
 
 
 def init_db():

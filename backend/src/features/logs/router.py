@@ -8,6 +8,7 @@ from datetime import date as date_type
 
 from database import get_db, AttendanceLog
 from .service import sync_all_machines, sync_status, status_lock
+from compat import safe_ilike
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +39,11 @@ def get_logs(
         # Step 1: Find matching IDs from registry/metadata (fast, small tables)
         match_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
+            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{employee_id}%")
         ).all()
         match_ids_meta = db.query(EmployeeMetadata.employee_id).filter(
             EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeMetadata.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{employee_id}%")
+            safe_ilike(EmployeeMetadata.emp_name, f"%{employee_id}%")
         ).all()
         
         found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
@@ -53,11 +54,10 @@ def get_logs(
     if machine_ip:
         query = query.filter(AttendanceLog.machine_ip == machine_ip)
     
-    from sqlalchemy import Date
     if start_date:
-        query = query.filter(func.cast(AttendanceLog.attendance_time, Date) >= start_date)
+        query = query.filter(AttendanceLog.attendance_date >= start_date)
     if end_date:
-        query = query.filter(func.cast(AttendanceLog.attendance_time, Date) <= end_date)
+        query = query.filter(AttendanceLog.attendance_date <= end_date)
         
     total = query.count()
     results = query.order_by(desc(AttendanceLog.attendance_time)) \

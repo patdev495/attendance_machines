@@ -1,14 +1,17 @@
 from sqlalchemy.orm import Session
 from database import EmployeeLocalRegistry, EmployeeMetadata, AttendanceLog, SessionLocal
-from config import config
+from config import config, DEMO_MODE
 from shared.hardware import get_machine_list
-from features.machines.service import get_users_from_machine, delete_user_from_machine, update_user_name_on_machine
+
+if not DEMO_MODE:
+    from features.machines.service import get_users_from_machine, delete_user_from_machine, update_user_name_on_machine
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import logging
 import io
 import openpyxl
 from sqlalchemy import func, Integer
+from compat import safe_ilike
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +27,13 @@ def update_registry(db: Session):
         excel_users = {emp.employee_id: emp for emp in db.query(EmployeeMetadata).all()}
         
         machine_users = set()
-        ips = get_machine_list()
-        for ip in ips:
-            users, status = get_users_from_machine(ip)
-            if status == "Success":
-                for u in users:
-                    machine_users.add(str(u.get('user_id')))
+        if not DEMO_MODE:
+            ips = get_machine_list()
+            for ip in ips:
+                users, status = get_users_from_machine(ip)
+                if status == "Success":
+                    for u in users:
+                        machine_users.add(str(u.get('user_id')))
                     
         log_users = {emp_id for (emp_id,) in db.query(AttendanceLog.employee_id).distinct().all()}
         
@@ -131,7 +135,7 @@ def export_employees_to_excel(db: Session, search: str = None, source_status: st
         found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
             EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
             EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%") |
-            EmployeeLocalRegistry.emp_name.collate('Vietnamese_CI_AI').ilike(f"%{search}%")
+            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{search}%")
         ).all()
         target_ids = {r[0] for r in found_ids} | {search}
         query = query.filter(func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id)).in_(list(target_ids)))

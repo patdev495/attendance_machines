@@ -18,6 +18,7 @@
               <th>{{ $t('attendance.table.emp_id') }}</th>
               <th>{{ $t('attendance.table.emp_name') }}</th>
               <th>{{ $t('attendance.table.attendance_time') }}</th>
+              <th>Ca làm việc</th>
               <th>{{ $t('attendance.table.machine_ip') }}</th>
             </tr>
           </thead>
@@ -40,6 +41,7 @@
                 <span v-if="row.is_live" class="badge-live">LIVE</span>
               </td>
               <td class="time-col">{{ formatDateTime(row.attendance_time) }}</td>
+              <td><span class="badge-shift" v-if="row.shift">{{ row.shift }}</span><span v-else class="text-muted italic">-</span></td>
               <td><span class="badge-ip">{{ row.machine_ip }}</span></td>
             </tr>
           </transition-group>
@@ -99,6 +101,7 @@ function formatDateTime(dt) {
 
 .badge-live { background: #ef4444; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; }
 .badge-ip { background: rgba(59, 130, 246, 0.1); color: #60a5fa; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; border: 1px solid rgba(59, 130, 246, 0.2); }
+.badge-shift { background: rgba(16, 185, 129, 0.1); color: #34d399; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; border: 1px solid rgba(16, 185, 129, 0.2); }
 
 /* Live Row and Animations */
 .live-row { background: rgba(239, 68, 68, 0.05); animation: highlight 2s ease-out; }

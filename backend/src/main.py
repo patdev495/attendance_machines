@@ -13,9 +13,8 @@ current_dir = Path(__file__).resolve().parent
 if str(current_dir) not in sys.path:
     sys.path.append(str(current_dir))
 
-from config import config
+from config import config, DEMO_MODE
 from database import init_db
-from features.machines.live_monitor import live_monitor
 import asyncio
 
 # v2.0 Feature routers (registered when implemented, phases 2-5)
@@ -37,18 +36,32 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_running_loop()
     _logger.info(f"[STARTUP] asyncio loop acquired: {loop}")
     
-    live_monitor.set_loop(loop)
-    _logger.info(f"[STARTUP] Loop injected into LiveMonitorManager")
-    
-    live_monitor.start()
-    _logger.info(f"[STARTUP] LiveMonitorManager started — monitoring active")
+    if DEMO_MODE:
+        _logger.info("[STARTUP] DEMO_MODE=true — skipping LiveMonitorManager (no hardware)")
+        # Start the demo live simulator instead
+        from features.machines.demo_simulator import demo_simulator
+        demo_simulator.set_loop(loop)
+        demo_simulator.start()
+        _logger.info("[STARTUP] DemoLiveSimulator started")
+    else:
+        from features.machines.live_monitor import live_monitor
+        live_monitor.set_loop(loop)
+        _logger.info(f"[STARTUP] Loop injected into LiveMonitorManager")
+        live_monitor.start()
+        _logger.info(f"[STARTUP] LiveMonitorManager started — monitoring active")
     
     yield
     
     # Shutdown
-    _logger.info("[SHUTDOWN] Stopping LiveMonitorManager...")
-    live_monitor.stop()
-    _logger.info("[SHUTDOWN] LiveMonitorManager stopped")
+    if DEMO_MODE:
+        from features.machines.demo_simulator import demo_simulator
+        demo_simulator.stop()
+        _logger.info("[SHUTDOWN] DemoLiveSimulator stopped")
+    else:
+        from features.machines.live_monitor import live_monitor
+        _logger.info("[SHUTDOWN] Stopping LiveMonitorManager...")
+        live_monitor.stop()
+        _logger.info("[SHUTDOWN] LiveMonitorManager stopped")
 
 def create_app() -> FastAPI:
     # Set up logging for the application
@@ -60,7 +73,24 @@ def create_app() -> FastAPI:
     logger = logging.getLogger(__name__)
     logger.info("Initializing Application...")
     
+    if DEMO_MODE:
+        logger.info("╔══════════════════════════════════════════╗")
+        logger.info("║         DEMO MODE ACTIVE                ║")
+        logger.info("║  Database: SQLite (demo_data/)           ║")
+        logger.info("║  Hardware: Disabled (simulator active)   ║")
+        logger.info("╚══════════════════════════════════════════╝")
+    
     init_db()
+    
+    # Seed demo data if DEMO_MODE and DB is empty
+    if DEMO_MODE:
+        # Add scripts dir to path for seed_demo import
+        scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        from seed_demo import seed_if_empty
+        seed_if_empty()
+    
     app = FastAPI(title="Time Attendance System", lifespan=lifespan)
 
     # CORS middleware

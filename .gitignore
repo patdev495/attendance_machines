@@ -4,6 +4,7 @@
 __pycache__
 *.pyc
 *.db
+!demo_data/attendance.db
 *.sqlite
 *.db-journal
 .pytest_cache

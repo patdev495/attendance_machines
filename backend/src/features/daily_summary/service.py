@@ -11,7 +11,9 @@ from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, Empl
 
 from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window
 
-from features.logs.service import get_machine_list, get_users_from_machine
+from config import DEMO_MODE
+if not DEMO_MODE:
+    from features.logs.service import get_machine_list, get_users_from_machine
 
 logger = logging.getLogger(__name__)
 
