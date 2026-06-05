@@ -1316,7 +1316,7 @@ def sync_employee_to_machines(
         emp_reg = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == employee_id).first()
         if emp_reg:
             if not name and emp_reg.emp_name:
-                name = emp_reg.emp_name
+                name = str(emp_reg.emp_name)
             if emp_reg.privilege == 3 or emp_reg.privilege == 14:
                 role = "admin"
                 authority = 2
@@ -1350,7 +1350,7 @@ def sync_employee_to_machines(
                     emp_detail = client.get_employee(employee_id)
                     if emp_detail:
                         if not name and emp_detail.get("name"):
-                            name = emp_detail.get("name")
+                            name = str(emp_detail.get("name"))
                         photo_base64 = emp_detail.get("capturejpg") or ""
                         face_data = emp_detail.get("face_data") or []
                         role = "employee"
