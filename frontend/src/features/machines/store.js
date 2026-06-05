@@ -112,8 +112,8 @@ export const useMachineStore = defineStore('machines', () => {
     await loadMachineEmployees(currentIp.value)
   }
 
-  async function addEmployee(employeeId, name, role = 'employee') {
-    await addMachineEmployee(currentIp.value, employeeId, name, role)
+  async function addEmployee(employeeId, name, role = 'employee', photoBase64 = '', password = '123456') {
+    await addMachineEmployee(currentIp.value, employeeId, name, role, photoBase64, password)
     await loadMachineEmployees(currentIp.value)
   }
 

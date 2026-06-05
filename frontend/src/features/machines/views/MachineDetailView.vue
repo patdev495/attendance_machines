@@ -196,12 +196,13 @@ async function handleAddEmployeeModal(payload) {
     return
   }
 
+  const roleLabel = payload.role === 'super_admin' ? 'Super Admin' : payload.role === 'admin' ? 'Quản trị viên' : 'nhân viên'
   isAddingEmployee.value = true
-  const notifyId = notification.info(`Đang thêm nhân viên ${normalizedId} vào máy ${props.ip}...`, 0)
+  const notifyId = notification.info(`Đang thêm ${roleLabel} ${normalizedId} vào máy ${props.ip}...`, 0)
   try {
-    await store.addEmployee(normalizedId, payload.name.trim(), payload.role)
+    await store.addEmployee(normalizedId, payload.name?.trim() || '', payload.role, payload.photoBase64 || '', payload.password || '123456')
     isAddModalOpen.value = false
-    notification.success(`Đã thêm nhân viên ${normalizedId} vào máy ${props.ip}`)
+    notification.success(`Đã thêm ${roleLabel} ${normalizedId} vào máy ${props.ip}`)
   } catch (e) {
     notification.error(t('common.error') + ': ' + e.message)
   } finally {
@@ -213,9 +214,6 @@ async function handleAddEmployeeModal(payload) {
 </script>
 
 <style scoped>
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-h2 { font-size: 1.4rem; font-weight: 600; }
-.ip-label { color: var(--accent); font-family: monospace; }
 .filter-bar { display: flex; gap: 16px; flex-wrap: wrap; padding: 16px 20px; margin-bottom: 16px; align-items: flex-end; }
 .filter-group { display: flex; flex-direction: column; gap: 6px; }
 .summary-row { margin-bottom: 12px; }

@@ -18,6 +18,7 @@
           <th>{{ $t('device.table.department') }}</th>
           <th>{{ $t('device.table.group') }}</th>
           <th>{{ $t('attendance.table.shift') }}</th>
+          <th>Vai trò</th>
           <th>Khuôn mặt</th>
           <th>{{ $t('device.table.status') }}</th>
           <th>{{ $t('device.table.action') }}</th>
@@ -25,7 +26,7 @@
       </thead>
       <tbody>
         <tr v-if="employees.length === 0">
-          <td colspan="10" class="empty-state">{{ $t('device.table.no_records') }}</td>
+          <td colspan="11" class="empty-state">{{ $t('device.table.no_records') }}</td>
         </tr>
         <tr v-for="u in employees" :key="u.user_id" :class="{'selected-row': selectedIds.includes(u.user_id)}">
           <td style="text-align:center;">
@@ -41,6 +42,11 @@
             <span v-else-if="u.status === 'D'" class="badge-shift night">{{ $t('attendance.filters.night_shift') }}</span>
             <span v-else-if="u.status === 'TV'" class="badge-status-tv">{{ $t('attendance.filters.resigned') }}</span>
             <span v-else style="color:var(--text-muted);font-size:0.83rem;">—</span>
+          </td>
+          <td>
+            <span :class="['badge', u.role === 'Super Admin' || u.role === 'Admin' ? 'badge-admin' : 'badge-user']">
+              {{ u.role || 'User' }}
+            </span>
           </td>
           <td>
             <span v-if="u.has_face" class="badge badge-face">Có</span>
@@ -196,6 +202,14 @@ watch(() => props.employees, () => {
 .badge-face {
   background-color: rgba(20, 184, 166, 0.2);
   color: #5eead4;
+}
+.badge-admin {
+  background-color: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+.badge-user {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
 }
 .face-missing {
   color: #94a3b8;

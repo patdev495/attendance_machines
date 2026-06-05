@@ -100,7 +100,13 @@ class HanvonClient:
         if param.get("result") != "success":
             raise HanvonProtocolError(f"DeleteEmployee failed: {param.get('reason') or response}")
 
-    def set_employee(self, employee_id: str, name: str = "") -> None:
+    def set_employee(self, employee_id: str, name: str = "", photo_base64: str = "") -> None:
+        """Create or update a standard employee on the device.
+
+        Protocol note: userType MUST be "1" — any other value is rejected by the
+        firmware with 不支持的用户类型. Photo is optional; omitting it creates the
+        employee without face-recognition capability.
+        """
         employee_id = str(employee_id).strip()
         if not employee_id:
             raise ValueError("employee_id is required")
@@ -116,13 +122,56 @@ class HanvonClient:
             job_num=employee_id,
             icCard="",
             recogPermission="face",
-            capturejpg="",
+            capturejpg=photo_base64 or "",
             face_data=[],
             finger_data=[],
         )
         param = response.get("PARAM", {})
         if param.get("result") != "success":
             raise HanvonProtocolError(f"SetEmployee failed: {param.get('reason') or response}")
+
+    def set_manager(
+        self,
+        manager_id: str,
+        photo_base64: str,
+        password: str = "123456",
+        authority: int = 2,
+    ) -> None:
+        """Create or update a manager (admin) on the device.
+
+        Protocol constraints (verified experimentally):
+        - capturejpg MUST be a real JPEG base64 string (≥15KB) — empty or tiny
+          images are rejected with 缺少图片 / 照片过大或过小.
+        - authority: 0 = Super Admin, 2 = Ordinary Admin (1/3 are normalised to 2).
+        - password must be unique across all managers (密码已存在 if duplicate).
+        """
+        manager_id = str(manager_id).strip()
+        if not manager_id:
+            raise ValueError("manager_id is required")
+        if not photo_base64 or not photo_base64.strip():
+            raise ValueError(
+                "A real JPEG photo (base64) is required to create a Hanvon manager. "
+                "Empty photos are rejected by the device with 缺少图片."
+            )
+
+        response = self._send_command(
+            "SetManager",
+            id=manager_id,
+            capturejpg=photo_base64.strip(),
+            password=str(password or "123456"),
+            authority=int(authority),
+        )
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            reason = param.get("reason", "")
+            # Surface device error messages in English for the frontend
+            if "缺少图片" in reason:
+                raise HanvonProtocolError("Manager photo is missing or empty (device rejected: 缺少图片).")
+            if "照片过大或过小" in reason:
+                raise HanvonProtocolError("Manager photo is too small or too large — must be a real JPEG ≥15KB (device rejected: 照片过大或过小).")
+            if "密码已存在" in reason:
+                raise HanvonProtocolError("Manager password already exists on the device. Choose a different password (device rejected: 密码已存在).")
+            raise HanvonProtocolError(f"SetManager failed: {reason or response}")
 
     def get_records(self, start_dt: datetime, end_dt: datetime) -> list[HanvonRecord]:
         response = self._send_command(
@@ -164,6 +213,22 @@ class HanvonClient:
         start_dt = datetime.combine(target_date, time.min).replace(microsecond=0)
         end_dt = datetime.combine(target_date, time.max).replace(microsecond=0)
         return self.get_records(start_dt, end_dt)
+
+    def get_manager_ids(self) -> list[str]:
+        response = self._send_command("GetManagerID")
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            if "fail" in str(param.get("result")):
+                return []
+            raise HanvonProtocolError(f"GetManagerID failed: {param.get('reason') or response}")
+        return [str(item).strip() for item in param.get("ids", []) if str(item).strip()]
+
+    def get_manager(self, manager_id: str) -> dict[str, Any]:
+        response = self._send_command("GetManager", id=str(manager_id))
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            raise HanvonProtocolError(f"GetManager failed: {param.get('reason') or response}")
+        return param
 
     def _send_command(self, command: str, **params: Any) -> dict[str, Any]:
         if not self._sock:

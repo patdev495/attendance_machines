@@ -26,6 +26,15 @@
         <div class="capacity-fill" :style="{ width: getPct(machine.fingers, machine.fingers_cap) + '%', background: fillColor(getPct(machine.fingers, machine.fingers_cap)) }"></div>
       </div>
 
+      <!-- Admins Section -->
+      <div v-if="machine.admins !== undefined" class="cap-row mt-12">
+        <span class="label">Quản trị viên</span>
+        <span class="val">{{ machine.admins }} / {{ machine.admins_cap || 10 }}</span>
+      </div>
+      <div v-if="machine.admins !== undefined" class="capacity-bar">
+        <div class="capacity-fill" :style="{ width: getPct(machine.admins, machine.admins_cap || 10) + '%', background: fillColor(getPct(machine.admins, machine.admins_cap || 10)) }"></div>
+      </div>
+
       <!-- Logs Section -->
       <div class="cap-row mt-12">
         <span class="label">{{ $t('machines.records') }}</span>

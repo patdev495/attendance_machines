@@ -37,7 +37,10 @@ class NameUpdate(BaseModel):
 class MachineEmployeeCreate(BaseModel):
     employee_id: str
     name: str = ""
-    role: str = "employee"
+    role: str = "employee"          # "employee" | "admin" | "super_admin"
+    photo_base64: str = ""          # Optional for employee; REQUIRED for admin/super_admin
+    password: str = "123456"        # Manager password (must be unique on device)
+    authority: int = 2              # 0 = Super Admin, 2 = Ordinary Admin (manager only)
 
 class FingerprintSyncRequest(BaseModel):
     ip: str
@@ -94,7 +97,8 @@ def get_machines_capacity():
             "status": "Online",
             "users": 200, "users_cap": 3000, 
             "fingers": 400, "fingers_cap": 3000, 
-            "records": 5000, "records_cap": 100000
+            "records": 5000, "records_cap": 100000,
+            "admins": 2, "admins_cap": 10
         } for c in configs]
     return get_devices_capacity_info()
 
@@ -132,6 +136,7 @@ def get_machine_employees(ip: str, db: Session = Depends(get_db)):
                 "group_name": reg.group_name,
                 "shift": reg.shift,
                 "source_status": reg.source_status or "excel_synced",
+                "role": "Admin" if reg.privilege == 3 else "User"
             })
         return {"items": enriched, "total": len(enriched), "status": "Success (Demo)"}
     
@@ -161,16 +166,40 @@ def get_machine_employees(ip: str, db: Session = Depends(get_db)):
 
 @router.post("/{ip}/employees")
 def add_machine_employee(ip: str, req: MachineEmployeeCreate):
-    """Add or update one employee shell on a specific Hanvon machine."""
+    """Add or update an employee or manager on a specific Hanvon machine.
+
+    Role → Hanvon API mapping (per HANVON_PROTOCOL.md §9):
+    - "employee"   → SetEmployee (userType="1"), photo optional
+    - "admin"      → SetManager (authority=2 = Ordinary Admin), photo REQUIRED
+    - "super_admin" → SetManager (authority=0 = Super Admin), photo REQUIRED
+    """
     employee_id = req.employee_id.strip()
     if not employee_id:
         raise HTTPException(status_code=422, detail="employee_id is required")
-    if req.role != "employee":
+
+    valid_roles = {"employee", "admin", "super_admin"}
+    if req.role not in valid_roles:
         raise HTTPException(
             status_code=422,
-            detail="Only standard employee role is supported here. Hanvon manager creation requires a separate photo/password flow.",
+            detail=f"Invalid role '{req.role}'. Must be one of: {', '.join(sorted(valid_roles))}",
         )
-    status = add_user_to_machine(ip, employee_id, req.name)
+
+    # Managers require a real photo per device protocol §8.3
+    if req.role in ("admin", "super_admin") and not req.photo_base64.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="A real JPEG photo (base64) is required to register a manager on a Hanvon device.",
+        )
+
+    status = add_user_to_machine(
+        ip=ip,
+        employee_id=employee_id,
+        name=req.name,
+        role=req.role,
+        photo_base64=req.photo_base64,
+        password=req.password,
+        authority=req.authority,
+    )
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)
     return {"status": status, "employee_id": employee_id}

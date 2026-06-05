@@ -73,6 +73,8 @@ def get_devices_capacity_info():
             users_cap = _to_int(info.get("max_faceregist"))
             records = _to_int(info.get("real_facerecord"))
             records_cap = _to_int(info.get("max_facerecord"))
+            admins = _to_int(info.get("managernum"))
+            admins_cap = _to_int(info.get("max_managernum"), 10)
             results.append({
                 "ip": ip,
                 "status": "Online",
@@ -87,6 +89,8 @@ def get_devices_capacity_info():
                 "fingers_cap": users_cap,
                 "records": records,
                 "records_cap": records_cap,
+                "admins": admins,
+                "admins_cap": admins_cap,
             })
         except Exception as e:
             results.append({
@@ -99,12 +103,14 @@ def get_devices_capacity_info():
                 "fingers_cap": 0,
                 "records": 0,
                 "records_cap": 0,
+                "admins": 0,
+                "admins_cap": 0,
                 "error": str(e),
             })
     return results
 
 def get_users_from_machine(ip: str):
-    """Fetches all Hanvon employee IDs from a specific machine."""
+    """Fetches all Hanvon employee IDs and manager IDs from a specific machine."""
     try:
         with HanvonClient(
             ip,
@@ -113,26 +119,81 @@ def get_users_from_machine(ip: str):
             timeout=15,
         ) as client:
             employee_ids, face_ids = client.get_employee_ids()
+            try:
+                manager_ids = client.get_manager_ids()
+            except Exception as e:
+                logger.warning(f"Error fetching manager IDs from machine {ip}: {e}")
+                manager_ids = []
 
-        user_list = []
-        for index, employee_id in enumerate(employee_ids, start=1):
-            user_list.append({
-                "uid": index,
-                "user_id": employee_id,
-                "name": "",
-                "privilege": 0,
-                "password": "",
-                "group_id": "",
-                "card": 0,
-                "has_face": employee_id in face_ids,
-            })
+            user_list = []
+            uid_counter = 1
+            
+            # Map normal employees
+            for employee_id in employee_ids:
+                user_list.append({
+                    "uid": uid_counter,
+                    "user_id": employee_id,
+                    "name": "",
+                    "privilege": 0,
+                    "password": "",
+                    "group_id": "",
+                    "card": 0,
+                    "has_face": employee_id in face_ids,
+                    "role": "User",
+                })
+                uid_counter += 1
+
+            # Map managers/admins
+            for manager_id in manager_ids:
+                authority = 2  # default ordinary admin
+                try:
+                    manager_detail = client.get_manager(manager_id)
+                    authority = _to_int(manager_detail.get("authority"), 2)
+                except Exception as e:
+                    logger.warning(f"Error fetching manager detail for {manager_id} from {ip}: {e}")
+
+                role_name = "Super Admin" if authority == 0 else "Admin"
+
+                # Avoid duplicate entries if any ID is present in both
+                existing = next((u for u in user_list if u["user_id"] == manager_id), None)
+                if existing:
+                    existing["role"] = role_name
+                    existing["privilege"] = 3
+                else:
+                    user_list.append({
+                        "uid": uid_counter,
+                        "user_id": manager_id,
+                        "name": "",
+                        "privilege": 3,
+                        "password": "",
+                        "group_id": "",
+                        "card": 0,
+                        "has_face": False,
+                        "role": role_name,
+                    })
+                    uid_counter += 1
+
         return user_list, "Success"
     except Exception as e:
         logger.error(f"Error fetching users from machine {ip}: {e}")
         return [], str(e)
 
-def add_user_to_machine(ip: str, employee_id: str, name: str = ""):
-    """Adds or updates a Hanvon employee shell on a specific machine."""
+def add_user_to_machine(
+    ip: str,
+    employee_id: str,
+    name: str = "",
+    role: str = "employee",
+    photo_base64: str = "",
+    password: str = "123456",
+    authority: int = 2,
+):
+    """Add or update an employee or manager on a specific Hanvon machine.
+
+    Role routing (per Hanvon protocol §9):
+    - "employee"  → SetEmployee (userType="1"), photo optional
+    - "admin"     → SetManager  (authority=2 = Ordinary Admin), photo REQUIRED
+    - "super_admin" → SetManager (authority=0 = Super Admin), photo REQUIRED
+    """
     try:
         with HanvonClient(
             ip,
@@ -140,11 +201,22 @@ def add_user_to_machine(ip: str, employee_id: str, name: str = ""):
             secret_key=config.HANVON_SECRET_KEY,
             timeout=10,
         ) as client:
-            client.set_employee(employee_id, name)
+            if role in ("admin", "super_admin"):
+                authority_val = 0 if role == "super_admin" else 2
+                client.set_manager(
+                    manager_id=employee_id,
+                    photo_base64=photo_base64,
+                    password=password,
+                    authority=authority_val,
+                )
+            else:
+                client.set_employee(employee_id, name, photo_base64=photo_base64)
         return "Success"
     except Exception as e:
-        logger.error(f"Error adding user {employee_id} to machine {ip}: {e}")
+        logger.error(f"Error adding user {employee_id} ({role}) to machine {ip}: {e}")
         return str(e)
+
+
 
 def delete_user_from_machine(ip: str, employee_id: str):
     """Deletes a Hanvon employee from a specific machine."""

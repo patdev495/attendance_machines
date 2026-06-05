@@ -142,3 +142,56 @@ def test_client_sends_set_employee_shell():
     assert payload["PARAM"]["capturejpg"] == ""
     assert payload["PARAM"]["face_data"] == []
     assert payload["PARAM"]["finger_data"] == []
+
+
+def test_client_sends_set_manager():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {"result": "success", "reason": ""},
+    })
+
+    client.set_manager("admin_user", "photo_base64_data", password="password123", authority=0)
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "SetManager"
+    assert payload["PARAM"]["id"] == "admin_user"
+    assert payload["PARAM"]["capturejpg"] == "photo_base64_data"
+    assert payload["PARAM"]["password"] == "password123"
+    assert payload["PARAM"]["authority"] == 0
+
+
+def test_client_sends_get_manager_ids():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {
+            "result": "success",
+            "ids": ["admin1", "admin2", ""],
+        },
+    })
+
+    ids = client.get_manager_ids()
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "GetManagerID"
+    assert ids == ["admin1", "admin2"]
+
+
+def test_client_sends_get_manager():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {
+            "result": "success",
+            "id": "admin1",
+            "authority": 2,
+            "password": "my_password",
+        },
+    })
+
+    param = client.get_manager("admin1")
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "GetManager"
+    assert payload["PARAM"]["id"] == "admin1"
+    assert param["id"] == "admin1"
+    assert param["authority"] == 2
+

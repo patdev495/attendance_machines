@@ -33,11 +33,17 @@ export function getMachineEmployees(ip) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`)
 }
 
-export function addMachineEmployee(ip, employeeId, name = '', role = 'employee') {
+export function addMachineEmployee(ip, employeeId, name = '', role = 'employee', photoBase64 = '', password = '123456') {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ employee_id: employeeId, name, role })
+    body: JSON.stringify({
+      employee_id: employeeId,
+      name,
+      role,
+      photo_base64: photoBase64,
+      password,
+    })
   })
 }
 
