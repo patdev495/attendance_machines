@@ -18,7 +18,7 @@
           <th>{{ $t('device.table.department') }}</th>
           <th>{{ $t('device.table.group') }}</th>
           <th>{{ $t('attendance.table.shift') }}</th>
-          <th>{{ $t('employees.privilege') }}</th>
+          <th>Khuôn mặt</th>
           <th>{{ $t('device.table.status') }}</th>
           <th>{{ $t('device.table.action') }}</th>
         </tr>
@@ -43,9 +43,8 @@
             <span v-else style="color:var(--text-muted);font-size:0.83rem;">—</span>
           </td>
           <td>
-            <span v-if="u.privilege === 14" class="badge badge-admin">Admin</span>
-            <span v-else-if="u.privilege > 0" class="badge badge-other">Special</span>
-            <span v-else class="privilege-user">User</span>
+            <span v-if="u.has_face" class="badge badge-face">Có</span>
+            <span v-else class="face-missing">Chưa rõ</span>
           </td>
           <td>
             <span :class="['badge', getStatusClass(u.source_status)]">
@@ -55,12 +54,6 @@
           <td class="actions">
             <div class="action-group">
               <button class="btn-view" :title="$t('common.info')" @click="$emit('view', u)">{{ $t('common.info') }}</button>
-              <button class="btn-privilege" :title="$t('device.action.change_privilege')" @click="$emit('changePrivilege', u)">
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                {{ $t('device.action.change_privilege') }}
-              </button>
-              <button class="btn-sync" :title="$t('device.action.sync_finger')" @click="$emit('syncFinger', u.user_id)">{{ $t('device.action.sync_finger') }}</button>
-              <button class="btn-edit" :title="$t('device.action.rename')" @click="$emit('rename', u)">{{ $t('device.action.rename') }}</button>
               <button class="btn-delete" :title="$t('device.action.delete')" @click="$emit('delete', u.user_id)">{{ $t('device.action.delete') }}</button>
             </div>
           </td>
@@ -77,7 +70,7 @@ const { t } = useI18n()
 import { useMachineStore } from '../store.js'
 
 const props = defineProps({ employees: { type: Array, default: () => [] } })
-const emit = defineEmits(['delete', 'rename', 'syncFinger', 'selection-change', 'view', 'changePrivilege'])
+const emit = defineEmits(['delete', 'selection-change', 'view'])
 
 const store = useMachineStore()
 const selectedIds = ref([])
@@ -200,22 +193,17 @@ watch(() => props.employees, () => {
   background-color: rgba(148, 163, 184, 0.2);
   color: #cbd5e1;
 }
-.badge-admin {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+.badge-face {
+  background-color: rgba(20, 184, 166, 0.2);
+  color: #5eead4;
 }
-.badge-other {
-  background-color: rgba(168, 85, 247, 0.2);
-  color: #a78bfa;
-}
-.privilege-user {
+.face-missing {
   color: #94a3b8;
   font-size: 0.85rem;
 }
 
 .actions {
-  min-width: 280px;
+  min-width: 150px;
 }
 
 .action-group {
@@ -234,9 +222,6 @@ button {
 }
 
 .btn-view { background: #10b981; color: white; }
-.btn-privilege { background: #f59e0b; color: white; display: flex; align-items: center; gap: 4px; }
-.btn-sync { background: #8b5cf6; color: white; }
-.btn-edit { background: #3b82f6; color: white; }
 .btn-delete { background: #ef4444; color: white; }
 
 button:hover { opacity: 0.8; }

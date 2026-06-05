@@ -10,7 +10,7 @@ if not DEMO_MODE:
     from . import service
     from .service import (
         get_machine_list, get_devices_capacity_info, get_users_from_machine,
-        delete_user_from_machine, bulk_delete_users_from_machine,
+        add_user_to_machine, delete_user_from_machine, bulk_delete_users_from_machine,
         update_user_name_all_machines, download_fingerprints_from_machine,
         bulk_download_fingerprints_from_machine, get_biometric_coverage,
         delete_status, delete_user_from_all_machines,
@@ -33,6 +33,11 @@ from pydantic import BaseModel
 class NameUpdate(BaseModel):
     employee_id: str
     new_name: str
+
+class MachineEmployeeCreate(BaseModel):
+    employee_id: str
+    name: str = ""
+    role: str = "employee"
 
 class FingerprintSyncRequest(BaseModel):
     ip: str
@@ -60,6 +65,13 @@ class EnrollmentRequest(BaseModel):
     finger_index: int = 0
 
 router = APIRouter(prefix="/api/machines", tags=["Machines"])
+
+
+def _hanvon_not_supported(feature: str):
+    raise HTTPException(
+        status_code=410,
+        detail=f"{feature} is a legacy ZKTeco operation and is not supported after switching machines to Hanvon.",
+    )
 
 @router.get("")
 def get_machines():
@@ -147,6 +159,22 @@ def get_machine_employees(ip: str, db: Session = Depends(get_db)):
         })
     return {"items": enriched, "total": len(enriched), "status": status}
 
+@router.post("/{ip}/employees")
+def add_machine_employee(ip: str, req: MachineEmployeeCreate):
+    """Add or update one employee shell on a specific Hanvon machine."""
+    employee_id = req.employee_id.strip()
+    if not employee_id:
+        raise HTTPException(status_code=422, detail="employee_id is required")
+    if req.role != "employee":
+        raise HTTPException(
+            status_code=422,
+            detail="Only standard employee role is supported here. Hanvon manager creation requires a separate photo/password flow.",
+        )
+    status = add_user_to_machine(ip, employee_id, req.name)
+    if status != "Success":
+        raise HTTPException(status_code=500, detail=status)
+    return {"status": status, "employee_id": employee_id}
+
 @router.delete("/{ip}/employees/{employee_id}")
 def delete_machine_employee(ip: str, employee_id: str):
     """Delete a single employee from a machine."""
@@ -163,33 +191,22 @@ def bulk_delete_machine_employees(ip: str, req: BulkDeleteRequest):
 @router.post("/update-name")
 def update_machine_name(data: NameUpdate):
     """Global name update across all machines and DB."""
-    return update_user_name_all_machines(data.employee_id, data.new_name)
+    _hanvon_not_supported("Machine-side name update")
 
 @router.post("/sync-fingerprints")
 def sync_fingerprints(data: FingerprintSyncRequest):
     """Pull fingerprints for a single user from a machine to DB."""
-    count, status = download_fingerprints_from_machine(data.ip, data.employee_id)
-    return {"count": count, "status": status}
+    _hanvon_not_supported("Fingerprint sync")
 
 @router.post("/{ip}/sync-all-fingerprints")
 def sync_all_machine_fingerprints(ip: str):
     """Pull all fingerprints from a machine to DB."""
-    count, status = bulk_download_fingerprints_from_machine(ip)
-    if status != "Success":
-        raise HTTPException(status_code=500, detail=status)
-    return {"count": count, "status": status}
+    _hanvon_not_supported("Fingerprint sync")
 
 @router.get("/export-fingerprints")
 def export_machine_fingerprints(ip: Optional[str] = Query(None), db: Session = Depends(get_db)):
     """Export DB fingerprints to Excel."""
-    output = BiometricExportService.generate_excel_from_db(db, ip=ip)
-    label = f"Device_{ip}" if ip else "All"
-    filename = f"Fingerprints_{label}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
-    )
+    _hanvon_not_supported("Fingerprint export")
 
 # Status polling for background tasks
 @router.get("/delete-status/{employee_id}")
@@ -216,11 +233,7 @@ def get_bulk_global_delete_status():
 @router.post("/push-fingerprints")
 def trigger_push_fingerprints(data: PushFingerprintsRequest, background_tasks: BackgroundTasks):
     """Start background global fingerprint pushing."""
-    if push_status["is_running"]:
-        raise HTTPException(status_code=400, detail="Another push operation is in progress")
-    
-    background_tasks.add_task(push_fingerprints_to_machines, data.employee_id, data.target_ips)
-    return {"status": "Started", "count": len(data.target_ips)}
+    _hanvon_not_supported("Fingerprint push")
 
 @router.get("/push-status")
 def get_push_status():
@@ -230,11 +243,7 @@ def get_push_status():
 @router.post("/bulk-push-fingerprints")
 def trigger_bulk_push_fingerprints(data: BulkPushRequest, background_tasks: BackgroundTasks):
     """Start background bulk fingerprint pushing."""
-    if bulk_push_status["is_running"]:
-        raise HTTPException(status_code=400, detail="Another bulk push operation is in progress")
-    
-    background_tasks.add_task(bulk_push_fingerprints_to_machines, data.employee_ids, data.target_ips)
-    return {"status": "Started", "employees_count": len(data.employee_ids), "machines_count": len(data.target_ips)}
+    _hanvon_not_supported("Fingerprint push")
 
 @router.get("/bulk-push-status")
 def get_bulk_push_status():
@@ -244,16 +253,12 @@ def get_bulk_push_status():
 @router.post("/bulk-push-preview")
 def preview_bulk_push_endpoint(data: BulkPushPreviewRequest):
     """Preview the data before pushing."""
-    from .service import preview_bulk_push
-    return preview_bulk_push(data.employee_ids)
+    _hanvon_not_supported("Fingerprint push preview")
 
 @router.post("/sync-all-fingerprints-global")
 def trigger_global_sync_all_fingerprints(background_tasks: BackgroundTasks):
     """Start background process to sync all fingerprints from all machines to DB."""
-    if global_sync_status["is_running"]:
-        raise HTTPException(status_code=400, detail="Global sync is already running")
-    background_tasks.add_task(global_sync_all_fingerprints)
-    return {"status": "Started"}
+    _hanvon_not_supported("Fingerprint sync")
 
 @router.get("/sync-all-fingerprints-global/status")
 def get_global_sync_status():
@@ -263,10 +268,7 @@ def get_global_sync_status():
 @router.post("/{ip}/clear-fingerprints")
 def clear_machine_fingerprints(ip: str, background_tasks: BackgroundTasks):
     """Clear all user data and fingerprints on a specific machine, keeping logs."""
-    if clear_fp_status["is_running"]:
-        raise HTTPException(status_code=400, detail="Clear operation already running")
-    background_tasks.add_task(clear_all_fingerprints_on_machine, ip)
-    return {"status": "Started"}
+    _hanvon_not_supported("Fingerprint clear")
 
 @router.get("/clear-fingerprints-status")
 def get_clear_fingerprints_status():
@@ -276,39 +278,33 @@ def get_clear_fingerprints_status():
 @router.post("/sync-time-all")
 def sync_all_machines_time():
     """Sync time for all connected machines."""
-    results = bulk_sync_time_all_machines()
-    return {"results": results}
+    _hanvon_not_supported("Time sync")
 
 @router.post("/{ip}/users/{employee_id}/privilege")
 def update_user_privilege_endpoint(ip: str, employee_id: str, req: PrivilegeUpdateRequest):
     """Sets a user's privilege on a specific machine and updates local DB."""
-    from .service import set_user_privilege_on_machine
-    result = set_user_privilege_on_machine(ip, employee_id, req.privilege)
-    if result != "Success":
-        raise HTTPException(status_code=500, detail=result)
-    return {"status": "Success"}
+    _hanvon_not_supported("Machine-side privilege update")
 
 @router.post("/{ip}/enroll")
 async def enroll_machine_user(ip: str, request: EnrollmentRequest, background_tasks: BackgroundTasks):
     """
     Kích hoạt chế độ đăng ký vân tay từ xa (chạy ngầm).
     """
-    background_tasks.add_task(service.enroll_user_remote, ip, request.employee_id, request.finger_index)
-    return {"status": "started", "message": "Enrollment process initiated."}
+    _hanvon_not_supported("Remote fingerprint enrollment")
 
 @router.get("/{ip}/enroll/status")
 async def get_enroll_status(ip: str):
     """
     Lấy trạng thái tiến trình đăng ký vân tay.
     """
-    return service.get_enroll_status(ip)
+    _hanvon_not_supported("Remote fingerprint enrollment")
 
 @router.post("/{ip}/enroll/cancel")
 async def cancel_enroll(ip: str):
     """
     Hủy bỏ tiến trình đăng ký vân tay trên máy.
     """
-    return service.cancel_enroll_remote(ip)
+    _hanvon_not_supported("Remote fingerprint enrollment")
 
 class MachineConfigUpdate(BaseModel):
     is_live: bool

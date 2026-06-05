@@ -17,10 +17,6 @@ def _parse_machine_line(content: str):
         tags_text = raw[raw.index('#'):].lower()
 
     protocol = "hanvon"
-    if "# hanvon" in tags_text or "# protocol:hanvon" in tags_text:
-        protocol = "hanvon"
-    elif "# zkteco" in tags_text or "# protocol:zkteco" in tags_text or "# protocol:zk" in tags_text:
-        protocol = "zkteco"
 
     meal_url = None
     if '# meal:' in tags_text:
@@ -130,8 +126,6 @@ def update_machine_tags(ip, is_live, is_canteen, file_path=config.MACHINES_FILE)
                 found = True
                 existing_cfg = _parse_machine_line(line) or {}
                 tags = []
-                if existing_cfg.get("protocol") == "zkteco":
-                    tags.append("zkteco")
                 if not is_live:
                     tags.append("nolive")
                 if is_canteen:

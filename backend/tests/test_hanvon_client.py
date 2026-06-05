@@ -12,6 +12,44 @@ if str(SRC_DIR) not in sys.path:
 from features.hanvon.client import HanvonClient, make_derived_key, xor_from_zero
 
 
+class FakeSocket:
+    def __init__(self, response_body):
+        self.sent = b""
+        self.recv_buffer = struct.pack("!I", len(response_body)) + response_body
+
+    def settimeout(self, timeout):
+        pass
+
+    def connect(self, address):
+        pass
+
+    def sendall(self, data):
+        self.sent += data
+
+    def recv(self, n):
+        chunk = self.recv_buffer[:n]
+        self.recv_buffer = self.recv_buffer[n:]
+        return chunk
+
+    def close(self):
+        pass
+
+
+def make_fake_client_response(response):
+    key = make_derived_key("123")
+    body = xor_from_zero(json.dumps(response).encode("utf-8"), key)
+    fake_socket = FakeSocket(body)
+    client = HanvonClient("192.168.209.61")
+    client._sock = fake_socket
+    return client, fake_socket
+
+
+def sent_payload(fake_socket):
+    key = make_derived_key("123")
+    sent_len = struct.unpack("!I", fake_socket.sent[:4])[0]
+    return json.loads(xor_from_zero(fake_socket.sent[4:4 + sent_len], key).decode("utf-8"))
+
+
 def test_derived_key_matches_verified_protocol_doc():
     assert make_derived_key("123") == bytes([0x31, 0x33, 0x35, 0x04, 0x08, 0x10, 0x20, 0x40])
 
@@ -25,7 +63,6 @@ def test_xor_resets_from_zero_for_each_transaction():
 
 
 def test_client_sends_client_get_record_and_parses_records():
-    key = make_derived_key("123")
     fake_response = {
         "COMMAND": "Return",
         "PARAM": {
@@ -43,40 +80,65 @@ def test_client_sends_client_get_record_and_parses_records():
             ],
         },
     }
-    body = xor_from_zero(json.dumps(fake_response).encode("utf-8"), key)
-
-    class FakeSocket:
-        def __init__(self):
-            self.sent = b""
-            self.recv_buffer = struct.pack("!I", len(body)) + body
-
-        def settimeout(self, timeout):
-            pass
-
-        def connect(self, address):
-            pass
-
-        def sendall(self, data):
-            self.sent += data
-
-        def recv(self, n):
-            chunk = self.recv_buffer[:n]
-            self.recv_buffer = self.recv_buffer[n:]
-            return chunk
-
-        def close(self):
-            pass
-
-    fake_socket = FakeSocket()
-    client = HanvonClient("192.168.209.61")
-    client._sock = fake_socket
+    client, fake_socket = make_fake_client_response(fake_response)
 
     records = client.get_records_by_day(date(2026, 6, 4))
 
-    sent_len = struct.unpack("!I", fake_socket.sent[:4])[0]
-    sent_payload = json.loads(xor_from_zero(fake_socket.sent[4:4 + sent_len], key).decode("utf-8"))
-    assert sent_payload["PARAM"]["command"] == "ClientGetRecord"
-    assert sent_payload["PARAM"]["start_time"] == "2026-06-04 00:00:00"
-    assert sent_payload["PARAM"]["end_time"] == "2026-06-04 23:59:59"
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "ClientGetRecord"
+    assert payload["PARAM"]["start_time"] == "2026-06-04 00:00:00"
+    assert payload["PARAM"]["end_time"] == "2026-06-04 23:59:59"
     assert records[0].employee_id == "232604090"
     assert records[0].attendance_time.isoformat() == "2026-06-04T15:43:05"
+
+
+def test_client_sends_get_employee_id_and_parses_face_ids():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {
+            "result": "success",
+            "ids": ["1001", " 1002 ", ""],
+            "fids": ["1002"],
+        },
+    })
+
+    ids, face_ids = client.get_employee_ids()
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "GetEmployeeID"
+    assert payload["PARAM"]["userType"] == "0"
+    assert ids == ["1001", "1002"]
+    assert face_ids == {"1002"}
+
+
+def test_client_sends_delete_employee():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {"result": "success"},
+    })
+
+    client.delete_employee("1001")
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "DeleteEmployee"
+    assert payload["PARAM"]["id"] == "1001"
+
+
+def test_client_sends_set_employee_shell():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {"result": "success", "reason": ""},
+    })
+
+    client.set_employee("1001", "Nguyen Van A")
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "SetEmployee"
+    assert payload["PARAM"]["id"] == "1001"
+    assert payload["PARAM"]["job_num"] == "1001"
+    assert payload["PARAM"]["name"] == "Nguyen Van A"
+    assert payload["PARAM"]["userType"] == "1"
+    assert payload["PARAM"]["recogPermission"] == "face"
+    assert payload["PARAM"]["capturejpg"] == ""
+    assert payload["PARAM"]["face_data"] == []
+    assert payload["PARAM"]["finger_data"] == []

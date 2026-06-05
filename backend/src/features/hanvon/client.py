@@ -85,6 +85,45 @@ class HanvonClient:
             raise HanvonProtocolError(f"GetDeviceInfo failed: {param.get('reason') or response}")
         return param.get("deviceInfo", {})
 
+    def get_employee_ids(self) -> tuple[list[str], set[str]]:
+        response = self._send_command("GetEmployeeID", userType="0")
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            raise HanvonProtocolError(f"GetEmployeeID failed: {param.get('reason') or response}")
+        ids = [str(item).strip() for item in param.get("ids", []) if str(item).strip()]
+        face_ids = {str(item).strip() for item in param.get("fids", []) if str(item).strip()}
+        return ids, face_ids
+
+    def delete_employee(self, employee_id: str) -> None:
+        response = self._send_command("DeleteEmployee", id=str(employee_id))
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            raise HanvonProtocolError(f"DeleteEmployee failed: {param.get('reason') or response}")
+
+    def set_employee(self, employee_id: str, name: str = "") -> None:
+        employee_id = str(employee_id).strip()
+        if not employee_id:
+            raise ValueError("employee_id is required")
+
+        response = self._send_command(
+            "SetEmployee",
+            id=employee_id,
+            name=str(name or "").strip(),
+            sex=2,
+            nation="Vietnamese",
+            address="",
+            userType="1",
+            job_num=employee_id,
+            icCard="",
+            recogPermission="face",
+            capturejpg="",
+            face_data=[],
+            finger_data=[],
+        )
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            raise HanvonProtocolError(f"SetEmployee failed: {param.get('reason') or response}")
+
     def get_records(self, start_dt: datetime, end_dt: datetime) -> list[HanvonRecord]:
         response = self._send_command(
             "ClientGetRecord",

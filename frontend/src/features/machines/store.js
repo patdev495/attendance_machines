@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { 
-  getMachinesCapacity, getMachineEmployees, deleteMachineEmployee, bulkDeleteMachineEmployees,
+  getMachinesCapacity, getMachineEmployees, addMachineEmployee, deleteMachineEmployee, bulkDeleteMachineEmployees,
   updateEmployeeName, syncFingerprints, syncAllMachineFingerprints,
   updateUserPrivilege, EXPORT_FINGERPRINTS_URL
 } from './api.js'
@@ -112,6 +112,11 @@ export const useMachineStore = defineStore('machines', () => {
     await loadMachineEmployees(currentIp.value)
   }
 
+  async function addEmployee(employeeId, name, role = 'employee') {
+    await addMachineEmployee(currentIp.value, employeeId, name, role)
+    await loadMachineEmployees(currentIp.value)
+  }
+
   async function bulkDeleteEmployees(employeeIds) {
     const res = await bulkDeleteMachineEmployees(currentIp.value, employeeIds)
     await loadMachineEmployees(currentIp.value)
@@ -144,7 +149,7 @@ export const useMachineStore = defineStore('machines', () => {
     currentIp, allEmployees, filteredEmployees, employeesLoading, employeeError,
     searchTerm, sourceStatusFilter, shiftFilter, idSortOrder, exportUrl, filteredExportUrl,
     empPage, empPageSize, empTotalPages, pagedEmployees,
-    fetchMachines, loadMachineEmployees, applyFilter, deleteEmployee, bulkDeleteEmployees,
+    fetchMachines, loadMachineEmployees, applyFilter, addEmployee, deleteEmployee, bulkDeleteEmployees,
     renameEmployee, syncEmployeeFingerprints, bulkSyncFingerprints, updatePrivilege
   }
 })

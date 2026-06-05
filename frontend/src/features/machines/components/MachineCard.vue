@@ -17,9 +17,9 @@
         <div class="capacity-fill" :style="{ width: getPct(machine.users, machine.users_cap) + '%', background: fillColor(getPct(machine.users, machine.users_cap)) }"></div>
       </div>
 
-      <!-- Fingers Section -->
+      <!-- Face registrations Section -->
       <div class="cap-row mt-12">
-        <span class="label">{{ $t('machines.fingerprints') }}</span>
+        <span class="label">Khuôn mặt</span>
         <span class="val">{{ machine.fingers }} / {{ machine.fingers_cap }}</span>
       </div>
       <div class="capacity-bar">

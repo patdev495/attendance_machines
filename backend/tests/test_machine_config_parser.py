@@ -33,7 +33,7 @@ def test_parse_protocol_tag_machine_line():
     assert cfg["protocol"] == "hanvon"
 
 
-def test_parse_zkteco_override_machine_line():
+def test_parse_legacy_zkteco_tag_is_ignored():
     cfg = _parse_machine_line("192.168.209.21 # zkteco")
 
-    assert cfg["protocol"] == "zkteco"
+    assert cfg["protocol"] == "hanvon"

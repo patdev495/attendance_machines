@@ -33,6 +33,14 @@ export function getMachineEmployees(ip) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`)
 }
 
+export function addMachineEmployee(ip, employeeId, name = '', role = 'employee') {
+  return apiFetch(`/${encodeURIComponent(ip)}/employees`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employee_id: employeeId, name, role })
+  })
+}
+
 export function deleteMachineEmployee(ip, employeeId) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees/${employeeId}`, { method: 'DELETE' })
 }

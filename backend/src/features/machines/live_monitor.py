@@ -5,8 +5,6 @@ import requests
 from requests.adapters import HTTPAdapter
 import logging
 from config import DEMO_MODE
-if not DEMO_MODE:
-    from zk import ZK
 
 from concurrent.futures import ThreadPoolExecutor
 from sqlalchemy import func
@@ -90,7 +88,7 @@ class LiveMonitorManager:
 
                 for cfg in live_configs:
                     ip = cfg['ip']
-                    protocol = cfg.get('protocol', 'zkteco')
+                    protocol = cfg.get('protocol', 'hanvon')
                     self.meal_configs[ip] = cfg['meal_url']
                     if cfg.get('is_canteen'):
                         self.canteen_ips.add(ip)
@@ -139,7 +137,7 @@ class LiveMonitorManager:
         logger.info("Stopping Live Monitor Manager...")
         # Threads will exit on their next loop iteration or timeout
 
-    def _start_monitor(self, ip, protocol="zkteco"):
+    def _start_monitor(self, ip, protocol="hanvon"):
         if ip in self.active_monitors and self.active_monitors[ip].is_alive():
             return
         
@@ -148,11 +146,8 @@ class LiveMonitorManager:
         self.active_monitors[ip] = thread
         logger.info(f"Started {protocol} live monitor thread for {ip}")
 
-    def _monitor_loop(self, ip, protocol="zkteco"):
-        if protocol == "hanvon":
-            self._monitor_hanvon_loop(ip)
-        else:
-            self._monitor_zkteco_loop(ip)
+    def _monitor_loop(self, ip, protocol="hanvon"):
+        self._monitor_hanvon_loop(ip)
 
     def _monitor_zkteco_loop(self, ip):
         """Background loop for a single machine."""
@@ -468,10 +463,10 @@ class LiveMonitorManager:
             return True, "Reconnecting initiated"
         else:
             logger.info(f"[MGMT] Reconnecting {ip} — was not active, starting now")
-            protocol = "zkteco"
+            protocol = "hanvon"
             for cfg in get_live_machine_list():
                 if cfg["ip"] == ip:
-                    protocol = cfg.get("protocol", "zkteco")
+                    protocol = cfg.get("protocol", "hanvon")
                     break
             self._start_monitor(ip, protocol)
             return True, "Started monitor thread"

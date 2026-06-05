@@ -1,10 +1,7 @@
 from config import config, DEMO_MODE
-if not DEMO_MODE:
-    from zk import ZK
-    from zk.user import User
-    from zk.finger import Finger
 
 from database import SessionLocal, EmployeeMetadata, EmployeeFingerprint
+from features.hanvon.client import HanvonClient
 from shared.hardware import get_machine_list, update_machine_tags, get_all_machine_configs
 from utils.encoding import sanitize_machine_name
 import logging
@@ -17,6 +14,19 @@ import time
 from typing import List, Optional, Dict, cast
 
 logger = logging.getLogger(__name__)
+
+
+def _to_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _unsupported_hanvon_operation(operation: str):
+    message = f"{operation} is not supported for Hanvon devices"
+    logger.warning(message)
+    return message
 
 # State for machine operations (deletion, etc.)
 delete_status = {
@@ -45,82 +55,108 @@ status_lock = threading.Lock()
 global_sync_lock = threading.Lock()
 
 def get_devices_capacity_info():
-    """Checks capacity for all machines in hardware list."""
-    machines = get_machine_list()
+    """Checks Hanvon capacity for all configured machines."""
+    machines = get_all_machine_configs()
     results = []
-    for ip in machines:
-        zk = ZK(ip, port=4370, timeout=5)
-        conn = None
+    for machine in machines:
+        ip = machine["ip"] if isinstance(machine, dict) else str(machine)
         try:
-            conn = zk.connect()
-            conn.read_sizes()
+            with HanvonClient(
+                ip,
+                port=config.HANVON_PORT,
+                secret_key=config.HANVON_SECRET_KEY,
+                timeout=5,
+            ) as client:
+                info = client.get_device_info()
+
+            users = _to_int(info.get("real_faceregist"))
+            users_cap = _to_int(info.get("max_faceregist"))
+            records = _to_int(info.get("real_facerecord"))
+            records_cap = _to_int(info.get("max_facerecord"))
             results.append({
                 "ip": ip,
                 "status": "Online",
-                "users": getattr(conn, 'users', 0),
-                "users_cap": getattr(conn, 'users_cap', 0),
-                "fingers": getattr(conn, 'fingers', 0),
-                "fingers_cap": getattr(conn, 'fingers_cap', 0),
-                "records": getattr(conn, 'records', 0),
-                "records_cap": getattr(conn, 'records_cap', 0)
+                "protocol": "hanvon",
+                "model": info.get("model") or info.get("type") or "",
+                "sn": info.get("sn") or "",
+                "firmware": info.get("edition") or "",
+                "device_time": info.get("time") or "",
+                "users": users,
+                "users_cap": users_cap,
+                "fingers": users,
+                "fingers_cap": users_cap,
+                "records": records,
+                "records_cap": records_cap,
             })
         except Exception as e:
             results.append({
                 "ip": ip,
                 "status": "Offline",
-                "error": str(e)
+                "protocol": "hanvon",
+                "users": 0,
+                "users_cap": 0,
+                "fingers": 0,
+                "fingers_cap": 0,
+                "records": 0,
+                "records_cap": 0,
+                "error": str(e),
             })
-        finally:
-            if conn:
-                try: conn.disconnect()
-                except: pass
     return results
 
 def get_users_from_machine(ip: str):
-    """Fetches all users from a specific machine."""
-    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-    conn = None
+    """Fetches all Hanvon employee IDs from a specific machine."""
     try:
-        conn = zk.connect()
-        conn.disable_device()
-        users = conn.get_users()
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=15,
+        ) as client:
+            employee_ids, face_ids = client.get_employee_ids()
+
         user_list = []
-        for u in users:
+        for index, employee_id in enumerate(employee_ids, start=1):
             user_list.append({
-                "uid": u.uid,
-                "user_id": u.user_id,
-                "name": u.name,
-                "privilege": u.privilege,
-                "password": u.password,
-                "group_id": u.group_id,
-                "card": u.card
+                "uid": index,
+                "user_id": employee_id,
+                "name": "",
+                "privilege": 0,
+                "password": "",
+                "group_id": "",
+                "card": 0,
+                "has_face": employee_id in face_ids,
             })
-        conn.enable_device()
         return user_list, "Success"
     except Exception as e:
         logger.error(f"Error fetching users from machine {ip}: {e}")
         return [], str(e)
-    finally:
-        if conn:
-            try: conn.disconnect()
-            except: pass
+
+def add_user_to_machine(ip: str, employee_id: str, name: str = ""):
+    """Adds or updates a Hanvon employee shell on a specific machine."""
+    try:
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=10,
+        ) as client:
+            client.set_employee(employee_id, name)
+        return "Success"
+    except Exception as e:
+        logger.error(f"Error adding user {employee_id} to machine {ip}: {e}")
+        return str(e)
 
 def delete_user_from_machine(ip: str, employee_id: str):
-    """Deletes a user from a specific machine."""
-    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-    conn = None
+    """Deletes a Hanvon employee from a specific machine."""
     try:
-        conn = zk.connect()
-        conn.disable_device()
-        users = conn.get_users()
-        target_user = next((u for u in users if u.user_id == employee_id), None)
-        
-        result = "Not in device"
-        if target_user:
-            conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
-            result = "Success"
-            
-        conn.enable_device()
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=10,
+        ) as client:
+            client.delete_employee(employee_id)
+        result = "Success"
         with status_lock:
             delete_status["results"][ip] = result
         return result
@@ -130,40 +166,27 @@ def delete_user_from_machine(ip: str, employee_id: str):
         with status_lock:
             delete_status["results"][ip] = msg
         return msg
-    finally:
-        if conn:
-            try: conn.disconnect()
-            except: pass
 
 def bulk_delete_users_from_machine(ip: str, employee_ids: list):
-    """Deletes multiple users from a machine in a single connection."""
-    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-    conn = None
+    """Deletes multiple Hanvon employees from a machine in a single connection."""
     deleted_count = 0
     try:
-        conn = zk.connect()
-        conn.disable_device()
-        users = conn.get_users()
-        user_map = {str(u.user_id): u for u in users}
-        
-        for emp_id in employee_ids:
-            target_user = user_map.get(str(emp_id))
-            if target_user:
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=15,
+        ) as client:
+            for emp_id in employee_ids:
                 try:
-                    conn.delete_user(uid=target_user.uid, user_id=target_user.user_id)
+                    client.delete_employee(str(emp_id))
                     deleted_count += 1
                 except Exception as e:
                     logger.error(f"Failed to delete {emp_id} from {ip}: {e}")
-                    
-        conn.enable_device()
         return deleted_count, "Success"
     except Exception as e:
         logger.error(f"Error bulk deleting from machine {ip}: {e}")
         return deleted_count, str(e)
-    finally:
-        if conn:
-            try: conn.disconnect()
-            except: pass
 
 def update_user_name_on_machine(ip: str, employee_id: str, new_name: str):
     """Updates user's name on a specific machine."""
