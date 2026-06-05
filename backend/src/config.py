@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from datetime import date
 from dotenv import load_dotenv
 
 # d:/Workspace/Time_Attendance_Machine/backend/src/config.py
@@ -65,5 +66,6 @@ class Config:
     HANVON_PORT = int(os.getenv("HANVON_PORT", "9922"))
     HANVON_SECRET_KEY = os.getenv("HANVON_SECRET_KEY", "123")
     HANVON_INITIAL_SYNC_DAYS = int(os.getenv("HANVON_INITIAL_SYNC_DAYS", "30"))
+    HANVON_FULL_SYNC_START_DATE = date.fromisoformat(os.getenv("HANVON_FULL_SYNC_START_DATE", "2000-01-01"))
 
 config = Config()

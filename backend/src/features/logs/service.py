@@ -29,7 +29,7 @@ sync_status = {
 
 status_lock = threading.Lock()
 
-def sync_all_machines():
+def sync_all_machines(start_date: datetime.date | None = None, end_date: datetime.date | None = None):
     global sync_status
     
     if DEMO_MODE:
@@ -68,9 +68,9 @@ def sync_all_machines():
         try:
             logger.info(f"Connecting to {protocol} machine {i+1}/{len(machine_configs)} at {ip}...")
             if protocol == "hanvon":
-                added = _sync_hanvon_machine(db, ip)
+                added = _sync_hanvon_machine(db, ip, start_date, end_date)
             else:
-                added = _sync_zkteco_machine(db, ip)
+                added = _sync_zkteco_machine(db, ip, start_date, end_date)
             local_total_added += added
             
             logger.info(f"Machine {ip}: Finished. Added {added} records, {local_total_added} total.")
@@ -90,7 +90,12 @@ def sync_all_machines():
     
     return local_total_added
 
-def _sync_zkteco_machine(db, ip: str) -> int:
+def _sync_zkteco_machine(
+    db,
+    ip: str,
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
+) -> int:
     # PyZK initialization
     zk = ZK(ip, port=4370, timeout=10, force_udp=False)
     conn = None
@@ -112,6 +117,10 @@ def _sync_zkteco_machine(db, ip: str) -> int:
             if user_id == '1': # Skip admin/system user
                 continue
             timestamp = att.timestamp.replace(tzinfo=None)
+            if start_date and timestamp.date() < start_date:
+                continue
+            if end_date and timestamp.date() > end_date:
+                continue
             if (user_id, timestamp) in existing_keys:
                 continue
 
@@ -139,34 +148,41 @@ def _sync_zkteco_machine(db, ip: str) -> int:
             try: conn.disconnect()
             except: pass
 
-def _sync_hanvon_machine(db, ip: str) -> int:
+def _sync_hanvon_machine(
+    db,
+    ip: str,
+    start_date: datetime.date | None = None,
+    end_date: datetime.date | None = None,
+) -> int:
     today = datetime.date.today()
-    latest = db.query(func.max(AttendanceLog.attendance_time)).filter(
-        AttendanceLog.machine_ip == ip
-    ).scalar()
-    if latest:
-        start_date = max(latest.date() - datetime.timedelta(days=1), datetime.date(2000, 1, 1))
-    else:
-        start_date = today - datetime.timedelta(days=max(config.HANVON_INITIAL_SYNC_DAYS - 1, 0))
+    requested_start = start_date
+    requested_end = end_date
+    if requested_start and requested_end and requested_start > requested_end:
+        requested_start, requested_end = requested_end, requested_start
 
-    existing_keys = set(
-        db.query(AttendanceLog.employee_id, AttendanceLog.attendance_time)
-          .filter(
-              AttendanceLog.machine_ip == ip,
-              AttendanceLog.attendance_date >= start_date,
-              AttendanceLog.attendance_date <= today,
-          )
-          .all()
+    full_device_sync = requested_start is None and requested_end is None
+    range_start = requested_start or config.HANVON_FULL_SYNC_START_DATE
+    range_end = requested_end or today
+
+    existing_query = db.query(AttendanceLog.employee_id, AttendanceLog.attendance_time).filter(
+        AttendanceLog.machine_ip == ip
     )
+    if range_start:
+        existing_query = existing_query.filter(AttendanceLog.attendance_date >= range_start)
+    if range_end:
+        existing_query = existing_query.filter(AttendanceLog.attendance_date <= range_end)
+    existing_keys = set(existing_query.all())
 
     added = 0
     new_logs = []
+    device_seen_keys = set()
     with HanvonClient(
         ip,
         port=config.HANVON_PORT,
         secret_key=config.HANVON_SECRET_KEY,
     ) as client:
         device_info = client.get_device_info()
+        device_record_count = int(device_info.get("real_facerecord") or 0)
         logger.info(
             "Hanvon machine %s: connected model=%s sn=%s records=%s",
             ip,
@@ -174,13 +190,29 @@ def _sync_hanvon_machine(db, ip: str) -> int:
             device_info.get("sn"),
             device_info.get("real_facerecord"),
         )
+        if full_device_sync and device_record_count == 0:
+            return 0
 
-        for target_date in iter_dates(start_date, today):
+        if full_device_sync:
+            dates_to_query = _iter_dates_desc(range_end, range_start)
+            logger.info(
+                "Hanvon machine %s: full sync from %s back to %s until %s device records are seen",
+                ip,
+                range_end,
+                range_start,
+                device_record_count,
+            )
+        else:
+            dates_to_query = iter_dates(range_start, range_end)
+            logger.info("Hanvon machine %s: range sync from %s to %s", ip, range_start, range_end)
+
+        for target_date in dates_to_query:
             records = client.get_records_by_day(target_date)
             logger.info("Hanvon machine %s: %s records on %s", ip, len(records), target_date)
             for record in records:
                 user_id = record.employee_id.strip()
                 timestamp = record.attendance_time.replace(tzinfo=None)
+                device_seen_keys.add((user_id, timestamp))
                 if user_id == '1':
                     continue
                 if (user_id, timestamp) in existing_keys:
@@ -201,10 +233,24 @@ def _sync_hanvon_machine(db, ip: str) -> int:
                     added += len(new_logs)
                     new_logs = []
 
+            if full_device_sync and device_record_count and len(device_seen_keys) >= device_record_count:
+                logger.info(
+                    "Hanvon machine %s: full sync reached device record count (%s)",
+                    ip,
+                    device_record_count,
+                )
+                break
+
     if new_logs:
         db.commit()
         added += len(new_logs)
     return added
+
+def _iter_dates_desc(start_date: datetime.date, end_date: datetime.date):
+    current = start_date
+    while current >= end_date:
+        yield current
+        current -= datetime.timedelta(days=1)
 
 def get_users_from_machine(ip: str):
     """Fetches all users from a specific machine."""

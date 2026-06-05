@@ -25,15 +25,8 @@ def get_logs(
     db: Session = Depends(get_db)
 ):
     from database import EmployeeLocalRegistry, EmployeeMetadata
-    query = db.query(
-        AttendanceLog.id,
-        AttendanceLog.employee_id,
-        AttendanceLog.attendance_time,
-        AttendanceLog.machine_ip,
-        func.coalesce(EmployeeLocalRegistry.emp_name, EmployeeMetadata.emp_name).label("emp_name")
-    ).outerjoin(EmployeeLocalRegistry, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id))) \
-     .outerjoin(EmployeeMetadata, func.ltrim(func.rtrim(AttendanceLog.employee_id)) == func.ltrim(func.rtrim(EmployeeMetadata.employee_id)))
-    
+    query = db.query(AttendanceLog)
+
     if employee_id:
         employee_id = employee_id.strip()
         # Step 1: Find matching IDs from registry/metadata (fast, small tables)
@@ -45,28 +38,58 @@ def get_logs(
             EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
             safe_ilike(EmployeeMetadata.emp_name, f"%{employee_id}%")
         ).all()
-        
+
         found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
-        
-        # Step 2: Filter large AttendanceLog table using indexed IN clause (very fast)
-        # Use ltrim/rtrim to be robust against machine-generated ID spaces
-        query = query.filter(func.ltrim(func.rtrim(AttendanceLog.employee_id)).in_(list(found_ids)))
+
+        query = query.filter(
+            (AttendanceLog.employee_id.in_(list(found_ids))) |
+            (AttendanceLog.employee_id.ilike(f"%{employee_id}%"))
+        )
     if machine_ip:
         query = query.filter(AttendanceLog.machine_ip == machine_ip)
-    
+
     if start_date:
         query = query.filter(AttendanceLog.attendance_date >= start_date)
     if end_date:
         query = query.filter(AttendanceLog.attendance_date <= end_date)
-        
+
     total = query.count()
-    results = query.order_by(desc(AttendanceLog.attendance_time)) \
-                   .offset((page - 1) * size) \
-                   .limit(size) \
-                   .all()
-                   
+    logs = query.order_by(desc(AttendanceLog.attendance_time)) \
+                .offset((page - 1) * size) \
+                .limit(size) \
+                .all()
+    employee_ids = {str(log.employee_id).strip() for log in logs if log.employee_id}
+    registry_map = {}
+    metadata_map = {}
+
+    if employee_ids:
+        registry_rows = db.query(
+            EmployeeLocalRegistry.employee_id,
+            EmployeeLocalRegistry.emp_name,
+        ).filter(EmployeeLocalRegistry.employee_id.in_(list(employee_ids))).all()
+        registry_map = {str(r.employee_id).strip(): r.emp_name for r in registry_rows}
+
+        missing_ids = employee_ids - set(registry_map.keys())
+        if missing_ids:
+            metadata_rows = db.query(
+                EmployeeMetadata.employee_id,
+                EmployeeMetadata.emp_name,
+            ).filter(EmployeeMetadata.employee_id.in_(list(missing_ids))).all()
+            metadata_map = {str(r.employee_id).strip(): r.emp_name for r in metadata_rows}
+
+    items = []
+    for log in logs:
+        emp_id = str(log.employee_id).strip()
+        items.append({
+            "id": log.id,
+            "employee_id": log.employee_id,
+            "attendance_time": log.attendance_time,
+            "machine_ip": log.machine_ip,
+            "emp_name": registry_map.get(emp_id) or metadata_map.get(emp_id),
+        })
+
     return {
-        "items": [r._asdict() for r in results],
+        "items": items,
         "total_count": total,
         "total_pages": (total + size - 1) // size
     }
@@ -84,7 +107,11 @@ def get_date_range(db: Session = Depends(get_db)):
     }
 
 @router.post("/sync")
-def start_sync(background_tasks: BackgroundTasks):
+def start_sync(
+    background_tasks: BackgroundTasks,
+    start_date: Optional[date_type] = Query(None),
+    end_date: Optional[date_type] = Query(None),
+):
     from shared.hardware import get_all_machine_configs
     # Set running state BEFORE background task starts to avoid race condition
     # where the first poll sees is_running=False and thinks sync is complete
@@ -98,7 +125,7 @@ def start_sync(background_tasks: BackgroundTasks):
         sync_status["current_machine_ip"] = ""
         sync_status["total_added"] = 0
         sync_status["fail_count"] = 0
-    background_tasks.add_task(sync_all_machines)
+    background_tasks.add_task(sync_all_machines, start_date, end_date)
     return {"message": "Sync started"}
 
 @router.get("/sync/status")

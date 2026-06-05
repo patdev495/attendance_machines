@@ -32,10 +32,14 @@ export const useSyncStore = defineStore('sync', () => {
   let deletePoller = null
   let excelPoller = null
 
-  async function startSync() {
+  async function startSync(filters = {}) {
     if (syncRunning.value) return
     syncRunning.value = true
     syncMessage.value = i18n.global.t('sync.initiating')
+    const syncParams = {
+      start_date: filters.start_date,
+      end_date: filters.end_date
+    }
     
     // Start polling immediately so the UI reflects the first machine connection
     const poll = async () => {
@@ -64,7 +68,7 @@ export const useSyncStore = defineStore('sync', () => {
     syncPoller = setInterval(poll, 1500)
     
     try {
-      await triggerSync()
+      await triggerSync(syncParams)
       // Initial poll after trigger to catch immediate state change
       await poll()
     } catch (e) {

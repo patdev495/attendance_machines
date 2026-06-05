@@ -13,8 +13,11 @@ export const logsApi = {
   getDateRange() {
     return axios.get(`${BASE}/date-range`)
   },
-  startSync() {
-    return axios.post(`${BASE}/sync`)
+  startSync(params = {}) {
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+    )
+    return axios.post(`${BASE}/sync`, null, { params: cleanParams })
   },
   getSyncStatus() {
     return axios.get(`${BASE}/sync/status`)
