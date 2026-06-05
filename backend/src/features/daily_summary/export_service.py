@@ -12,6 +12,9 @@ from database import AttendanceLog, EmployeeLocalRegistry, EmployeeDailyShifts, 
 
 from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap
 
+REPORT_SOURCE_STATUSES = ("excel_synced", "machine_only")
+EXPORT_DATA_CELL_STYLES = os.getenv("EXPORT_DATA_CELL_STYLES", "false").lower() == "true"
+
 export_status = {
     "is_running": False,
     "progress": 0,
@@ -22,6 +25,14 @@ export_status = {
     "error": None
 }
 export_lock = threading.Lock()
+
+def _style_data_cell(cell, border_style, alignment_style, font=None):
+    if not EXPORT_DATA_CELL_STYLES:
+        return
+    cell.border = border_style
+    cell.alignment = alignment_style
+    if font is not None:
+        cell.font = font
 
 def _get_shift_meta(shift_code, rules_pool):
     """Return (shift_category, is_night_shift) for a given shift_code.
@@ -134,10 +145,6 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         ).order_by(base_calc_sub.c.work_date, base_calc_sub.c.employee_id)
         
         results = query.all()
-        if not results:
-             with export_lock:
-                 export_status.update({"is_running": False, "error": "No data found for this range."})
-             return
 
         # Also load ALL daily shifts for the date range (for days without attendance logs)
         all_daily_shifts = db.query(EmployeeDailyShifts).filter(
@@ -149,19 +156,21 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         for ds in all_daily_shifts:
             daily_shift_lookup[(ds.employee_id, ds.work_date)] = ds.shift_code
 
+        registry_employees = db.query(EmployeeLocalRegistry).filter(
+            EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES)
+        ).all()
+        registry_emp_ids = {emp.employee_id for emp in registry_employees}
+
         # Extract set of employee IDs from results
         all_emp_ids = sorted(list(set(row.employee_id for row in results)))
         # Also include employees that have daily shifts but no attendance logs
         daily_shift_emp_ids = set(ds.employee_id for ds in all_daily_shifts)
-        all_emp_ids = sorted(list(set(all_emp_ids) | daily_shift_emp_ids))
+        all_emp_ids = sorted(list((set(all_emp_ids) | daily_shift_emp_ids | registry_emp_ids) & registry_emp_ids))
 
         # Phase 13: Batch fetch to avoid SQL Server 2100 parameter limit
         emp_meta = {}
-        for i in range(0, len(all_emp_ids), 1000):
-            batch = all_emp_ids[i:i+1000]
-            batch_query = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id.in_(batch)).all()
-            for m in batch_query:
-                emp_meta[m.employee_id] = m
+        for m in registry_employees:
+            emp_meta[m.employee_id] = m
         
         # Pre-define styles
         border_style = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
@@ -175,6 +184,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         
         for row in results:
             emp_id = row.employee_id
+            if emp_id not in registry_emp_ids:
+                continue
             w_date = row.work_date
             if emp_id not in processed_data:
                 processed_data[emp_id] = {"general_shift": row.shift, "days": {}}
@@ -294,6 +305,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
         # Phase 13: Add days with leave codes but no attendance logs
         for (emp_id, w_date), shift_code in daily_shift_lookup.items():
+            if emp_id not in registry_emp_ids:
+                continue
             if emp_id not in processed_data:
                 processed_data[emp_id] = {"general_shift": shift_code, "days": {}}
             if w_date not in processed_data[emp_id]["days"]:
@@ -309,6 +322,16 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                         "ot_normal_day": 0, "ot_holiday_day": 0, "ot_rotation_day": 0,
                         "ot_normal_night": 0, "ot_holiday_night": 0, "ot_rotation_night": 0,
                     }
+
+        for emp_id in all_emp_ids:
+            if emp_id not in processed_data:
+                emp_m = emp_meta.get(emp_id)
+                processed_data[emp_id] = {
+                    "general_shift": emp_m.shift if emp_m and emp_m.shift else "NA",
+                    "days": {},
+                }
+                if emp_m and emp_m.full_emp_id:
+                    processed_data[emp_id]["full_id"] = emp_m.full_emp_id
             
         sorted_emp_ids = sorted(processed_data.keys())
             
@@ -377,14 +400,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 vals = [emp_id, full_id_val, emp_name, emp_dept, emp_group, emp_start]
                 for c_idx, val in enumerate(vals, 1):
                     cell = ws.cell(row=r_idx, column=c_idx, value=val)
-                    cell.border = border_style
-                    cell.alignment = alignment_style
-                    if not is_first:
-                        cell.font = white_font
-                
+                    _style_data_cell(cell, border_style, alignment_style, None if is_first else white_font)
+
                 cell_ind = ws.cell(row=r_idx, column=7, value=all_indicators[r_offset])
-                cell_ind.border = border_style
-                cell_ind.alignment = alignment_style
+                _style_data_cell(cell_ind, border_style, alignment_style)
 
             # Fill in notes in the last column of the first row of each employee block
             notes_str = ""
@@ -394,17 +413,16 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     notes_str += f"{d.day}/{d.month}: {emp_data[d]['note']}"
             
             notes_col = len(dates_list) + 8
-            ws.cell(row=current_row, column=notes_col, value=notes_str if notes_str else "-").border = border_style
+            _style_data_cell(ws.cell(row=current_row, column=notes_col, value=notes_str if notes_str else "-"), border_style, alignment_style)
             for i in range(1, num_rows):
-                ws.cell(row=current_row+i, column=notes_col, value="").border = border_style
+                _style_data_cell(ws.cell(row=current_row+i, column=notes_col, value=""), border_style, alignment_style)
 
             for date_idx, d in enumerate(dates_list):
                 col = date_idx + 8 # Date columns start after "Chỉ số" (Column 7)
                 if d not in emp_data:
-                    for i in range(num_rows): 
+                    for i in range(num_rows):
                         cell = ws.cell(row=current_row+i, column=col, value="-")
-                        cell.border = border_style
-                        cell.alignment = alignment_style
+                        _style_data_cell(cell, border_style, alignment_style)
                 else:
                     ds = emp_data[d]
                     def fmt_ot(v):
@@ -417,10 +435,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     else:
                         vals = [ds["first"], ds["last"], ds["std"], fmt_ot(ds["ot"]), ds["late"], ds["early"], ds.get("shift_code", "-")]
                     
-                    for i, v in enumerate(vals): 
+                    for i, v in enumerate(vals):
                         cell = ws.cell(row=current_row+i, column=col, value=v)
-                        cell.border = border_style
-                        cell.alignment = alignment_style
+                        _style_data_cell(cell, border_style, alignment_style)
             current_row += num_rows
 
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
@@ -455,9 +472,30 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             emp_info = processed_data[emp_id]
             emp_m = emp_meta.get(emp_id)
             for d in dates_list:
-                if d not in emp_info["days"]: continue
-                ds = emp_info["days"][d]
-                
+                ds = emp_info["days"].get(d)
+                if not ds:
+                    shift_code_val = emp_info.get("general_shift") or "NA"
+                    ds = {
+                        "first": "-",
+                        "last": "-",
+                        "std": 0,
+                        "ot": 0,
+                        "late": 0,
+                        "early": 0,
+                        "shift_code": shift_code_val,
+                        "std_expected": 8.0,
+                        "night_subsidy": 0,
+                        "work_normal": 0,
+                        "work_holiday": 0,
+                        "work_rotation": 0,
+                        "ot_normal_day": 0,
+                        "ot_holiday_day": 0,
+                        "ot_rotation_day": 0,
+                        "ot_normal_night": 0,
+                        "ot_holiday_night": 0,
+                        "ot_rotation_night": 0,
+                    }
+
                 ot = ds["ot"]
                 display_ot = ot if (isinstance(ot, (int, float)) and ot > 0) else 0
                 shift_code_val = ds.get("shift_code", ds.get("shift", "N"))
@@ -481,8 +519,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 
                 for c_idx, val in enumerate(row_data, 1):
                     cell = ws2.cell(row=ws2_row, column=c_idx, value=val)
-                    cell.border = border_style
-                    cell.alignment = alignment_style
+                    _style_data_cell(cell, border_style, alignment_style)
                 
                 ws2_row += 1
 
@@ -571,8 +608,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             ]
             ws3.append(row_data_ws3)
             for cell in ws3[ws3.max_row]:
-                cell.border = border_style
-                cell.alignment = alignment_style
+                _style_data_cell(cell, border_style, alignment_style)
 
         for sheet in [ws, ws2, ws3]:
             for col_idx in range(1, sheet.max_column + 1):

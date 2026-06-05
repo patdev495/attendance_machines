@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy import func, desc, case, literal_column, text, Time, Date
+from sqlalchemy import func, desc, case, literal, literal_column, text, Time, Date, union_all, true
 from starlette.background import BackgroundTask
 from typing import List, Optional
 from datetime import date, datetime, time, timedelta
@@ -18,6 +18,17 @@ from .export_service import export_status, export_lock, run_export_task
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/daily-summary", tags=["Daily Summary"])
+REPORT_SOURCE_STATUSES = ("excel_synced", "machine_only")
+
+def _date_range_subquery(db: Session, start_date: date, end_date: date, name: str = "report_dates"):
+    current = start_date
+    selects = []
+    while current <= end_date:
+        selects.append(db.query(literal(current).label("work_date")))
+        current += timedelta(days=1)
+    if not selects:
+        selects.append(db.query(literal(start_date).label("work_date")))
+    return union_all(*selects).subquery(name)
 
 @router.get("/unique-shifts")
 def get_unique_shifts(db: Session = Depends(get_db)):
@@ -126,18 +137,33 @@ def get_daily_summary(
     # 3. Union Keys (Set of Employee + Date to report on)
     # Use explicit labels to ensure column names are consistent across UNION
     roster_keys = db.query(
-        roster_sub.c.employee_id.label('employee_id'), 
+        roster_sub.c.employee_id.label('employee_id'),
         roster_sub.c.work_date.label('work_date')
     )
+    registry_keys = None
+    if start_date and end_date:
+        report_dates = _date_range_subquery(db, start_date, end_date)
+        registry_keys = db.query(
+            EmployeeLocalRegistry.employee_id.label('employee_id'),
+            report_dates.c.work_date.label('work_date')
+        ).select_from(EmployeeLocalRegistry).join(
+            report_dates,
+            true()
+        ).filter(EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES))
+
     log_keys = db.query(
-        agg_logs_sub.c.employee_id.label('employee_id'), 
+        agg_logs_sub.c.employee_id.label('employee_id'),
         agg_logs_sub.c.work_date.label('work_date')
     )
     # Match range for logs as well
     if start_date: log_keys = log_keys.filter(agg_logs_sub.c.work_date >= start_date)
     if end_date: log_keys = log_keys.filter(agg_logs_sub.c.work_date <= end_date)
-    
-    union_query = roster_keys.union(log_keys)
+
+    union_parts = [roster_keys, log_keys]
+    if registry_keys is not None:
+        union_parts.insert(0, registry_keys)
+
+    union_query = union_parts[0].union(*union_parts[1:])
     union_keys = union_query.subquery('union_keys')
 
     # 4. Main Query: Join Union Keys with Metrics and Metadata
@@ -166,9 +192,10 @@ def get_daily_summary(
         EmployeeLocalRegistry, 
         union_keys.c.employee_id == EmployeeLocalRegistry.employee_id
     ).outerjoin(
-        EmployeeMetadata, 
+        EmployeeMetadata,
         union_keys.c.employee_id == EmployeeMetadata.employee_id
     )
+    query = query.filter(EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES))
 
     # 5. Filters
     if employee_id:
