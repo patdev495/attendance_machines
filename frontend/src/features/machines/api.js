@@ -47,6 +47,19 @@ export function addMachineEmployee(ip, employeeId, name = '', role = 'employee',
   })
 }
 
+export function updateMachineEmployee(ip, employeeId, payload) {
+  return apiFetch(`/${encodeURIComponent(ip)}/employees/${encodeURIComponent(employeeId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: payload.name || '',
+      role: payload.role || 'employee',
+      photo_base64: payload.photoBase64 || '',
+      password: payload.password || '',
+    })
+  })
+}
+
 export function deleteMachineEmployee(ip, employeeId) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees/${employeeId}`, { method: 'DELETE' })
 }

@@ -95,17 +95,23 @@ class HanvonClient:
         return ids, face_ids
 
     def get_employee(self, employee_id: str) -> dict[str, Any]:
-        response = self._send_command("ClientGetEmployee", job_num=str(employee_id), userType="0")
+        response = self._send_command("ClientGetEmployee", job_num=employee_id, userType="0")
         param = response.get("PARAM", {})
         if param.get("result") != "success":
             raise HanvonProtocolError(f"ClientGetEmployee failed: {param.get('reason') or response}")
         return param
 
     def delete_employee(self, employee_id: str) -> None:
-        response = self._send_command("DeleteEmployee", id=str(employee_id))
+        response = self._send_command("DeleteEmployee", id=employee_id)
         param = response.get("PARAM", {})
         if param.get("result") != "success":
             raise HanvonProtocolError(f"DeleteEmployee failed: {param.get('reason') or response}")
+
+    def delete_manager(self, manager_id: str) -> None:
+        response = self._send_command("DeleteManager", id=manager_id)
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            raise HanvonProtocolError(f"DeleteManager failed: {param.get('reason') or response}")
 
     def set_employee(self, employee_id: str, name: str = "", photo_base64: str = "", face_data: list | None = None) -> None:
         """Create or update a standard employee on the device.
@@ -114,25 +120,28 @@ class HanvonClient:
         firmware with 不支持的用户类型. Photo is optional; omitting it creates the
         employee without face-recognition capability.
         """
-        employee_id = str(employee_id).strip()
+        employee_id = employee_id.strip()
         if not employee_id:
             raise ValueError("employee_id is required")
 
-        response = self._send_command(
-            "SetEmployee",
-            id=employee_id,
-            name=str(name or "").strip(),
-            sex=2,
-            nation="Vietnamese",
-            address="",
-            userType="1",
-            job_num=employee_id,
-            icCard="",
-            recogPermission="face",
-            capturejpg=photo_base64 or "",
-            face_data=face_data or [],
-            finger_data=[],
-        )
+        params: dict[str, Any] = {
+            "id": employee_id,
+            "name": (name or "").strip(),
+            "sex": 2,
+            "nation": "Vietnamese",
+            "address": "",
+            "userType": "1",
+            "job_num": employee_id,
+            "icCard": "",
+            "recogPermission": "face",
+            "capturejpg": photo_base64 or "",
+        }
+        # Only include face/finger arrays when non-empty to avoid device rejecting unknown fields
+        if face_data:
+            params["face_data"] = face_data
+            params["finger_data"] = []
+
+        response = self._send_command("SetEmployee", **params)
         param = response.get("PARAM", {})
         if param.get("result") != "success":
             raise HanvonProtocolError(f"SetEmployee failed: {param.get('reason') or response}")
@@ -152,7 +161,7 @@ class HanvonClient:
         - authority: 0 = Super Admin, 2 = Ordinary Admin (1/3 are normalised to 2).
         - password must be unique across all managers (密码已存在 if duplicate).
         """
-        manager_id = str(manager_id).strip()
+        manager_id = manager_id.strip()
         if not manager_id:
             raise ValueError("manager_id is required")
         if not photo_base64 or not photo_base64.strip():
@@ -165,8 +174,8 @@ class HanvonClient:
             "SetManager",
             id=manager_id,
             capturejpg=photo_base64.strip(),
-            password=str(password or "123456"),
-            authority=int(authority),
+            password=password or "123456",
+            authority=authority,
         )
         param = response.get("PARAM", {})
         if param.get("result") != "success":
@@ -231,7 +240,7 @@ class HanvonClient:
         return [str(item).strip() for item in param.get("ids", []) if str(item).strip()]
 
     def get_manager(self, manager_id: str) -> dict[str, Any]:
-        response = self._send_command("GetManager", id=str(manager_id))
+        response = self._send_command("GetManager", id=manager_id)
         param = response.get("PARAM", {})
         if param.get("result") != "success":
             raise HanvonProtocolError(f"GetManager failed: {param.get('reason') or response}")
@@ -265,7 +274,10 @@ class HanvonClient:
         try:
             return json.loads(decrypted.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise HanvonProtocolError("Invalid JSON response from Hanvon device") from exc
+            preview = decrypted[:300].hex()
+            raise HanvonProtocolError(
+                f"Invalid JSON response from Hanvon device (command={command}, raw_hex={preview})"
+            ) from exc
 
     def _recv_exact(self, n: int) -> bytes:
         assert self._sock is not None

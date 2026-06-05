@@ -53,6 +53,12 @@ class MachineEmployeeCreate(BaseModel):
     password: str = "123456"        # Manager password (must be unique on device)
     authority: int = 2              # 0 = Super Admin, 2 = Ordinary Admin (manager only)
 
+class MachineEmployeeUpdate(BaseModel):
+    name: str = ""
+    role: str = "employee"          # "employee" | "admin" | "super_admin"
+    photo_base64: str = ""          # Optional; existing machine photo is preserved when omitted
+    password: str = ""              # Optional; existing manager password is preserved when omitted
+
 class FingerprintSyncRequest(BaseModel):
     ip: str
     employee_id: str
@@ -210,6 +216,35 @@ def add_machine_employee(ip: str, req: MachineEmployeeCreate):
         photo_base64=req.photo_base64,
         password=req.password,
         authority=req.authority,
+    )
+    if status != "Success":
+        raise HTTPException(status_code=500, detail=status)
+    return {"status": status, "employee_id": employee_id}
+
+@router.put("/{ip}/employees/{employee_id}")
+def update_machine_employee(ip: str, employee_id: str, req: MachineEmployeeUpdate):
+    """Update one employee/manager identity on a specific Hanvon machine."""
+    employee_id = employee_id.strip()
+    if not employee_id:
+        raise HTTPException(status_code=422, detail="employee_id is required")
+
+    valid_roles = {"employee", "admin", "super_admin"}
+    if req.role not in valid_roles:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid role '{req.role}'. Must be one of: {', '.join(sorted(valid_roles))}",
+        )
+
+    if DEMO_MODE:
+        return {"status": "Success (Demo)", "employee_id": employee_id}
+
+    status = service.update_user_on_machine(
+        ip=ip,
+        employee_id=employee_id,
+        name=req.name,
+        role=req.role,
+        photo_base64=req.photo_base64,
+        password=req.password,
     )
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)

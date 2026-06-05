@@ -124,7 +124,21 @@ def test_client_sends_delete_employee():
     assert payload["PARAM"]["id"] == "1001"
 
 
+def test_client_sends_delete_manager():
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {"result": "success"},
+    })
+
+    client.delete_manager("admin1")
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["command"] == "DeleteManager"
+    assert payload["PARAM"]["id"] == "admin1"
+
+
 def test_client_sends_set_employee_shell():
+    """Without biometric data, face_data/finger_data must NOT be sent (device rejects them)."""
     client, fake_socket = make_fake_client_response({
         "COMMAND": "Return",
         "PARAM": {"result": "success", "reason": ""},
@@ -140,7 +154,23 @@ def test_client_sends_set_employee_shell():
     assert payload["PARAM"]["userType"] == "1"
     assert payload["PARAM"]["recogPermission"] == "face"
     assert payload["PARAM"]["capturejpg"] == ""
-    assert payload["PARAM"]["face_data"] == []
+    # face_data and finger_data must be absent when no biometric data is provided
+    assert "face_data" not in payload["PARAM"]
+    assert "finger_data" not in payload["PARAM"]
+
+
+def test_client_sends_set_employee_with_face_data():
+    """With biometric data, face_data and finger_data must be included in the payload."""
+    client, fake_socket = make_fake_client_response({
+        "COMMAND": "Return",
+        "PARAM": {"result": "success", "reason": ""},
+    })
+
+    fake_face = [{"type": "face", "data": "base64abc"}]
+    client.set_employee("1001", "Nguyen Van A", face_data=fake_face)
+
+    payload = sent_payload(fake_socket)
+    assert payload["PARAM"]["face_data"] == fake_face
     assert payload["PARAM"]["finger_data"] == []
 
 

@@ -1,8 +1,5 @@
 from config import DEMO_MODE
 
-if not DEMO_MODE:
-    from zk import ZK
-
 from database import SessionLocal, AttendanceLog
 from config import config
 import logging
@@ -60,17 +57,14 @@ def sync_all_machines(start_date: datetime.date | None = None, end_date: datetim
 
     for i, machine in enumerate(machine_configs):
         ip = machine["ip"]
-        protocol = machine.get("protocol", "zkteco")
+        protocol = machine.get("protocol", "hanvon")
         with status_lock:
             sync_status["current_machine_index"] = i + 1
             sync_status["current_machine_ip"] = ip
             
         try:
             logger.info(f"Connecting to {protocol} machine {i+1}/{len(machine_configs)} at {ip}...")
-            if protocol == "hanvon":
-                added = _sync_hanvon_machine(db, ip, start_date, end_date)
-            else:
-                added = _sync_zkteco_machine(db, ip, start_date, end_date)
+            added = _sync_hanvon_machine(db, ip, start_date, end_date)
             local_total_added += added
             
             logger.info(f"Machine {ip}: Finished. Added {added} records, {local_total_added} total.")
@@ -89,64 +83,6 @@ def sync_all_machines(start_date: datetime.date | None = None, end_date: datetim
         sync_status["last_sync_time"] = datetime.datetime.now().isoformat()
     
     return local_total_added
-
-def _sync_zkteco_machine(
-    db,
-    ip: str,
-    start_date: datetime.date | None = None,
-    end_date: datetime.date | None = None,
-) -> int:
-    # PyZK initialization
-    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-    conn = None
-    added = 0
-    try:
-        conn = zk.connect()
-        attendances = conn.get_attendance()
-        logger.info(f"ZKTeco machine {ip}: Found {len(attendances)} records.")
-
-        existing_keys = set(
-            db.query(AttendanceLog.employee_id, AttendanceLog.attendance_time)
-              .filter(AttendanceLog.machine_ip == ip)
-              .all()
-        )
-
-        new_logs = []
-        for att in attendances:
-            user_id = str(att.user_id).strip()
-            if user_id == '1': # Skip admin/system user
-                continue
-            timestamp = att.timestamp.replace(tzinfo=None)
-            if start_date and timestamp.date() < start_date:
-                continue
-            if end_date and timestamp.date() > end_date:
-                continue
-            if (user_id, timestamp) in existing_keys:
-                continue
-
-            new_item = AttendanceLog(
-                employee_id=user_id,
-                attendance_date=timestamp.date(),
-                attendance_time=timestamp,
-                machine_ip=ip
-            )
-            db.add(new_item)
-            new_logs.append(new_item)
-            existing_keys.add((user_id, timestamp))
-
-            if len(new_logs) >= 500:
-                db.commit()
-                added += len(new_logs)
-                new_logs = []
-
-        if new_logs:
-            db.commit()
-            added += len(new_logs)
-        return added
-    finally:
-        if conn:
-            try: conn.disconnect()
-            except: pass
 
 def _sync_hanvon_machine(
     db,
@@ -253,31 +189,28 @@ def _iter_dates_desc(start_date: datetime.date, end_date: datetime.date):
         current -= datetime.timedelta(days=1)
 
 def get_users_from_machine(ip: str):
-    """Fetches all users from a specific machine."""
-    zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-    conn = None
+    """Fetch Hanvon employee and manager IDs from a specific machine."""
     try:
-        conn = zk.connect()
-        conn.disable_device()
-        users = conn.get_users()
-        # Convert ZK user objects to serializable dicts
-        user_list = []
-        for u in users:
-            user_list.append({
-                "uid": u.uid,
-                "user_id": u.user_id,
-                "name": u.name,
-                "privilege": u.privilege,
-                "password": u.password,
-                "group_id": u.group_id,
-                "card": u.card
-            })
-        conn.enable_device()
-        return user_list, "Success"
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=15,
+        ) as client:
+            employee_ids, face_ids = client.get_employee_ids()
+            manager_ids = client.get_manager_ids()
+
+        users = [
+            {"user_id": employee_id, "has_face": employee_id in face_ids, "role": "Employee"}
+            for employee_id in employee_ids
+        ]
+        for manager_id in manager_ids:
+            existing = next((u for u in users if u["user_id"] == manager_id), None)
+            if existing:
+                existing["role"] = "Machine Manager"
+            else:
+                users.append({"user_id": manager_id, "has_face": False, "role": "Machine Manager"})
+        return users, "Success"
     except Exception as e:
-        logger.error(f"Error fetching users from machine {ip}: {e}")
+        logger.error(f"Error fetching Hanvon users from machine {ip}: {e}")
         return [], str(e)
-    finally:
-        if conn:
-            try: conn.disconnect()
-            except: pass

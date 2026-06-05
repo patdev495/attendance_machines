@@ -19,7 +19,7 @@
 
       <!-- Face registrations Section -->
       <div class="cap-row mt-12">
-        <span class="label">Khuôn mặt</span>
+        <span class="label">{{ $t('device.table.face') }}</span>
         <span class="val">{{ machine.fingers }} / {{ machine.fingers_cap }}</span>
       </div>
       <div class="capacity-bar">
@@ -28,7 +28,7 @@
 
       <!-- Admins Section -->
       <div v-if="machine.admins !== undefined" class="cap-row mt-12">
-        <span class="label">Quản trị viên</span>
+        <span class="label">{{ $t('device.roles.admin') }}</span>
         <span class="val">{{ machine.admins }} / {{ machine.admins_cap || 10 }}</span>
       </div>
       <div v-if="machine.admins !== undefined" class="capacity-bar">

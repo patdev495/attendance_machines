@@ -13,7 +13,6 @@ class EmployeeOut(EmployeeBase):
     start_date: Optional[date] = None
     shift: Optional[str] = None
     source_status: str
-    privilege: Optional[int] = 0
     updated_at: Optional[datetime] = None
 
     class Config:
@@ -46,7 +45,7 @@ class UpdateHardwareOut(BaseModel):
 class BiometricCoverageOut(BaseModel):
     ip: str
     status: str
-    has_user: bool
-    has_finger: bool
-    finger_count: Optional[int] = None
+    registered: bool
+    role: str
+    has_face: bool
     error: Optional[str] = None

@@ -21,29 +21,8 @@
           </a>
         </div>
 
-        <!-- Group 2: Biometric & Hardware Ops -->
+        <!-- Group 2: Hardware Ops -->
         <div class="action-group">
-          <button class="btn-secondary btn-green" @click="handleGlobalSync" :disabled="globalSyncStatus.is_running">
-            <span class="icon" :class="{'spin': globalSyncStatus.is_running}">🔄</span> 
-            {{ globalSyncStatus.is_running ? $t('employees.syncing_fingerprints') : $t('employees.collect_all_fingerprints') }}
-          </button>
-
-          <button class="btn-secondary" @click="isBulkPushModalOpen = true">
-            <span class="icon">📤</span> {{ $t('employees.bulk_push_fingerprints') }}
-          </button>
-
-          <div class="dropdown-wrapper" style="position: relative;">
-            <button class="btn-secondary btn-outline-danger" @click="showClearDropdown = !showClearDropdown">
-              <span class="icon">🗑️</span> {{ $t('employees.clear_fingerprints_machine') }}
-            </button>
-            <div v-if="showClearDropdown" class="clear-dropdown">
-              <div class="clear-dropdown-header">{{ $t('employees.select_machine_to_clear') }}</div>
-              <button v-for="ip in clearMachineList" :key="ip" class="clear-dropdown-item" @click="handleClearMachine(ip)" :disabled="isClearingMachine">
-                {{ ip }}
-              </button>
-            </div>
-          </div>
-
           <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
             <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
           </button>
@@ -67,26 +46,6 @@
       </div>
     </div>
 
-    <!-- Global Sync Progress -->
-    <div v-if="globalSyncStatus.is_running" class="status-banner animate-in bulk-banner" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3);">
-      <div class="banner-content">
-        <div class="spinner-small" style="border-top-color: #10b981;"></div>
-        <span style="color: #10b981;">
-          {{ $t('employees.collect_progress', { current: globalSyncStatus.processed_count + 1, total: globalSyncStatus.total_machines, ip: globalSyncStatus.current_ip }) }}
-        </span>
-      </div>
-    </div>
-
-    <!-- Clear Fingerprints Progress -->
-    <div v-if="clearFpStatus.is_running" class="status-banner animate-in bulk-banner" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3);">
-      <div class="banner-content">
-        <div class="spinner-small" style="border-top-color: #ef4444;"></div>
-        <span style="color: #ef4444;">
-          {{ $t('employees.clear_progress', { ip: clearFpStatus.ip, processed: clearFpStatus.processed_users, total: clearFpStatus.total_users }) }}
-        </span>
-      </div>
-    </div>
-    
     <!-- Inline Progress Banner -->
     <div v-if="syncStatus.is_running || syncStatus.progress > 0" class="status-banner animate-in" :class="{ 'status-success': syncStatus.progress === 100 && !syncStatus.is_running }">
       <div class="banner-content">
@@ -111,11 +70,6 @@
         <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
       </select>
 
-      <select v-model="privilegeFilter" @change="resetAndFetch">
-        <option value="">{{ $t('attendance.filters.all_privilege') }}</option>
-        <option value="0">{{ $t('attendance.filters.privilege_user') }}</option>
-        <option value="14">{{ $t('attendance.filters.privilege_admin') }}</option>
-      </select>
     </div>
 
 
@@ -162,11 +116,6 @@
       @close="isBulkDeleteModalOpen = false"
     />
 
-    <BulkPushHardwareModal
-      :show="isBulkPushModalOpen"
-      @close="isBulkPushModalOpen = false"
-      @success="handleBulkPushSuccess"
-    />
   </div>
 </template>
 
@@ -178,7 +127,6 @@ import EditEmployeeModal from './components/EditEmployeeModal.vue'
 import EmployeeDetailsModal from './components/EmployeeDetailsModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
 import BulkDeleteHardwareModal from './components/BulkDeleteHardwareModal.vue'
-import BulkPushHardwareModal from './components/BulkPushHardwareModal.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
 import { useI18n } from 'vue-i18n'
@@ -190,9 +138,6 @@ const notification = useNotificationStore()
 const employees = ref([])
 const searchQuery = ref('')
 const statusFilter = ref('')
-const privilegeFilter = ref('')
-
-const isBulkPushModalOpen = ref(false)
 
 const currentPage = ref(1)
 const totalCount = ref(0)
@@ -216,121 +161,13 @@ const exportUrl = computed(() => {
   const params = new URLSearchParams()
   if (searchQuery.value) params.append('search', searchQuery.value)
   if (statusFilter.value) params.append('source_status', statusFilter.value)
-  if (privilegeFilter.value !== '') params.append('privilege', privilegeFilter.value)
   return `/api/employees/export?${params.toString()}`
 })
 
-import { bulkDeleteGlobal, getBulkDeleteStatus, triggerGlobalSync, getGlobalSyncStatus, getMachines, clearMachineFingerprints, getClearFpStatus } from '@/features/machines/api'
-
-const showClearDropdown = ref(false)
-const clearMachineList = ref([])
-const isClearingMachine = ref(false)
-const clearFpStatus = ref({ is_running: false, ip: '', total_users: 0, processed_users: 0, result: '' })
-let clearFpPollInterval = null
-
-// Load machine list for clear dropdown
-const loadClearMachines = async () => {
-  try {
-    clearMachineList.value = await getMachines() || []
-  } catch (e) { console.error(e) }
-}
-loadClearMachines()
-
-// Close dropdown on click outside
-const handleClickOutside = (e) => {
-  if (showClearDropdown.value && !e.target.closest('.dropdown-wrapper')) {
-    showClearDropdown.value = false
-  }
-}
-
-
-onMounted(() => document.addEventListener('click', handleClickOutside))
-onUnmounted(() => document.removeEventListener('click', handleClickOutside))
-
-const handleClearMachine = async (ip) => {
-  const confirmed = await notification.confirm(t('employees.clear_confirm', { ip }))
-  if (!confirmed) return
-  
-  try {
-    showClearDropdown.value = false
-    await clearMachineFingerprints(ip)
-    clearFpStatus.value.is_running = true
-    clearFpStatus.value.ip = ip
-    
-    clearFpPollInterval = setInterval(async () => {
-      try {
-        const status = await getClearFpStatus()
-        clearFpStatus.value = status
-        if (!status.is_running) {
-          clearInterval(clearFpPollInterval)
-          clearFpPollInterval = null
-          if (status.result) {
-            notification.success(status.result)
-          }
-        }
-      } catch (e) { console.error(e) }
-    }, 1000)
-  } catch (err) {
-    notification.error(`Lỗi xóa vân tay trên ${ip}: ${err.message || err}`)
-  }
-}
-
-const globalSyncStatus = ref({
-  is_running: false,
-  total_machines: 0,
-  processed_count: 0,
-  current_ip: ''
-})
-
-let globalSyncPollInterval = null
-
-const handleGlobalSync = async () => {
-  const confirmed = await notification.confirm(t('employees.collect_confirm'))
-  if (!confirmed) return
-  
-  try {
-    await triggerGlobalSync()
-    notification.success(t('employees.collect_start_success'))
-    globalSyncStatus.value.is_running = true
-    startGlobalSyncPoll()
-  } catch (err) {
-    notification.error('Lỗi khi bắt đầu gom vân tay: ' + err.message)
-  }
-}
-
-const startGlobalSyncPoll = () => {
-  if (globalSyncPollInterval) clearInterval(globalSyncPollInterval)
-  globalSyncPollInterval = setInterval(async () => {
-    try {
-      const status = await getGlobalSyncStatus()
-      globalSyncStatus.value = status
-      
-      if (!status.is_running && status.total_machines > 0) {
-        clearInterval(globalSyncPollInterval)
-        globalSyncPollInterval = null
-        
-        // Calculate total
-        let totalFp = 0
-        Object.values(status.results || {}).forEach(msg => {
-          const match = msg.match(/(\d+) vân tay/)
-          if (match) totalFp += parseInt(match[1])
-        })
-        
-        notification.success(t('employees.collect_complete_success', { count: totalFp, machines: status.total_machines }))
-      }
-    } catch (e) {
-      console.error(e)
-    }
-  }, 1500)
-}
+import { bulkDeleteGlobal, getBulkDeleteStatus } from '@/features/machines/api'
 
 const handleSelectionChange = (ids) => {
   selectedIds.value = ids
-}
-
-const handleBulkPushSuccess = () => {
-  isBulkPushModalOpen.value = false
-  fetchEmployees()
 }
 
 let bulkPollInterval = null
@@ -448,7 +285,6 @@ const fetchEmployees = async () => {
     const filters = {}
     if (searchQuery.value) filters.search = searchQuery.value
     if (statusFilter.value) filters.source_status = statusFilter.value
-    if (privilegeFilter.value !== '') filters.privilege = parseInt(privilegeFilter.value)
     
     filters.order = idSortOrder.value
     

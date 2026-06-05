@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { 
-  getMachinesCapacity, getMachineEmployees, addMachineEmployee, deleteMachineEmployee, bulkDeleteMachineEmployees,
+  getMachinesCapacity, getMachineEmployees, addMachineEmployee, updateMachineEmployee, deleteMachineEmployee, bulkDeleteMachineEmployees,
   updateEmployeeName, syncFingerprints, syncAllMachineFingerprints,
   updateUserPrivilege, EXPORT_FINGERPRINTS_URL
 } from './api.js'
@@ -20,7 +20,6 @@ export const useMachineStore = defineStore('machines', () => {
   // Filters
   const searchTerm = ref('')
   const sourceStatusFilter = ref('')
-  const shiftFilter = ref('')
   const idSortOrder = ref('asc') // 'asc' or 'desc'
 
   // Pagination
@@ -55,7 +54,6 @@ export const useMachineStore = defineStore('machines', () => {
     filteredEmployees.value = []
     searchTerm.value = ''
     sourceStatusFilter.value = ''
-    shiftFilter.value = ''
     idSortOrder.value = 'asc'
     employeesLoading.value = true
     employeeError.value = null
@@ -74,7 +72,6 @@ export const useMachineStore = defineStore('machines', () => {
   function applyFilter() {
     const s = searchTerm.value.toLowerCase()
     const st = sourceStatusFilter.value
-    const sh = shiftFilter.value
     
     let result = allEmployees.value.filter(u => {
       const matchSearch = !s ||
@@ -83,24 +80,15 @@ export const useMachineStore = defineStore('machines', () => {
         (u.db_name && u.db_name.toLowerCase().includes(s))
       
       const matchSource = !st || u.source_status === st
-      
-      let matchShift = true
-      if (sh) {
-        if (sh === '__none__') {
-          matchShift = !u.shift || u.shift === '-'
-        } else {
-          matchShift = u.shift === sh
-        }
-      }
-      
-      return matchSearch && matchSource && matchShift
+      return matchSearch && matchSource
     })
 
-    // Apply Numeric Sorting
+    // Hanvon IDs can exceed JavaScript's safe integer range; sort as numeric strings.
     result.sort((a, b) => {
-      const idA = parseInt(a.user_id) || 0
-      const idB = parseInt(b.user_id) || 0
-      return idSortOrder.value === 'asc' ? idA - idB : idB - idA
+      const idA = String(a.user_id || '')
+      const idB = String(b.user_id || '')
+      const cmp = idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' })
+      return idSortOrder.value === 'asc' ? cmp : -cmp
     })
 
     filteredEmployees.value = result
@@ -114,6 +102,11 @@ export const useMachineStore = defineStore('machines', () => {
 
   async function addEmployee(employeeId, name, role = 'employee', photoBase64 = '', password = '123456') {
     await addMachineEmployee(currentIp.value, employeeId, name, role, photoBase64, password)
+    await loadMachineEmployees(currentIp.value)
+  }
+
+  async function updateEmployee(employeeId, payload) {
+    await updateMachineEmployee(currentIp.value, employeeId, payload)
     await loadMachineEmployees(currentIp.value)
   }
 
@@ -147,9 +140,9 @@ export const useMachineStore = defineStore('machines', () => {
   return {
     machines, machinesLoading,
     currentIp, allEmployees, filteredEmployees, employeesLoading, employeeError,
-    searchTerm, sourceStatusFilter, shiftFilter, idSortOrder, exportUrl, filteredExportUrl,
+    searchTerm, sourceStatusFilter, idSortOrder, exportUrl, filteredExportUrl,
     empPage, empPageSize, empTotalPages, pagedEmployees,
-    fetchMachines, loadMachineEmployees, applyFilter, addEmployee, deleteEmployee, bulkDeleteEmployees,
+    fetchMachines, loadMachineEmployees, applyFilter, addEmployee, updateEmployee, deleteEmployee, bulkDeleteEmployees,
     renameEmployee, syncEmployeeFingerprints, bulkSyncFingerprints, updatePrivilege
   }
 })

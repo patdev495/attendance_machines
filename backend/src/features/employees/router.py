@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, Integer
+from sqlalchemy import func
 from database import get_db, EmployeeLocalRegistry
 from compat import safe_ilike
 from typing import List, Optional
@@ -19,7 +19,6 @@ from .schema import (
 from .service import update_registry, delete_user_from_hardware, update_employee_info, export_employees_to_excel
 from features.machines.service import (
     get_biometric_coverage, 
-    bulk_delete_ids_from_selected_machines,
     run_bulk_delete_on_machines,
     bulk_delete_status
 )
@@ -46,15 +45,12 @@ def run_update_registry(db: Session):
     finally:
         registry_update_state["is_running"] = False
 
-from sqlalchemy import cast, Integer
-
 @router.get("", response_model=EmployeeListOut)
 def list_employees(
     page: int = 1,
     page_size: int = 50,
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
-    privilege: Optional[int] = None,
     order: str = 'asc',
     db: Session = Depends(get_db)
 ):
@@ -74,15 +70,11 @@ def list_employees(
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)
 
-    if privilege is not None:
-        query = query.filter(EmployeeLocalRegistry.privilege == privilege)
-
-
-    # Apply sorting (Numeric sort for employee_id)
+    # Hanvon IDs can exceed SQL Server INT range, so do not cast employee_id.
     if order.lower() == 'desc':
-        query = query.order_by(func.cast(EmployeeLocalRegistry.employee_id, Integer).desc())
+        query = query.order_by(EmployeeLocalRegistry.employee_id.desc())
     else:
-        query = query.order_by(func.cast(EmployeeLocalRegistry.employee_id, Integer).asc())
+        query = query.order_by(EmployeeLocalRegistry.employee_id.asc())
 
 
     total_count = query.count()
@@ -110,11 +102,10 @@ def trigger_update_registry(background_tasks: BackgroundTasks, db: Session = Dep
 def export_employees(
     search: Optional[str] = None, 
     source_status: Optional[str] = None,
-    privilege: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     from datetime import datetime
-    output = export_employees_to_excel(db, search, source_status, privilege)
+    output = export_employees_to_excel(db, search, source_status)
     filename = f"Employees_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     return StreamingResponse(
         output,
@@ -164,7 +155,7 @@ def get_biometric_coverage_endpoint(employee_id: str):
 async def bulk_delete_hardware_endpoint(
     bg_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    machine_ips: str = Form(...)  # Comma separated
+    machine_ips: str = Form(...)
 ):
     # 1. Parse IDs from file
     content = await file.read()
@@ -175,12 +166,10 @@ async def bulk_delete_hardware_endpoint(
     if not employee_ids:
         raise HTTPException(status_code=400, detail="No valid Employee IDs found in file")
         
-    # 2. Parse IPs
     ips = [ip.strip() for ip in machine_ips.split(",") if ip.strip()]
     if not ips:
         raise HTTPException(status_code=400, detail="No target machines selected")
-        
-    # 3. Perform bulk deletion (Background)
+
     if bulk_delete_status["is_running"]:
         raise HTTPException(status_code=400, detail="Another bulk operation is in progress")
         

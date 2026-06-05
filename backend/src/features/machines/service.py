@@ -1,10 +1,5 @@
 from config import config, DEMO_MODE
 
-if not DEMO_MODE:
-    from zk import ZK
-    from zk.user import User
-    from zk.finger import Finger
-
 from database import SessionLocal, EmployeeMetadata, EmployeeFingerprint
 from features.hanvon.client import HanvonClient
 from shared.hardware import get_machine_list, update_machine_tags, get_all_machine_configs
@@ -151,9 +146,11 @@ def get_users_from_machine(ip: str):
             # Map managers/admins
             for manager_id in manager_ids:
                 authority = 2  # default ordinary admin
+                has_face = False
                 try:
                     manager_detail = client.get_manager(manager_id)
                     authority = _to_int(manager_detail.get("authority"), 2)
+                    has_face = bool(str(manager_detail.get("capturejpg") or "").strip())
                 except Exception as e:
                     logger.warning(f"Error fetching manager detail for {manager_id} from {ip}: {e}")
 
@@ -164,6 +161,7 @@ def get_users_from_machine(ip: str):
                 if existing:
                     existing["role"] = role_name
                     existing["privilege"] = 3
+                    existing["has_face"] = existing["has_face"] or has_face
                 else:
                     user_list.append({
                         "uid": uid_counter,
@@ -173,7 +171,7 @@ def get_users_from_machine(ip: str):
                         "password": "",
                         "group_id": "",
                         "card": 0,
-                        "has_face": False,
+                        "has_face": has_face,
                         "role": role_name,
                     })
                     uid_counter += 1
@@ -222,9 +220,15 @@ def add_user_to_machine(
         return str(e)
 
 
-
-def delete_user_from_machine(ip: str, employee_id: str):
-    """Deletes a Hanvon employee from a specific machine."""
+def update_user_on_machine(
+    ip: str,
+    employee_id: str,
+    name: str = "",
+    role: str = "employee",
+    photo_base64: str = "",
+    password: str = "",
+):
+    """Update one Hanvon employee/manager while preserving existing biometric data."""
     try:
         with HanvonClient(
             ip,
@@ -232,8 +236,92 @@ def delete_user_from_machine(ip: str, employee_id: str):
             secret_key=config.HANVON_SECRET_KEY,
             timeout=10,
         ) as client:
-            client.delete_employee(employee_id)
-        result = "Success"
+            employee_ids, _face_ids = client.get_employee_ids()
+            manager_ids = client.get_manager_ids()
+            is_employee = employee_id in employee_ids
+            is_manager = employee_id in manager_ids
+
+            employee_detail: dict[str, Any] = {}
+            manager_detail: dict[str, Any] = {}
+
+            if is_employee:
+                try:
+                    employee_detail = client.get_employee(employee_id)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch employee detail for {employee_id} from {ip}: {e}")
+
+            if is_manager:
+                try:
+                    manager_detail = client.get_manager(employee_id)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch manager detail for {employee_id} from {ip}: {e}")
+
+            if role in ("admin", "super_admin"):
+                manager_photo = (
+                    photo_base64.strip()
+                    or str(manager_detail.get("capturejpg") or "").strip()
+                    or str(employee_detail.get("capturejpg") or "").strip()
+                )
+                if not manager_photo:
+                    return "A real JPEG photo is required to update/register a Hanvon manager."
+
+                client.set_manager(
+                    manager_id=employee_id,
+                    photo_base64=manager_photo,
+                    password=(password or manager_detail.get("password") or "123456"),
+                    authority=0 if role == "super_admin" else 2,
+                )
+                return "Success"
+
+            if not is_employee and not is_manager:
+                return f"User {employee_id} not found on machine {ip}"
+
+            client.set_employee(
+                employee_id=employee_id,
+                name=(name or employee_detail.get("name") or ""),
+                photo_base64=(photo_base64 or employee_detail.get("capturejpg") or ""),
+                face_data=employee_detail.get("face_data") or None,
+            )
+            return "Success"
+    except Exception as e:
+        logger.error(f"Error updating user {employee_id} ({role}) on machine {ip}: {e}")
+        return str(e)
+
+
+
+def delete_user_from_machine(ip: str, employee_id: str):
+    """Delete a Hanvon employee and/or manager identity from a specific machine."""
+    try:
+        actions = []
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=10,
+        ) as client:
+            employee_ids, _face_ids = client.get_employee_ids()
+            manager_ids = client.get_manager_ids()
+
+            if employee_id in employee_ids:
+                try:
+                    client.delete_employee(employee_id)
+                    actions.append("employee deleted")
+                except Exception as e:
+                    actions.append(f"employee delete failed: {e}")
+
+            if employee_id in manager_ids:
+                try:
+                    client.delete_manager(employee_id)
+                    actions.append("manager deleted")
+                except Exception as e:
+                    actions.append(f"manager delete failed: {e}")
+
+        if not actions:
+            result = "Not found"
+        elif any("failed" in action for action in actions):
+            result = "; ".join(actions)
+        else:
+            result = "Success: " + ", ".join(actions)
         with status_lock:
             delete_status["results"][ip] = result
         return result
@@ -245,8 +333,9 @@ def delete_user_from_machine(ip: str, employee_id: str):
         return msg
 
 def bulk_delete_users_from_machine(ip: str, employee_ids: list):
-    """Deletes multiple Hanvon employees from a machine in a single connection."""
+    """Deletes multiple Hanvon employee/manager identities from a machine in a single connection."""
     deleted_count = 0
+    details = {}
     try:
         with HanvonClient(
             ip,
@@ -254,16 +343,36 @@ def bulk_delete_users_from_machine(ip: str, employee_ids: list):
             secret_key=config.HANVON_SECRET_KEY,
             timeout=15,
         ) as client:
+            existing_employee_ids, _face_ids = client.get_employee_ids()
+            existing_manager_ids = client.get_manager_ids()
             for emp_id in employee_ids:
+                emp_id = str(emp_id)
+                actions = []
                 try:
-                    client.delete_employee(str(emp_id))
-                    deleted_count += 1
+                    deleted_any = False
+                    if emp_id in existing_employee_ids:
+                        client.delete_employee(emp_id)
+                        deleted_any = True
+                        actions.append("employee deleted")
+                    if emp_id in existing_manager_ids:
+                        client.delete_manager(emp_id)
+                        deleted_any = True
+                        actions.append("manager deleted")
+                    if deleted_any:
+                        deleted_count += 1
+                        details[emp_id] = {"status": "Success", "actions": actions}
+                    else:
+                        details[emp_id] = {"status": "Not found", "actions": []}
                 except Exception as e:
                     logger.error(f"Failed to delete {emp_id} from {ip}: {e}")
-        return deleted_count, "Success"
+                    details[emp_id] = {"status": f"Error: {str(e)}", "actions": actions}
+
+        failed = [d for d in details.values() if str(d["status"]).startswith("Error:")]
+        status = "Success" if not failed else f"Partial failure: {len(failed)} errors"
+        return deleted_count, status, details
     except Exception as e:
         logger.error(f"Error bulk deleting from machine {ip}: {e}")
-        return deleted_count, str(e)
+        return deleted_count, f"Error: {str(e)}", details
 
 def update_user_name_on_machine(ip: str, employee_id: str, new_name: str):
     """Updates user's name on a specific machine."""
@@ -420,40 +529,51 @@ def bulk_download_fingerprints_from_machine(ip: str):
             except: pass
 
 def check_user_biometric_on_machine(ip: str, employee_id: str):
-    """Checks biometric status on a machine efficiently."""
-    zk = ZK(ip, port=4370, timeout=5, force_udp=False)
-    conn = None
+    """Checks Hanvon registration, manager role, and face coverage on a machine."""
     try:
-        conn = zk.connect()
-        conn.disable_device()
-        users = conn.get_users()
-        target = next((u for u in users if u.user_id == employee_id), None)
-        
-        if not target:
-            return {"ip": ip, "status": "Online", "has_user": False, "has_finger": False}
-        
-        # Optimized: Check specific slots instead of downloading thousands of templates
-        has_finger = False
-        finger_count = 0
-        # Most users have fingers in slots 0-9
-        for fid in range(10):
-            try:
-                tmp = conn.get_user_template(uid=target.uid, temp_id=fid, user_id=target.user_id)
-                if tmp and tmp.template:
-                    has_finger = True
-                    finger_count += 1
-            except:
-                continue
-                
-        conn.enable_device()
-        return {"ip": ip, "status": "Online", "has_user": True, "has_finger": has_finger, "finger_count": finger_count}
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=10,
+        ) as client:
+            employee_ids, face_ids = client.get_employee_ids()
+            manager_ids = client.get_manager_ids()
+
+            is_employee = employee_id in employee_ids
+            is_manager = employee_id in manager_ids
+            role = "not_registered"
+
+            if is_manager:
+                role = "admin"
+                manager_has_face = False
+                try:
+                    manager_detail = client.get_manager(employee_id)
+                    manager_has_face = bool(str(manager_detail.get("capturejpg") or "").strip())
+                    if _to_int(manager_detail.get("authority"), 2) == 0:
+                        role = "super_admin"
+                except Exception as e:
+                    logger.warning(f"Error fetching manager detail for {employee_id} from {ip}: {e}")
+            elif is_employee:
+                role = "employee"
+
+            return {
+                "ip": ip,
+                "status": "Online",
+                "registered": is_employee or is_manager,
+                "role": role,
+                "has_face": manager_has_face if is_manager else employee_id in face_ids,
+            }
     except Exception as e:
         logger.error(f"Error checking biometric on {ip}: {e}")
-        return {"ip": ip, "status": "Online" if "connect" not in str(e).lower() else "Offline", "error": str(e), "has_user": False, "has_finger": False}
-    finally:
-        if conn:
-            try: conn.disconnect()
-            except: pass
+        return {
+            "ip": ip,
+            "status": "Offline",
+            "error": str(e),
+            "registered": False,
+            "role": "not_registered",
+            "has_face": False,
+        }
 
 def get_biometric_coverage(employee_id: str):
     """Check across all machines."""
@@ -538,8 +658,13 @@ def bulk_delete_ids_from_selected_machines(employee_ids: list, target_ips: list)
                 bulk_delete_status["current_ip"] = ip
             
             try:
-                deleted_count, status = future.result()
-                results[ip] = {"deleted": deleted_count, "status": status}
+                result = future.result()
+                if len(result) == 2:
+                    deleted_count, status = result
+                    details = {}
+                else:
+                    deleted_count, status, details = result
+                results[ip] = {"deleted": deleted_count, "status": status, "details": details}
             except Exception as e:
                 results[ip] = {"deleted": 0, "status": f"Error: {str(e)}"}
             

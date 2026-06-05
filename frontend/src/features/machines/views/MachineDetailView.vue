@@ -20,8 +20,7 @@
         </button>
         <button class="btn btn-primary btn-add-employee" @click="isAddModalOpen = true">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M16 11h6"/></svg>
-          <span class="btn-label">Thêm nhân viên</span>
-          Thêm nhân viên
+          <span class="btn-label">{{ $t('device.machine_employee.add_employee_button') }}</span>
         </button>
       </div>
     </div>
@@ -41,16 +40,6 @@
           <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
         </select>
       </div>
-      <div class="filter-group" style="min-width:180px;">
-        <label>{{ $t('attendance.filters.shift') }}</label>
-        <select v-model="store.shiftFilter" @change="store.applyFilter()">
-          <option value="">{{ $t('employees.all_shifts') }}</option>
-          <option value="N">{{ $t('attendance.filters.day_shift') }}</option>
-          <option value="D">{{ $t('attendance.filters.night_shift') }}</option>
-          <option value="TV">{{ $t('attendance.filters.resigned') }}</option>
-          <option value="__none__">{{ $t('employees.none_shift') }}</option>
-        </select>
-      </div>
     </div>
 
     <!-- Count summary -->
@@ -64,6 +53,7 @@
       <MachineEmployeeTable 
         :employees="store.pagedEmployees" 
         @view="handleView"
+        @edit="handleEdit"
         @delete="handleDelete" 
         @sync="handleSync"
         @selection-change="ids => selectedIds = ids"
@@ -91,6 +81,15 @@
       @submit="handleAddEmployeeModal"
     />
 
+    <EditMachineEmployeeModal
+      :isOpen="isEditMachineEmployeeOpen"
+      :ip="ip"
+      :employee="editingMachineEmployee"
+      :isSubmitting="isUpdatingMachineEmployee"
+      @close="isEditMachineEmployeeOpen = false"
+      @submit="handleUpdateMachineEmployee"
+    />
+
     <SyncToMachinesModal
       :isOpen="isSyncModalOpen"
       :employeeId="syncEmployeeId"
@@ -110,6 +109,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import MachineEmployeeTable from '../components/MachineEmployeeTable.vue'
 import AddMachineEmployeeModal from '../components/AddMachineEmployeeModal.vue'
+import EditMachineEmployeeModal from '../components/EditMachineEmployeeModal.vue'
 import EmployeeDetailsModal from '@/features/employees/components/EmployeeDetailsModal.vue'
 import SyncToMachinesModal from '../components/SyncToMachinesModal.vue'
 
@@ -123,6 +123,9 @@ const selectedEmployee = ref(null)
 const isDetailsModalOpen = ref(false)
 const isAddModalOpen = ref(false)
 const isAddingEmployee = ref(false)
+const isEditMachineEmployeeOpen = ref(false)
+const isUpdatingMachineEmployee = ref(false)
+const editingMachineEmployee = ref(null)
 
 const isSyncModalOpen = ref(false)
 const syncEmployeeId = ref('')
@@ -149,6 +152,11 @@ function handleView(u) {
     source_status: u.source_status
   }
   isDetailsModalOpen.value = true
+}
+
+function handleEdit(u) {
+  editingMachineEmployee.value = u
+  isEditMachineEmployeeOpen.value = true
 }
 
 async function handleDelete(employeeId) {
@@ -185,50 +193,55 @@ async function handleBulkDelete() {
   }
 }
 
-async function handleAddEmployee() {
-  const employeeId = await notification.prompt('Nhập mã nhân viên cần thêm vào máy này', 'Thêm nhân viên', '')
-  if (employeeId === null) return
-
-  const normalizedId = employeeId.trim()
-  if (!normalizedId) {
-    notification.error('Mã nhân viên không được để trống')
-    return
-  }
-
-  const name = await notification.prompt('Nhập tên nhân viên trên máy', 'Tên nhân viên', '')
-  if (name === null) return
-
-  const notifyId = notification.info(`Đang thêm nhân viên ${normalizedId} vào máy ${props.ip}...`, 0)
-  try {
-    await store.addEmployee(normalizedId, name.trim())
-    notification.success(`Đã thêm nhân viên ${normalizedId} vào máy ${props.ip}`)
-  } catch (e) {
-    notification.error(t('common.error') + ': ' + e.message)
-  } finally {
-    notification.remove(notifyId)
-  }
-}
-
 async function handleAddEmployeeModal(payload) {
   const normalizedId = payload.employeeId.trim()
   if (!normalizedId) {
-    notification.error('Mã nhân viên không được để trống')
+    notification.error(t('device.machine_employee.employee_id_required'))
     return
   }
 
-  const roleLabel = payload.role === 'super_admin' ? 'Super Admin' : payload.role === 'admin' ? 'Quản trị viên' : 'nhân viên'
+  const roleLabel = machineRoleLabel(payload.role)
   isAddingEmployee.value = true
-  const notifyId = notification.info(`Đang thêm ${roleLabel} ${normalizedId} vào máy ${props.ip}...`, 0)
+  const notifyId = notification.info(t('device.machine_employee.adding_notice', { role: roleLabel, id: normalizedId, ip: props.ip }), 0)
   try {
     await store.addEmployee(normalizedId, payload.name?.trim() || '', payload.role, payload.photoBase64 || '', payload.password || '123456')
     isAddModalOpen.value = false
-    notification.success(`Đã thêm ${roleLabel} ${normalizedId} vào máy ${props.ip}`)
+    notification.success(t('device.machine_employee.add_success', { role: roleLabel, id: normalizedId, ip: props.ip }))
   } catch (e) {
     notification.error(t('common.error') + ': ' + e.message)
   } finally {
     isAddingEmployee.value = false
     notification.remove(notifyId)
   }
+}
+
+async function handleUpdateMachineEmployee(payload) {
+  if (!payload?.employeeId) return
+
+  isUpdatingMachineEmployee.value = true
+  const notifyId = notification.info(t('device.machine_employee.updating_notice', { id: payload.employeeId, ip: props.ip }), 0)
+  try {
+    await store.updateEmployee(payload.employeeId, {
+      name: payload.name?.trim() || '',
+      role: payload.role,
+      photoBase64: payload.photoBase64 || '',
+      password: payload.password || '',
+    })
+    isEditMachineEmployeeOpen.value = false
+    editingMachineEmployee.value = null
+    notification.success(t('device.machine_employee.update_success', { id: payload.employeeId, ip: props.ip }))
+  } catch (e) {
+    notification.error(t('common.error') + ': ' + e.message)
+  } finally {
+    isUpdatingMachineEmployee.value = false
+    notification.remove(notifyId)
+  }
+}
+
+function machineRoleLabel(role) {
+  if (role === 'super_admin') return t('device.roles.super_admin')
+  if (role === 'admin') return t('device.roles.admin')
+  return t('device.roles.employee')
 }
 
 </script>

@@ -18,8 +18,8 @@
           <th>{{ $t('device.table.department') }}</th>
           <th>{{ $t('device.table.group') }}</th>
           <th>{{ $t('attendance.table.shift') }}</th>
-          <th>Vai trò</th>
-          <th>Khuôn mặt</th>
+          <th>{{ $t('device.table.role') }}</th>
+          <th>{{ $t('device.table.face') }}</th>
           <th>{{ $t('device.table.status') }}</th>
           <th>{{ $t('device.table.action') }}</th>
         </tr>
@@ -45,12 +45,12 @@
           </td>
           <td>
             <span :class="['badge', u.role === 'Super Admin' || u.role === 'Admin' ? 'badge-admin' : 'badge-user']">
-              {{ u.role || 'User' }}
+              {{ roleLabel(u.role) }}
             </span>
           </td>
           <td>
-            <span v-if="u.has_face" class="badge badge-face">Có</span>
-            <span v-else class="face-missing">Chưa rõ</span>
+            <span v-if="u.has_face" class="badge badge-face">{{ $t('device.face.has_face') }}</span>
+            <span v-else class="face-missing">{{ $t('device.face.unknown') }}</span>
           </td>
           <td>
             <span :class="['badge', getStatusClass(u.source_status)]">
@@ -60,7 +60,8 @@
           <td class="actions">
             <div class="action-group">
               <button class="btn-view" :title="$t('common.info')" @click="$emit('view', u)">{{ $t('common.info') }}</button>
-              <button class="btn-sync-emp" title="Đồng bộ sang các máy khác" @click="$emit('sync', u)">Đồng bộ</button>
+              <button class="btn-edit" :title="$t('device.action.edit_on_machine')" @click="$emit('edit', u)">{{ $t('device.action.edit') }}</button>
+              <button class="btn-sync-emp" :title="$t('device.action.sync_to_others')" @click="$emit('sync', u)">{{ $t('device.action.sync') }}</button>
               <button class="btn-delete" :title="$t('device.action.delete')" @click="$emit('delete', u.user_id)">{{ $t('device.action.delete') }}</button>
             </div>
           </td>
@@ -77,7 +78,7 @@ const { t } = useI18n()
 import { useMachineStore } from '../store.js'
 
 const props = defineProps({ employees: { type: Array, default: () => [] } })
-const emit = defineEmits(['delete', 'selection-change', 'view', 'sync'])
+const emit = defineEmits(['delete', 'selection-change', 'view', 'edit', 'sync'])
 
 const store = useMachineStore()
 const selectedIds = ref([])
@@ -98,6 +99,12 @@ const formatStatus = (status) => {
   if (status === 'machine_only') return t('attendance.filters.status_machine')
   if (status === 'log_only') return t('attendance.filters.status_log')
   return status || t('attendance.filters.status_machine')
+}
+
+const roleLabel = (role) => {
+  if (role === 'Super Admin') return t('device.roles.super_admin')
+  if (role === 'Admin' || role === 'Machine Manager') return t('device.roles.admin')
+  return t('device.roles.employee')
 }
 
 const isAllSelected = computed(() => {
@@ -237,6 +244,7 @@ button {
 }
 
 .btn-view { background: #10b981; color: white; }
+.btn-edit { background: #f59e0b; color: white; }
 .btn-sync-emp { background: #6366f1; color: white; }
 .btn-delete { background: #ef4444; color: white; }
 

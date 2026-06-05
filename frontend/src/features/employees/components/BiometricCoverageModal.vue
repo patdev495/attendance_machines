@@ -44,9 +44,12 @@
                       </div>
                     </template>
                     <template v-else>
-                      <div class="badge-pill" :class="m.has_finger ? 'success' : (m.has_user ? 'warning' : 'info')">
-                        <div class="dot" :class="{ 'green-glow': m.has_finger }"></div>
-                        {{ m.has_finger ? $t('biometric.template_ok') + (m.finger_count ? ` (${m.finger_count})` : '') : (m.has_user ? $t('biometric.no_template') : $t('biometric.not_registered')) }}
+                      <div class="badge-pill" :class="m.registered ? roleClass(m.role) : 'info'">
+                        <div class="dot" :class="{ 'green-glow': m.has_face }"></div>
+                        {{ roleLabel(m.role) }}
+                      </div>
+                      <div class="badge-pill" :class="m.has_face ? 'success' : 'warning'">
+                        {{ m.has_face ? faceLabels.hasFace : faceLabels.noFace }}
                       </div>
                     </template>
                   </div>
@@ -87,6 +90,24 @@ const results = ref([])
 const sortedResults = computed(() => {
   return [...results.value].sort((a, b) => a.ip.localeCompare(b.ip))
 })
+
+const faceLabels = {
+  hasFace: 'Có khuôn mặt',
+  noFace: 'Chưa có khuôn mặt'
+}
+
+function roleLabel(role) {
+  if (role === 'employee') return 'Nhân viên'
+  if (role === 'admin') return 'Admin'
+  if (role === 'super_admin') return 'Super Admin'
+  return 'Không có trên máy'
+}
+
+function roleClass(role) {
+  if (role === 'admin' || role === 'super_admin') return 'warning'
+  if (role === 'employee') return 'success'
+  return 'info'
+}
 
 async function fetchCoverage() {
   if (!props.employeeId) return
