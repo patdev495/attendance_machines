@@ -32,7 +32,7 @@ def _parse_machine_line(content: str):
         "is_canteen": '# canteen' in tags_text,
     }
 
-def get_machine_list(file_path=config.MACHINES_FILE):
+def get_machine_list(file_path=config.MACHINES_FILE) -> list[str]:
     """
     Reads all machine IPs, stripping comments.
     """
