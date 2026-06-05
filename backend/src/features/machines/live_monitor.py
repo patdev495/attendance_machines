@@ -14,8 +14,14 @@ from database import SessionLocal, AttendanceLog, EmployeeLocalRegistry
 from shared.hardware import get_machine_list, get_live_machine_list
 from shared.socket_manager import manager
 import asyncio
+from datetime import datetime, time as dt_time
 
 logger = logging.getLogger(__name__)
+
+class AttendanceEvent:
+    def __init__(self, user_id: str, timestamp: datetime):
+        self.user_id = user_id
+        self.timestamp = timestamp
 
 class LiveMonitorManager:
     def __init__(self):
@@ -84,6 +90,7 @@ class LiveMonitorManager:
 
                 for cfg in live_configs:
                     ip = cfg['ip']
+                    protocol = cfg.get('protocol', 'zkteco')
                     self.meal_configs[ip] = cfg['meal_url']
                     if cfg.get('is_canteen'):
                         self.canteen_ips.add(ip)
@@ -91,8 +98,8 @@ class LiveMonitorManager:
                         self.canteen_ips.discard(ip)
                     # Start monitor if it's new or the previous thread died
                     if ip not in self.active_monitors or not self.active_monitors[ip].is_alive():
-                        logger.info(f"[MGMT] Starting monitor thread for {ip} (canteen={cfg.get('is_canteen', False)})")
-                        self._start_monitor(ip)
+                        logger.info(f"[MGMT] Starting {protocol} monitor thread for {ip} (canteen={cfg.get('is_canteen', False)})")
+                        self._start_monitor(ip, protocol)
                 
                 # Stop monitors for IPs that are no longer marked as live
                 # (either removed from file or marked with # nolive)
@@ -132,16 +139,22 @@ class LiveMonitorManager:
         logger.info("Stopping Live Monitor Manager...")
         # Threads will exit on their next loop iteration or timeout
 
-    def _start_monitor(self, ip):
+    def _start_monitor(self, ip, protocol="zkteco"):
         if ip in self.active_monitors and self.active_monitors[ip].is_alive():
             return
         
-        thread = threading.Thread(target=self._monitor_loop, args=(ip,), daemon=True)
+        thread = threading.Thread(target=self._monitor_loop, args=(ip, protocol), daemon=True)
         thread.start()
         self.active_monitors[ip] = thread
-        logger.info(f"Started live monitor thread for {ip}")
+        logger.info(f"Started {protocol} live monitor thread for {ip}")
 
-    def _monitor_loop(self, ip):
+    def _monitor_loop(self, ip, protocol="zkteco"):
+        if protocol == "hanvon":
+            self._monitor_hanvon_loop(ip)
+        else:
+            self._monitor_zkteco_loop(ip)
+
+    def _monitor_zkteco_loop(self, ip):
         """Background loop for a single machine."""
         retry_count = 0
         logger.info(f"[MONITOR {ip}] Thread started")
@@ -205,6 +218,67 @@ class LiveMonitorManager:
                     except: pass
                 logger.info(f"[MONITOR {ip}] Disconnected — cooldown 5s before reconnect")
                 time.sleep(5) # Cooldown before reconnect
+
+    def _monitor_hanvon_loop(self, ip):
+        retry_count = 0
+        known_ids = set()
+        first_poll = True
+        current_date = datetime.now().date()
+        logger.info(f"[HANVON {ip}] Thread started")
+
+        from config import config
+        from features.hanvon.client import HanvonClient
+
+        while self.is_running and ip in self.active_monitors:
+            retry_count += 1
+            ok, err = self._test_network_reach(ip, port=config.HANVON_PORT)
+            if not ok:
+                self._status[ip] = "disconnected"
+                logger.error(f"[HANVON {ip}] Network unreachable (attempt #{retry_count}): {err}")
+                time.sleep(10)
+                continue
+
+            try:
+                with HanvonClient(ip, port=config.HANVON_PORT, secret_key=config.HANVON_SECRET_KEY) as client:
+                    client.get_device_info()
+                    retry_count = 0
+                    self._status[ip] = "connected"
+                    self._last_activity[ip] = time.time()
+                    logger.info(f"[HANVON {ip}] Connected OK - entering ClientGetRecord polling")
+
+                    while self.is_running and ip in self.active_monitors:
+                        today = datetime.now().date()
+                        if today != current_date:
+                            known_ids.clear()
+                            first_poll = True
+                            current_date = today
+
+                        start_dt = datetime.combine(today, dt_time.min)
+                        end_dt = datetime.now().replace(microsecond=0)
+                        records = client.get_records(start_dt, end_dt)
+                        self._last_activity[ip] = time.time()
+
+                        if first_poll:
+                            known_ids.update(f"{r.employee_id}|{r.attendance_time}" for r in records)
+                            first_poll = False
+                        else:
+                            for record in records:
+                                event_key = f"{record.employee_id}|{record.attendance_time}"
+                                if event_key in known_ids:
+                                    continue
+                                known_ids.add(event_key)
+                                self._last_real_event[ip] = time.time()
+                                self._process_event(ip, AttendanceEvent(record.employee_id, record.attendance_time))
+
+                        time.sleep(3)
+            except Exception as e:
+                if self.is_running:
+                    self._status[ip] = "disconnected"
+                    logger.error(f"[HANVON {ip}] Error (attempt #{retry_count}): {e}")
+                    time.sleep(5)
+            finally:
+                logger.info(f"[HANVON {ip}] Disconnected - cooldown 5s before reconnect")
+                time.sleep(5)
 
     def _process_event(self, ip, event):
         """Processes a single live attendance event."""
@@ -394,7 +468,12 @@ class LiveMonitorManager:
             return True, "Reconnecting initiated"
         else:
             logger.info(f"[MGMT] Reconnecting {ip} — was not active, starting now")
-            self._start_monitor(ip)
+            protocol = "zkteco"
+            for cfg in get_live_machine_list():
+                if cfg["ip"] == ip:
+                    protocol = cfg.get("protocol", "zkteco")
+                    break
+            self._start_monitor(ip, protocol)
             return True, "Started monitor thread"
 
 # Global instance

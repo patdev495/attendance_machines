@@ -1,0 +1,1 @@
+"""Hanvon attendance machine support."""

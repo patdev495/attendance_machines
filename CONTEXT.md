@@ -5,7 +5,7 @@ A system designed to synchronize employee biometric data, track daily work shift
 ## Language
 
 **Attendance Machine**:
-A physical biometric terminal used by employees to clock in/out, communicating via the ZK protocol.
+A physical biometric terminal used by employees to clock in/out. The default supported vendor protocol is Hanvon; ZKTeco is treated as a legacy override during migration.
 _Avoid_: Terminal, scanner, clocking machine
 
 **Employee**:
@@ -13,7 +13,7 @@ A unified record in the **Employee Local Registry** representing an individual, 
 _Avoid_: User, staff, registry list
 
 **Raw Log**:
-A timestamped entry representing a physical check-in or check-out event on an **Attendance Machine**.
+A timestamped entry representing a physical check-in or check-out event on an **Attendance Machine**, regardless of which supported vendor protocol produced it.
 _Avoid_: Punch log, swipe record
 
 **Daily Summary**:

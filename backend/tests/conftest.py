@@ -5,9 +5,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
-# Ensure we can import from backend.src
-# This allows 'pytest backend/tests' to find 'backend.src'
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+# The app modules use absolute imports from backend/src, while tests import
+# package paths such as backend.src.database.
+for path in (ROOT_DIR, SRC_DIR):
+    if path not in sys.path:
+        sys.path.append(path)
 
 from backend.src.database import Base, get_db
 from backend.src.main import app

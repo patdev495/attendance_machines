@@ -61,4 +61,9 @@ class Config:
     EXCEL_FILE = BASE_DIR / "employee_work_shift.xlsx"
     AUDIO_DIR = BASE_DIR / "audio"
 
+    # Hanvon log sync settings
+    HANVON_PORT = int(os.getenv("HANVON_PORT", "9922"))
+    HANVON_SECRET_KEY = os.getenv("HANVON_SECRET_KEY", "123")
+    HANVON_INITIAL_SYNC_DAYS = int(os.getenv("HANVON_INITIAL_SYNC_DAYS", "30"))
+
 config = Config()

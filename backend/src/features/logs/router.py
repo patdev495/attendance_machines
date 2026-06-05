@@ -85,15 +85,15 @@ def get_date_range(db: Session = Depends(get_db)):
 
 @router.post("/sync")
 def start_sync(background_tasks: BackgroundTasks):
-    from shared.hardware import get_machine_list
+    from shared.hardware import get_all_machine_configs
     # Set running state BEFORE background task starts to avoid race condition
     # where the first poll sees is_running=False and thinks sync is complete
     with status_lock:
         if sync_status["is_running"]:
             return {"message": "Sync already running"}
-        machine_ips = get_machine_list()
+        machine_configs = get_all_machine_configs()
         sync_status["is_running"] = True
-        sync_status["total_machines"] = len(machine_ips)
+        sync_status["total_machines"] = len(machine_configs)
         sync_status["current_machine_index"] = 0
         sync_status["current_machine_ip"] = ""
         sync_status["total_added"] = 0

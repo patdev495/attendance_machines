@@ -3,14 +3,50 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _parse_machine_line(content: str):
+    raw = content.strip()
+    if not raw or raw.startswith('#'):
+        return None
+
+    ip = raw.split('#')[0].strip()
+    if not ip:
+        return None
+
+    tags_text = ""
+    if '#' in raw:
+        tags_text = raw[raw.index('#'):].lower()
+
+    protocol = "hanvon"
+    if "# hanvon" in tags_text or "# protocol:hanvon" in tags_text:
+        protocol = "hanvon"
+    elif "# zkteco" in tags_text or "# protocol:zkteco" in tags_text or "# protocol:zk" in tags_text:
+        protocol = "zkteco"
+
+    meal_url = None
+    if '# meal:' in tags_text:
+        parts = raw.split('# meal:')
+        if len(parts) > 1:
+            meal_url = parts[1].strip().split(' ')[0]
+
+    return {
+        "ip": ip,
+        "protocol": protocol,
+        "meal_url": meal_url,
+        "is_live": '# nolive' not in tags_text,
+        "is_canteen": '# canteen' in tags_text,
+    }
+
 def get_machine_list(file_path=config.MACHINES_FILE):
     """
     Reads all machine IPs, stripping comments.
     """
     try:
         with open(file_path, "r") as f:
-            # Strip comments (anything after #) and then trim whitespace
-            return [line.split('#')[0].strip() for line in f if line.split('#')[0].strip()]
+            return [
+                cfg["ip"]
+                for line in f
+                if (cfg := _parse_machine_line(line)) is not None
+            ]
     except Exception as e:
         logger.error(f"Could not read machines.txt: {e}")
         return []
@@ -24,33 +60,17 @@ def get_live_machine_list(file_path=config.MACHINES_FILE):
         live_configs = []
         with open(file_path, "r") as f:
             for line in f:
-                content = line.strip()
-                if not content or content.startswith('#'):
+                cfg = _parse_machine_line(line)
+                if not cfg:
                     continue
-                
-                # If # nolive is in the line, skip it for live monitoring
-                if '# nolive' in content.lower():
+                if not cfg["is_live"]:
                     continue
-                
-                # Extract IP (part before any #)
-                ip = content.split('#')[0].strip()
-                if not ip:
-                    continue
-                
-                meal_url = None
-                # Extract tag-based configs (e.g. # meal:http://...)
-                if '# meal:' in content.lower():
-                    parts = content.split('# meal:')
-                    if len(parts) > 1:
-                        meal_url = parts[1].strip().split(' ')[0] # take first word after tag
-
-                # Check for canteen tag
-                is_canteen = '# canteen' in content.lower()
 
                 live_configs.append({
-                    "ip": ip,
-                    "meal_url": meal_url,
-                    "is_canteen": is_canteen
+                    "ip": cfg["ip"],
+                    "meal_url": cfg["meal_url"],
+                    "is_canteen": cfg["is_canteen"],
+                    "protocol": cfg["protocol"],
                 })
         return live_configs
     except Exception as e:
@@ -65,22 +85,15 @@ def get_all_machine_configs(file_path=config.MACHINES_FILE):
         configs = []
         with open(file_path, "r") as f:
             for line in f:
-                content = line.strip()
-                if not content or content.startswith('#'):
+                cfg = _parse_machine_line(line)
+                if not cfg:
                     continue
-                
-                # Extract IP (part before any #)
-                ip = content.split('#')[0].strip()
-                if not ip:
-                    continue
-                
-                is_live = '# nolive' not in content.lower()
-                is_canteen = '# canteen' in content.lower()
-                
+
                 configs.append({
-                    "ip": ip,
-                    "is_live": is_live,
-                    "is_canteen": is_canteen
+                    "ip": cfg["ip"],
+                    "is_live": cfg["is_live"],
+                    "is_canteen": cfg["is_canteen"],
+                    "protocol": cfg["protocol"],
                 })
         return configs
     except Exception as e:
@@ -115,11 +128,16 @@ def update_machine_tags(ip, is_live, is_canteen, file_path=config.MACHINES_FILE)
             line_ip = stripped.split('#')[0].strip()
             if line_ip == ip:
                 found = True
+                existing_cfg = _parse_machine_line(line) or {}
                 tags = []
+                if existing_cfg.get("protocol") == "zkteco":
+                    tags.append("zkteco")
                 if not is_live:
                     tags.append("nolive")
                 if is_canteen:
                     tags.append("canteen")
+                if existing_cfg.get("meal_url"):
+                    tags.append(f"meal:{existing_cfg['meal_url']}")
                 
                 new_line = f"{ip}"
                 if tags:
