@@ -1,5 +1,10 @@
 from config import config, DEMO_MODE
 
+if not DEMO_MODE:
+    from zk import ZK
+    from zk.user import User
+    from zk.finger import Finger
+
 from database import SessionLocal, EmployeeMetadata, EmployeeFingerprint
 from features.hanvon.client import HanvonClient
 from shared.hardware import get_machine_list, update_machine_tags, get_all_machine_configs
