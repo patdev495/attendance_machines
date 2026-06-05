@@ -1,9 +1,10 @@
 from config import config
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-def _parse_machine_line(content: str):
+def _parse_machine_line(content: str) -> dict[str, Any] | None:
     raw = content.strip()
     if not raw or raw.startswith('#'):
         return None
