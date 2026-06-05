@@ -60,6 +60,7 @@
           <td class="actions">
             <div class="action-group">
               <button class="btn-view" :title="$t('common.info')" @click="$emit('view', u)">{{ $t('common.info') }}</button>
+              <button class="btn-sync-emp" title="Đồng bộ sang các máy khác" @click="$emit('sync', u)">Đồng bộ</button>
               <button class="btn-delete" :title="$t('device.action.delete')" @click="$emit('delete', u.user_id)">{{ $t('device.action.delete') }}</button>
             </div>
           </td>
@@ -76,7 +77,7 @@ const { t } = useI18n()
 import { useMachineStore } from '../store.js'
 
 const props = defineProps({ employees: { type: Array, default: () => [] } })
-const emit = defineEmits(['delete', 'selection-change', 'view'])
+const emit = defineEmits(['delete', 'selection-change', 'view', 'sync'])
 
 const store = useMachineStore()
 const selectedIds = ref([])
@@ -236,6 +237,7 @@ button {
 }
 
 .btn-view { background: #10b981; color: white; }
+.btn-sync-emp { background: #6366f1; color: white; }
 .btn-delete { background: #ef4444; color: white; }
 
 button:hover { opacity: 0.8; }

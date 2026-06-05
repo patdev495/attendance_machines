@@ -123,6 +123,23 @@ export function pushFingerprints(employeeId, targetIps) {
   })
 }
 
+export function syncEmployeeToMachines(sourceIp, employeeId, employeeName, targetIps) {
+  return apiFetch('/sync-employee', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      source_ip: sourceIp,
+      employee_id: employeeId,
+      employee_name: employeeName,
+      target_ips: targetIps
+    })
+  })
+}
+
+export function getSyncEmployeeStatus() {
+  return apiFetch('/sync-employee/status')
+}
+
 export function previewBulkPush(employeeIds) {
   return apiFetch('/bulk-push-preview', {
     method: 'POST',

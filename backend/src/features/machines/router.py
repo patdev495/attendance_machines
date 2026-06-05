@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List, Optional, cast
+from typing import List, Optional, cast, Dict, Any
 from datetime import datetime
 from database import get_db, EmployeeMetadata
 from config import DEMO_MODE
@@ -20,11 +20,22 @@ if not DEMO_MODE:
         clear_all_fingerprints_on_machine, clear_fp_status,
         enroll_user_remote, update_machine_tags, get_all_machine_configs,
         push_status, push_fingerprints_to_machines,
-        bulk_push_status, bulk_push_fingerprints_to_machines
+        bulk_push_status, bulk_push_fingerprints_to_machines,
+        sync_employee_status, sync_employee_to_machines
     )
 else:
     # In DEMO_MODE, hardware service is not available
     from shared.hardware import get_machine_list, get_all_machine_configs, update_machine_tags
+    import threading
+    sync_employee_status: Dict[str, Any] = {
+        "is_running": False,
+        "employee_id": "",
+        "total_machines": 0,
+        "processed_count": 0,
+        "current_ip": "",
+        "results": {}
+    }
+    sync_employee_status_lock = threading.Lock()
 
 if not DEMO_MODE:
     from .biometric_service import BiometricExportService
@@ -357,4 +368,62 @@ def reconnect_machine_endpoint(ip: str):
     if not success:
         raise HTTPException(status_code=500, detail=msg)
     return {"status": "success", "message": msg}
+
+
+class SyncEmployeeRequest(BaseModel):
+    source_ip: str
+    employee_id: str
+    employee_name: str
+    target_ips: List[str]
+
+@router.post("/sync-employee")
+def sync_employee_endpoint(req: SyncEmployeeRequest, background_tasks: BackgroundTasks):
+    """
+    Kích hoạt tiến trình đồng bộ nhân viên sang các máy khác (chạy ngầm).
+    """
+    if DEMO_MODE:
+        import time
+        with sync_employee_status_lock:
+            if sync_employee_status["is_running"]:
+                raise HTTPException(status_code=400, detail="Sync already running")
+            sync_employee_status.update({
+                "is_running": True,
+                "employee_id": req.employee_id,
+                "total_machines": len(req.target_ips),
+                "processed_count": 0,
+                "current_ip": "",
+                "results": {}
+            })
+        def run_demo():
+            for ip in req.target_ips:
+                with sync_employee_status_lock:
+                    sync_employee_status["current_ip"] = ip
+                time.sleep(1.0)
+                with sync_employee_status_lock:
+                    sync_employee_status["results"][ip] = "Success"
+                    sync_employee_status["processed_count"] = int(sync_employee_status["processed_count"]) + 1
+            with sync_employee_status_lock:
+                sync_employee_status["is_running"] = False
+        
+        background_tasks.add_task(run_demo)
+        return {"status": "Success"}
+
+    background_tasks.add_task(
+        sync_employee_to_machines,
+        req.source_ip,
+        req.employee_id,
+        req.employee_name,
+        req.target_ips
+    )
+    return {"status": "Success"}
+
+@router.get("/sync-employee/status")
+def get_sync_employee_status_endpoint():
+    """
+    Lấy trạng thái của tiến trình đồng bộ nhân viên.
+    """
+    if DEMO_MODE:
+        return sync_employee_status
+    return sync_employee_status
+
 

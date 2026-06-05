@@ -94,13 +94,20 @@ class HanvonClient:
         face_ids = {str(item).strip() for item in param.get("fids", []) if str(item).strip()}
         return ids, face_ids
 
+    def get_employee(self, employee_id: str) -> dict[str, Any]:
+        response = self._send_command("ClientGetEmployee", job_num=str(employee_id), userType="0")
+        param = response.get("PARAM", {})
+        if param.get("result") != "success":
+            raise HanvonProtocolError(f"ClientGetEmployee failed: {param.get('reason') or response}")
+        return param
+
     def delete_employee(self, employee_id: str) -> None:
         response = self._send_command("DeleteEmployee", id=str(employee_id))
         param = response.get("PARAM", {})
         if param.get("result") != "success":
             raise HanvonProtocolError(f"DeleteEmployee failed: {param.get('reason') or response}")
 
-    def set_employee(self, employee_id: str, name: str = "", photo_base64: str = "") -> None:
+    def set_employee(self, employee_id: str, name: str = "", photo_base64: str = "", face_data: list | None = None) -> None:
         """Create or update a standard employee on the device.
 
         Protocol note: userType MUST be "1" — any other value is rejected by the
@@ -123,7 +130,7 @@ class HanvonClient:
             icCard="",
             recogPermission="face",
             capturejpg=photo_base64 or "",
-            face_data=[],
+            face_data=face_data or [],
             finger_data=[],
         )
         param = response.get("PARAM", {})

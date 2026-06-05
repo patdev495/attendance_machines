@@ -65,6 +65,7 @@
         :employees="store.pagedEmployees" 
         @view="handleView"
         @delete="handleDelete" 
+        @sync="handleSync"
         @selection-change="ids => selectedIds = ids"
       />
       <PaginationBar
@@ -89,6 +90,14 @@
       @close="isAddModalOpen = false"
       @submit="handleAddEmployeeModal"
     />
+
+    <SyncToMachinesModal
+      :isOpen="isSyncModalOpen"
+      :employeeId="syncEmployeeId"
+      :employeeName="syncEmployeeName"
+      :sourceIp="ip"
+      @close="isSyncModalOpen = false"
+    />
   </div>
 </template>
 
@@ -102,6 +111,7 @@ import PaginationBar from '@/components/shared/PaginationBar.vue'
 import MachineEmployeeTable from '../components/MachineEmployeeTable.vue'
 import AddMachineEmployeeModal from '../components/AddMachineEmployeeModal.vue'
 import EmployeeDetailsModal from '@/features/employees/components/EmployeeDetailsModal.vue'
+import SyncToMachinesModal from '../components/SyncToMachinesModal.vue'
 
 const props = defineProps({ ip: { type: String, required: true } })
 const store = useMachineStore()
@@ -114,9 +124,19 @@ const isDetailsModalOpen = ref(false)
 const isAddModalOpen = ref(false)
 const isAddingEmployee = ref(false)
 
+const isSyncModalOpen = ref(false)
+const syncEmployeeId = ref('')
+const syncEmployeeName = ref('')
+
 onMounted(() => {
   store.loadMachineEmployees(props.ip)
 })
+
+function handleSync(u) {
+  syncEmployeeId.value = u.user_id
+  syncEmployeeName.value = u.db_name || u.name || ''
+  isSyncModalOpen.value = true
+}
 
 function handleView(u) {
   // Map machine-specific fields to registry-style fields for the modal

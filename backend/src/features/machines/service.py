@@ -16,7 +16,7 @@ import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
 import base64
 import time
-from typing import List, Optional, Dict, cast
+from typing import List, Optional, Dict, cast, Any
 
 logger = logging.getLogger(__name__)
 
@@ -1265,3 +1265,140 @@ def get_enroll_status(ip: str):
     Returns the current enrollment status for an IP.
     """
     return enrollment_sessions.get(ip, {"status": "idle", "message": "No active session."})
+
+
+# State for sync employee operations
+sync_employee_status: Dict[str, Any] = {
+    "is_running": False,
+    "employee_id": "",
+    "total_machines": 0,
+    "processed_count": 0,
+    "current_ip": "",
+    "results": {}
+}
+sync_employee_status_lock = threading.Lock()
+
+def sync_employee_to_machines(
+    source_ip: str,
+    employee_id: str,
+    employee_name: str,
+    target_ips: list
+):
+    """
+    Syncs an employee's details (face template, photo, privilege, password)
+    from a source Hanvon machine (or local registry DB) to target Hanvon machines.
+    """
+    global sync_employee_status
+    with sync_employee_status_lock:
+        if sync_employee_status["is_running"]:
+            return
+        sync_employee_status.update({
+            "is_running": True,
+            "employee_id": employee_id,
+            "total_machines": len(target_ips),
+            "processed_count": 0,
+            "current_ip": "",
+            "results": {}
+        })
+
+    # 1. Fetch employee details from source machine
+    name = employee_name
+    role = "employee"
+    photo_base64 = ""
+    face_data = []
+    password = "123456"
+    authority = 2
+
+    # Get from DB registry to verify role/name first
+    db = SessionLocal()
+    try:
+        from database import EmployeeLocalRegistry
+        emp_reg = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == employee_id).first()
+        if emp_reg:
+            if not name and emp_reg.emp_name:
+                name = emp_reg.emp_name
+            if emp_reg.privilege == 3 or emp_reg.privilege == 14:
+                role = "admin"
+                authority = 2
+    except Exception as e:
+        logger.warning(f"Error querying local registry for sync: {e}")
+    finally:
+        db.close()
+
+    # Query source machine to get face templates/photos if online
+    try:
+        with HanvonClient(
+            source_ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=10
+        ) as client:
+            # Check if this ID is a manager
+            managers = client.get_manager_ids()
+            if employee_id in managers:
+                try:
+                    manager_detail = client.get_manager(employee_id)
+                    role = "super_admin" if _to_int(manager_detail.get("authority"), 2) == 0 else "admin"
+                    authority = _to_int(manager_detail.get("authority"), 2)
+                    password = manager_detail.get("password") or "123456"
+                    photo_base64 = manager_detail.get("capturejpg") or ""
+                except Exception as ex:
+                    logger.warning(f"Failed to fetch manager details from source machine: {ex}")
+            else:
+                try:
+                    # Retrieve employee photo and face templates
+                    emp_detail = client.get_employee(employee_id)
+                    if emp_detail:
+                        if not name and emp_detail.get("name"):
+                            name = emp_detail.get("name")
+                        photo_base64 = emp_detail.get("capturejpg") or ""
+                        face_data = emp_detail.get("face_data") or []
+                        role = "employee"
+                except Exception as ex:
+                    logger.warning(f"Failed to fetch employee details from source machine: {ex}")
+    except Exception as e:
+        logger.warning(f"Source machine {source_ip} offline or error during fetch: {e}")
+
+    # 2. Add/update employee on each target machine
+    for ip in target_ips:
+        with sync_employee_status_lock:
+            sync_employee_status["current_ip"] = ip
+
+        try:
+            with HanvonClient(
+                ip,
+                port=config.HANVON_PORT,
+                secret_key=config.HANVON_SECRET_KEY,
+                timeout=10
+            ) as client:
+                if role in ("admin", "super_admin"):
+                    # For managers/admins, photo is REQUIRED by the device. If missing, we fail.
+                    if not photo_base64:
+                        raise ValueError("Photo (capturejpg) is required to register a Hanvon manager, but it is empty.")
+                    
+                    client.set_manager(
+                        manager_id=employee_id,
+                        photo_base64=photo_base64,
+                        password=password,
+                        authority=authority
+                    )
+                else:
+                    client.set_employee(
+                        employee_id=employee_id,
+                        name=name,
+                        photo_base64=photo_base64,
+                        face_data=face_data
+                    )
+            
+            with sync_employee_status_lock:
+                sync_employee_status["results"][ip] = "Success"
+        except Exception as e:
+            logger.error(f"Error syncing employee {employee_id} to machine {ip}: {e}")
+            with sync_employee_status_lock:
+                sync_employee_status["results"][ip] = str(e)
+        finally:
+            with sync_employee_status_lock:
+                sync_employee_status["processed_count"] = int(sync_employee_status["processed_count"]) + 1
+
+    with sync_employee_status_lock:
+        sync_employee_status["is_running"] = False
