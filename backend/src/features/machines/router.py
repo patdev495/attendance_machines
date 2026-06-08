@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, cast, Dict, Any
 from datetime import datetime
-from database import get_db, EmployeeMetadata
+from database import get_db, EmployeeMetadata, EmployeeLocalRegistry
 from config import DEMO_MODE
 
 if not DEMO_MODE:
@@ -21,7 +21,8 @@ if not DEMO_MODE:
         enroll_user_remote, update_machine_tags, get_all_machine_configs,
         push_status, push_fingerprints_to_machines,
         bulk_push_status, bulk_push_fingerprints_to_machines,
-        sync_employee_status, sync_employee_to_machines
+        sync_employee_status, sync_employee_to_machines,
+        get_user_photo_from_machine
     )
 else:
     # In DEMO_MODE, hardware service is not available
@@ -92,6 +93,26 @@ def _hanvon_not_supported(feature: str):
         status_code=410,
         detail=f"{feature} is a legacy ZKTeco operation and is not supported after switching machines to Hanvon.",
     )
+
+
+def _record_machine_employee_name(db: Session, employee_id: str, name: str) -> None:
+    name = name.strip()
+    if not name:
+        return
+
+    registry_entry = db.query(EmployeeLocalRegistry).filter(
+        EmployeeLocalRegistry.employee_id == employee_id
+    ).first()
+    if registry_entry:
+        if not registry_entry.emp_name:
+            registry_entry.emp_name = name
+    else:
+        db.add(EmployeeLocalRegistry(
+            employee_id=employee_id,
+            emp_name=name,
+            source_status="machine_only",
+        ))
+    db.commit()
 
 @router.get("")
 def get_machines():
@@ -182,7 +203,7 @@ def get_machine_employees(ip: str, db: Session = Depends(get_db)):
     return {"items": enriched, "total": len(enriched), "status": status}
 
 @router.post("/{ip}/employees")
-def add_machine_employee(ip: str, req: MachineEmployeeCreate):
+def add_machine_employee(ip: str, req: MachineEmployeeCreate, db: Session = Depends(get_db)):
     """Add or update an employee or manager on a specific Hanvon machine.
 
     Role → Hanvon API mapping (per HANVON_PROTOCOL.md §9):
@@ -219,10 +240,14 @@ def add_machine_employee(ip: str, req: MachineEmployeeCreate):
     )
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)
+
+    if req.role == "employee":
+        _record_machine_employee_name(db, employee_id, req.name)
+
     return {"status": status, "employee_id": employee_id}
 
 @router.put("/{ip}/employees/{employee_id}")
-def update_machine_employee(ip: str, employee_id: str, req: MachineEmployeeUpdate):
+def update_machine_employee(ip: str, employee_id: str, req: MachineEmployeeUpdate, db: Session = Depends(get_db)):
     """Update one employee/manager identity on a specific Hanvon machine."""
     employee_id = employee_id.strip()
     if not employee_id:
@@ -248,7 +273,32 @@ def update_machine_employee(ip: str, employee_id: str, req: MachineEmployeeUpdat
     )
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)
+
+    if req.role == "employee":
+        _record_machine_employee_name(db, employee_id, req.name)
+
     return {"status": status, "employee_id": employee_id}
+
+@router.get("/{ip}/employees/{employee_id}/photo")
+def get_machine_employee_photo(ip: str, employee_id: str):
+    """Fetch the current face photo for one employee/manager on a specific Hanvon machine."""
+    employee_id = employee_id.strip()
+    if not employee_id:
+        raise HTTPException(status_code=422, detail="employee_id is required")
+
+    if DEMO_MODE:
+        return {"status": "Success (Demo)", "employee_id": employee_id, "photo_base64": "", "has_photo": False}
+
+    photo_base64, status = get_user_photo_from_machine(ip, employee_id)
+    if status != "Success":
+        raise HTTPException(status_code=500, detail=status)
+
+    return {
+        "status": status,
+        "employee_id": employee_id,
+        "photo_base64": photo_base64,
+        "has_photo": bool(photo_base64),
+    }
 
 @router.delete("/{ip}/employees/{employee_id}")
 def delete_machine_employee(ip: str, employee_id: str):

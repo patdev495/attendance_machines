@@ -2,7 +2,7 @@ uv run pyinstaller --onedir --name "TimeAttendance" --paths "backend/src" --hidd
 uv run -m uvicorn main:app --reload --app-dir backend/src --port 8000
 
 192.168.209.60 # nolive
-
+D:\PAT\headroom\.venv\Scripts\headroom.exe wrap codex
 
 docker compose up -d --build
 # Xem trạng thái các container đang chạy

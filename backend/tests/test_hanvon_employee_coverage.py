@@ -12,10 +12,12 @@ from features.machines import service
 class FakeHanvonClient:
     employee_ids = []
     face_ids = set()
+    employee_details = {}
     manager_ids = []
     manager_authority = {}
     manager_photos = {}
     fail = False
+    get_employee_calls = []
 
     def __init__(self, *args, **kwargs):
         if self.fail:
@@ -30,6 +32,10 @@ class FakeHanvonClient:
     def get_employee_ids(self):
         return self.employee_ids, self.face_ids
 
+    def get_employee(self, employee_id):
+        self.get_employee_calls.append(employee_id)
+        return self.employee_details.get(employee_id, {})
+
     def get_manager_ids(self):
         return self.manager_ids
 
@@ -41,13 +47,15 @@ class FakeHanvonClient:
         }
 
 
-def patch_client(monkeypatch, *, employees=None, faces=None, managers=None, authorities=None, manager_photos=None, fail=False):
+def patch_client(monkeypatch, *, employees=None, faces=None, employee_details=None, managers=None, authorities=None, manager_photos=None, fail=False):
     FakeHanvonClient.employee_ids = employees or []
     FakeHanvonClient.face_ids = set(faces or [])
+    FakeHanvonClient.employee_details = employee_details or {}
     FakeHanvonClient.manager_ids = managers or []
     FakeHanvonClient.manager_authority = authorities or {}
     FakeHanvonClient.manager_photos = manager_photos or {}
     FakeHanvonClient.fail = fail
+    FakeHanvonClient.get_employee_calls = []
     monkeypatch.setattr(service, "HanvonClient", FakeHanvonClient)
 
 
@@ -96,3 +104,56 @@ def test_hanvon_coverage_offline(monkeypatch):
     assert result["status"] == "Offline"
     assert result["registered"] is False
     assert result["role"] == "not_registered"
+
+
+def test_get_users_from_machine_does_not_fetch_employee_details(monkeypatch):
+    patch_client(
+        monkeypatch,
+        employees=["1001"],
+        faces=["1001"],
+        employee_details={"1001": {"name": "Nguyen Van A", "capturejpg": "photo_base64"}},
+    )
+
+    users, status = service.get_users_from_machine("192.168.1.10")
+
+    assert status == "Success"
+    assert users[0]["user_id"] == "1001"
+    assert users[0]["name"] == ""
+    assert FakeHanvonClient.get_employee_calls == []
+
+
+def test_get_user_photo_from_machine_returns_employee_photo(monkeypatch):
+    patch_client(
+        monkeypatch,
+        employees=["1001"],
+        employee_details={"1001": {"capturejpg": "employee_photo_base64"}},
+    )
+
+    photo, status = service.get_user_photo_from_machine("192.168.1.10", "1001")
+
+    assert status == "Success"
+    assert photo == "employee_photo_base64"
+
+
+def test_get_user_photo_from_machine_prefers_manager_photo(monkeypatch):
+    patch_client(
+        monkeypatch,
+        employees=["1001"],
+        employee_details={"1001": {"capturejpg": "employee_photo_base64"}},
+        managers=["1001"],
+        manager_photos={"1001": "manager_photo_base64"},
+    )
+
+    photo, status = service.get_user_photo_from_machine("192.168.1.10", "1001")
+
+    assert status == "Success"
+    assert photo == "manager_photo_base64"
+
+
+def test_get_user_photo_from_machine_reports_not_found(monkeypatch):
+    patch_client(monkeypatch, employees=["1001"])
+
+    photo, status = service.get_user_photo_from_machine("192.168.1.10", "2002")
+
+    assert photo == ""
+    assert "not found" in status

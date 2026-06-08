@@ -28,6 +28,7 @@ def _unsupported_hanvon_operation(operation: str):
     logger.warning(message)
     return message
 
+
 # State for machine operations (deletion, etc.)
 delete_status = {
     "is_running": False,
@@ -286,6 +287,50 @@ def update_user_on_machine(
     except Exception as e:
         logger.error(f"Error updating user {employee_id} ({role}) on machine {ip}: {e}")
         return str(e)
+
+
+def get_user_photo_from_machine(ip: str, employee_id: str) -> tuple[str, str]:
+    """Fetch the current Hanvon capture photo for one employee/manager."""
+    employee_id = employee_id.strip()
+    if not employee_id:
+        return "", "employee_id is required"
+
+    try:
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=10,
+        ) as client:
+            employee_ids, _face_ids = client.get_employee_ids()
+            manager_ids = client.get_manager_ids()
+            is_employee = employee_id in employee_ids
+            is_manager = employee_id in manager_ids
+
+            if not is_employee and not is_manager:
+                return "", f"User {employee_id} not found on machine {ip}"
+
+            if is_manager:
+                try:
+                    manager_detail = client.get_manager(employee_id)
+                    manager_photo = str(manager_detail.get("capturejpg") or "").strip()
+                    if manager_photo:
+                        return manager_photo, "Success"
+                except Exception as e:
+                    logger.warning(f"Failed to fetch manager photo for {employee_id} from {ip}: {e}")
+
+            if is_employee:
+                try:
+                    employee_detail = client.get_employee(employee_id)
+                    return str(employee_detail.get("capturejpg") or "").strip(), "Success"
+                except Exception as e:
+                    logger.warning(f"Failed to fetch employee photo for {employee_id} from {ip}: {e}")
+                    return "", str(e)
+
+            return "", "Success"
+    except Exception as e:
+        logger.error(f"Error fetching user photo {employee_id} from machine {ip}: {e}")
+        return "", str(e)
 
 
 

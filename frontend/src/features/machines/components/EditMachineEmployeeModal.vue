@@ -40,11 +40,14 @@
             <div class="photo-section">
               <span>{{ $t('device.machine_employee.face_photo') }}</span>
               <button type="button" class="photo-button" @click="fileInput?.click()">
-                {{ photoPreview ? $t('device.machine_employee.change_selected_photo') : $t('device.machine_employee.choose_new_photo') }}
+                {{ displayedPhotoPreview ? $t('device.machine_employee.change_selected_photo') : $t('device.machine_employee.choose_new_photo') }}
               </button>
               <input ref="fileInput" type="file" accept="image/jpeg,image/jpg" hidden @change="handleFileSelect" />
-              <img v-if="photoPreview" :src="photoPreview" class="photo-preview" alt="preview" />
-              <button v-if="photoPreview" type="button" class="clear-photo" @click="clearPhoto">
+              <div v-if="isPhotoLoading" class="photo-status">{{ $t('device.machine_employee.loading_current_photo') }}</div>
+              <div v-else-if="photoLoadError" class="photo-status photo-status-error">{{ photoLoadError }}</div>
+              <img v-if="displayedPhotoPreview" :src="displayedPhotoPreview" class="photo-preview" alt="preview" />
+              <div v-else-if="!isPhotoLoading && !photoLoadError" class="photo-status">{{ $t('device.machine_employee.no_current_photo') }}</div>
+              <button v-if="newPhotoPreview" type="button" class="clear-photo" @click="clearNewPhoto">
                 {{ $t('device.machine_employee.clear_new_photo') }}
               </button>
               <small>{{ $t('device.machine_employee.preserve_existing_photo') }}</small>
@@ -68,6 +71,7 @@
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { getMachineEmployeePhoto } from '../api.js'
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -81,9 +85,13 @@ const { t } = useI18n()
 
 const nameInput = ref(null)
 const fileInput = ref(null)
-const photoPreview = ref('')
+const currentPhotoPreview = ref('')
+const newPhotoPreview = ref('')
 const photoBase64 = ref('')
+const isPhotoLoading = ref(false)
+const photoLoadError = ref('')
 const errorMessage = ref('')
+let photoRequestId = 0
 
 const form = reactive({
   name: '',
@@ -92,14 +100,17 @@ const form = reactive({
 })
 
 const isManagerRole = computed(() => form.role === 'admin' || form.role === 'super_admin')
+const displayedPhotoPreview = computed(() => newPhotoPreview.value || currentPhotoPreview.value)
 
 watch(() => props.isOpen, async (open) => {
   if (!open) return
   form.name = props.employee?.name || props.employee?.db_name || ''
   form.role = normalizeRole(props.employee?.role)
   form.password = ''
-  clearPhoto()
+  clearCurrentPhoto()
+  clearNewPhoto()
   errorMessage.value = ''
+  loadCurrentPhoto()
   await nextTick()
   nameInput.value?.focus()
 })
@@ -114,10 +125,42 @@ function close() {
   if (!props.isSubmitting) emit('close')
 }
 
-function clearPhoto() {
-  photoPreview.value = ''
+function clearCurrentPhoto() {
+  currentPhotoPreview.value = ''
+  isPhotoLoading.value = false
+  photoLoadError.value = ''
+}
+
+function clearNewPhoto() {
+  newPhotoPreview.value = ''
   photoBase64.value = ''
   if (fileInput.value) fileInput.value.value = ''
+}
+
+async function loadCurrentPhoto() {
+  const employeeId = props.employee?.user_id
+  if (!employeeId) return
+
+  const requestId = ++photoRequestId
+  isPhotoLoading.value = true
+  photoLoadError.value = ''
+
+  try {
+    const result = await getMachineEmployeePhoto(props.ip, employeeId)
+    if (requestId !== photoRequestId || !props.isOpen) return
+    currentPhotoPreview.value = result.photo_base64 ? toJpegDataUrl(result.photo_base64) : ''
+  } catch (e) {
+    if (requestId !== photoRequestId || !props.isOpen) return
+    photoLoadError.value = t('device.machine_employee.current_photo_failed')
+  } finally {
+    if (requestId === photoRequestId) isPhotoLoading.value = false
+  }
+}
+
+function toJpegDataUrl(value) {
+  if (!value) return ''
+  if (value.startsWith('data:image/')) return value
+  return `data:image/jpeg;base64,${value}`
 }
 
 function handleFileSelect(e) {
@@ -133,7 +176,7 @@ function handleFileSelect(e) {
   const reader = new FileReader()
   reader.onload = (event) => {
     const result = event.target.result
-    photoPreview.value = result
+    newPhotoPreview.value = result
     photoBase64.value = result.split(',')[1] || ''
   }
   reader.readAsDataURL(file)
@@ -274,6 +317,23 @@ small {
   max-height: 140px;
   border-radius: 8px;
   object-fit: cover;
+}
+
+.photo-status {
+  width: fit-content;
+  max-width: 100%;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
+.photo-status-error {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
 }
 
 .error-msg {

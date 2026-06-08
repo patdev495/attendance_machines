@@ -33,6 +33,10 @@ export function getMachineEmployees(ip) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`)
 }
 
+export function getMachineEmployeePhoto(ip, employeeId) {
+  return apiFetch(`/${encodeURIComponent(ip)}/employees/${encodeURIComponent(employeeId)}/photo`)
+}
+
 export function addMachineEmployee(ip, employeeId, name = '', role = 'employee', photoBase64 = '', password = '123456') {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`, {
     method: 'POST',
