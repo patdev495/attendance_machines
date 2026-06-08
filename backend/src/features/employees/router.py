@@ -1,9 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 from database import get_db, EmployeeLocalRegistry
-from compat import safe_ilike
 from typing import List, Optional
 import threading
 
@@ -17,6 +15,7 @@ from .schema import (
     BiometricCoverageOut
 )
 from .service import update_registry, delete_user_from_hardware, update_employee_info, export_employees_to_excel
+from .registry_service import filter_registry_by_employee_search
 from features.machines.service import (
     get_biometric_coverage, 
     run_bulk_delete_on_machines,
@@ -55,17 +54,7 @@ def list_employees(
     db: Session = Depends(get_db)
 ):
     query = db.query(EmployeeLocalRegistry)
-    if search:
-        search = search.strip()
-        found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
-            EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
-            EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%") |
-            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{search}%")
-        ).all()
-        
-        target_ids = {r[0] for r in found_ids} | {search}
-        # Use ltrim/rtrim to be robust against machine-generated ID spaces
-        query = query.filter(func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id)).in_(list(target_ids)))
+    query = filter_registry_by_employee_search(query, db, search)
         
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)

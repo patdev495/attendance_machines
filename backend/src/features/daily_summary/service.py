@@ -8,12 +8,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import exists, text
 
 from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition
+from features.employees.registry_service import reconcile_employee_local_registry
 
 from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window
-
-from config import DEMO_MODE
-if not DEMO_MODE:
-    from features.logs.service import get_machine_list, get_users_from_machine
 
 logger = logging.getLogger(__name__)
 
@@ -196,11 +193,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
 def sync_employees_full(file_bytes: Optional[io.BytesIO] = None):
     """
-    Upgraded Sync:
-    1. Sync Excel to EmployeeMetadata (if file provided).
-    2. Upsert Excel users into EmployeeLocalRegistry (source_status=excel_synced).
-    3. Scan all machines for users.
-    4. Upsert machine-only users into EmployeeLocalRegistry (source_status=machine_only) if not already synced from Excel.
+    Sync Excel data into EmployeeMetadata, then reconcile the Employee Local Registry
+    from Excel, Attendance Machine, and Raw Log sources.
     """
     global sync_status
     
@@ -398,13 +392,12 @@ def sync_employees_full(file_bytes: Optional[io.BytesIO] = None):
         else:
             logger.info("No Excel file provided — skipping Excel processing and daily shift sync")
 
-        # 2. Call centralized update_registry
+        # 2. Reconcile registry from Excel, Attendance Machine, and Raw Log sources.
         with status_lock:
             sync_status["current_step"] = "Scanning machines and logs to sync registry..."
             sync_status["progress"] = 60
             
-        from features.employees.service import update_registry
-        update_registry(db)
+        reconcile_employee_local_registry(db)
         
         excel_count = db.query(EmployeeLocalRegistry).filter_by(source_status='excel_synced').count()
         machine_only_count = db.query(EmployeeLocalRegistry).filter_by(source_status='machine_only').count()

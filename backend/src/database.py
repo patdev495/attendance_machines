@@ -83,7 +83,7 @@ class EmployeeFingerprint(Base):
 # v2.0 NEW TABLE — EmployeeLocalRegistry
 # Unified employee registry that tracks employees from 3 sources:
 #   excel_synced  → imported via Excel sync
-#   machine_only  → found on a ZKTeco machine but not in Excel
+#   machine_only  → found on an Attendance Machine but not in Excel
 #   log_only      → found only in AttendanceLogs (old logs, no machine/Excel match)
 #
 # IMPORTANT: existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata,

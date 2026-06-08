@@ -10,7 +10,7 @@ from typing import Optional
 from datetime import date, datetime
 
 from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftDefinition
-from compat import safe_ilike
+from features.employees.registry_service import find_employee_ids_for_search, normalize_employee_id
 
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
 from .export_service import export_status, export_lock, run_export_task
@@ -62,21 +62,10 @@ def get_daily_summary(
 
     # 5. Filters
     if employee_id:
-        employee_id = employee_id.strip()
-        id_match_q = db.query(EmployeeLocalRegistry.employee_id).filter(
-            EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeLocalRegistry.full_emp_id.ilike(f"%{employee_id}%") |
-            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{employee_id}%")
-        )
-        id_match_meta_q = db.query(EmployeeMetadata.employee_id).filter(
-            EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
-            EmployeeMetadata.full_emp_id.ilike(f"%{employee_id}%") |
-            safe_ilike(EmployeeMetadata.emp_name, f"%{employee_id}%")
-        )
-
+        employee_id = normalize_employee_id(employee_id)
+        matched_ids = find_employee_ids_for_search(db, employee_id)
         query = query.filter(
-            (union_keys.c.employee_id.in_(id_match_q)) |
-            (union_keys.c.employee_id.in_(id_match_meta_q)) |
+            (union_keys.c.employee_id.in_(list(matched_ids))) |
             (union_keys.c.employee_id.like(f"%{employee_id}%"))
         )
 

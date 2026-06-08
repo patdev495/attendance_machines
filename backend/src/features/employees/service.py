@@ -1,90 +1,23 @@
 from sqlalchemy.orm import Session
 from database import EmployeeLocalRegistry, EmployeeMetadata, AttendanceLog, SessionLocal
-from config import config, DEMO_MODE
+from config import DEMO_MODE
 from shared.hardware import get_machine_list
 
 if not DEMO_MODE:
-    from features.machines.service import get_users_from_machine, delete_user_from_machine
+    from features.machines.service import delete_user_from_machine
 from concurrent.futures import ThreadPoolExecutor
 import concurrent.futures
 import logging
 import io
 import openpyxl
 from sqlalchemy import func
-from compat import safe_ilike
+from .registry_service import filter_registry_by_employee_search, reconcile_employee_local_registry
 
 logger = logging.getLogger(__name__)
 
 def update_registry(db: Session):
-    """
-    Update EmployeeLocalRegistry from 3 sources:
-    1. Excel (EmployeeMetadata)
-    2. Machines (get_users_from_machine)
-    3. Logs (AttendanceLogs)
-    """
     try:
-        # 1. Gather current sets
-        excel_users = {emp.employee_id: emp for emp in db.query(EmployeeMetadata).all()}
-
-        machine_users = set()
-        if not DEMO_MODE:
-            ips = get_machine_list()
-            for ip in ips:
-                users, status = get_users_from_machine(ip)
-                if status == "Success":
-                    for u in users:
-                        machine_users.add(str(u.get('user_id')))
-
-        log_users = {emp_id for (emp_id,) in db.query(AttendanceLog.employee_id).distinct().all()}
-
-        all_active_ids = set(excel_users.keys()) | machine_users | log_users
-
-        # 2. Update existing and delete stale
-        existing_registry = db.query(EmployeeLocalRegistry).all()
-        for reg in existing_registry:
-            if reg.employee_id not in all_active_ids:
-                db.delete(reg)
-            else:
-                # Update status based on precedence
-                if reg.employee_id in excel_users:
-                    emp = excel_users[reg.employee_id]
-                    reg.emp_name = emp.emp_name
-                    reg.department = emp.department
-                    reg.group_name = emp.group
-                    reg.start_date = emp.start_date
-                    reg.shift = emp.shift
-                    reg.source_status = 'excel_synced'
-                elif reg.employee_id in machine_users:
-                    reg.source_status = 'machine_only'
-                elif reg.employee_id in log_users:
-                    reg.source_status = 'log_only'
-
-        db.commit()
-
-        # 3. Add new entries
-        existing_ids = {reg.employee_id for reg in db.query(EmployeeLocalRegistry.employee_id).all()}
-        new_ids = all_active_ids - existing_ids
-
-        for emp_id in new_ids:
-            if emp_id in excel_users:
-                emp = excel_users[emp_id]
-                new_reg = EmployeeLocalRegistry(
-                    employee_id=emp_id,
-                    emp_name=emp.emp_name,
-                    department=emp.department,
-                    group_name=emp.group,
-                    start_date=emp.start_date,
-                    shift=emp.shift,
-                    source_status='excel_synced'
-                )
-            elif emp_id in machine_users:
-                new_reg = EmployeeLocalRegistry(employee_id=emp_id, source_status='machine_only')
-            else:
-                new_reg = EmployeeLocalRegistry(employee_id=emp_id, source_status='log_only')
-
-            db.add(new_reg)
-
-        db.commit()
+        reconcile_employee_local_registry(db)
     except Exception as e:
         logger.error(f"Error updating registry: {e}")
         db.rollback()
@@ -130,15 +63,7 @@ def update_employee_info(employee_id: str, db_name: str, db: Session):
 def export_employees_to_excel(db: Session, search: str = None, source_status: str = None):
     query = db.query(EmployeeLocalRegistry)
 
-    if search:
-        search = search.strip()
-        found_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
-            EmployeeLocalRegistry.employee_id.ilike(f"%{search}%") |
-            EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%") |
-            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{search}%")
-        ).all()
-        target_ids = {r[0] for r in found_ids} | {search}
-        query = query.filter(func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id)).in_(list(target_ids)))
+    query = filter_registry_by_employee_search(query, db, search)
 
     if source_status:
         query = query.filter(EmployeeLocalRegistry.source_status == source_status)

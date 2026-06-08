@@ -3,12 +3,12 @@ import logging
 from sqlalchemy.orm import Session
 from shared.socket_manager import manager
 from sqlalchemy import func, desc
-from typing import List, Optional
+from typing import Optional
 from datetime import date as date_type
 
 from database import get_db, AttendanceLog
 from .service import sync_all_machines, sync_status, status_lock
-from compat import safe_ilike
+from features.employees.registry_service import employee_name_map, find_employee_ids_for_search, normalize_employee_id
 
 logger = logging.getLogger(__name__)
 
@@ -24,22 +24,11 @@ def get_logs(
     size: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
-    from database import EmployeeLocalRegistry, EmployeeMetadata
     query = db.query(AttendanceLog)
 
     if employee_id:
-        employee_id = employee_id.strip()
-        # Step 1: Find matching IDs from registry/metadata (fast, small tables)
-        match_ids = db.query(EmployeeLocalRegistry.employee_id).filter(
-            EmployeeLocalRegistry.employee_id.ilike(f"%{employee_id}%") |
-            safe_ilike(EmployeeLocalRegistry.emp_name, f"%{employee_id}%")
-        ).all()
-        match_ids_meta = db.query(EmployeeMetadata.employee_id).filter(
-            EmployeeMetadata.employee_id.ilike(f"%{employee_id}%") |
-            safe_ilike(EmployeeMetadata.emp_name, f"%{employee_id}%")
-        ).all()
-
-        found_ids = {r[0] for r in match_ids} | {r[0] for r in match_ids_meta} | {employee_id}
+        employee_id = normalize_employee_id(employee_id)
+        found_ids = find_employee_ids_for_search(db, employee_id)
 
         query = query.filter(
             (AttendanceLog.employee_id.in_(list(found_ids))) |
@@ -58,34 +47,17 @@ def get_logs(
                 .offset((page - 1) * size) \
                 .limit(size) \
                 .all()
-    employee_ids = {str(log.employee_id).strip() for log in logs if log.employee_id}
-    registry_map = {}
-    metadata_map = {}
-
-    if employee_ids:
-        registry_rows = db.query(
-            EmployeeLocalRegistry.employee_id,
-            EmployeeLocalRegistry.emp_name,
-        ).filter(EmployeeLocalRegistry.employee_id.in_(list(employee_ids))).all()
-        registry_map = {str(r.employee_id).strip(): r.emp_name for r in registry_rows}
-
-        missing_ids = employee_ids - set(registry_map.keys())
-        if missing_ids:
-            metadata_rows = db.query(
-                EmployeeMetadata.employee_id,
-                EmployeeMetadata.emp_name,
-            ).filter(EmployeeMetadata.employee_id.in_(list(missing_ids))).all()
-            metadata_map = {str(r.employee_id).strip(): r.emp_name for r in metadata_rows}
+    names = employee_name_map(db, (log.employee_id for log in logs))
 
     items = []
     for log in logs:
-        emp_id = str(log.employee_id).strip()
+        emp_id = normalize_employee_id(log.employee_id)
         items.append({
             "id": log.id,
             "employee_id": log.employee_id,
             "attendance_time": log.attendance_time,
             "machine_ip": log.machine_ip,
-            "emp_name": registry_map.get(emp_id) or metadata_map.get(emp_id),
+            "emp_name": names.get(emp_id),
         })
 
     return {

@@ -10,9 +10,7 @@ from database import (
     EmployeeLocalRegistry,
     EmployeeMetadata,
 )
-
-
-REPORT_SOURCE_STATUSES = ("excel_synced", "machine_only")
+from features.employees.registry_service import REPORT_SOURCE_STATUSES
 
 
 class DailySummaryQueryParts(NamedTuple):
