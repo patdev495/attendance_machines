@@ -11,18 +11,18 @@ if not DEMO_MODE:
     from .service import (
         get_machine_list, get_devices_capacity_info, get_users_from_machine,
         add_user_to_machine, delete_user_from_machine, bulk_delete_users_from_machine,
-        update_user_name_all_machines, download_fingerprints_from_machine,
-        bulk_download_fingerprints_from_machine, get_biometric_coverage,
+        get_biometric_coverage,
         delete_status, delete_user_from_all_machines,
         bulk_delete_status, bulk_delete_users_from_all_machines,
-        sync_time_on_machine, bulk_sync_time_all_machines,
-        global_sync_status, global_sync_all_fingerprints,
-        clear_all_fingerprints_on_machine, clear_fp_status,
-        enroll_user_remote, update_machine_tags, get_all_machine_configs,
-        push_status, push_fingerprints_to_machines,
-        bulk_push_status, bulk_push_fingerprints_to_machines,
+        update_machine_tags, get_all_machine_configs,
         sync_employee_status, sync_employee_to_machines,
         get_user_photo_from_machine
+    )
+    from .legacy_zkteco_service import (
+        bulk_push_status,
+        clear_fp_status,
+        global_sync_status,
+        push_status,
     )
 else:
     # In DEMO_MODE, hardware service is not available
@@ -131,10 +131,10 @@ def get_machines_capacity():
         # Return simulated capacity data for demo machines
         configs = get_all_machine_configs()
         return [{
-            "ip": c["ip"], 
+            "ip": c["ip"],
             "status": "Online",
-            "users": 200, "users_cap": 3000, 
-            "fingers": 400, "fingers_cap": 3000, 
+            "users": 200, "users_cap": 3000,
+            "fingers": 400, "fingers_cap": 3000,
             "records": 5000, "records_cap": 100000,
             "admins": 2, "admins_cap": 10
         } for c in configs]
@@ -153,7 +153,7 @@ def get_live_machines_status():
 def get_machine_employees(ip: str, db: Session = Depends(get_db)):
     """List employees currently on a specific machine, enriched with DB names."""
     from database import EmployeeLocalRegistry
-    
+
     if DEMO_MODE:
         # In demo mode, return all employees as if they're on every machine
         registry = db.query(EmployeeLocalRegistry).all()
@@ -177,18 +177,18 @@ def get_machine_employees(ip: str, db: Session = Depends(get_db)):
                 "role": "Admin" if reg.privilege == 3 else "User"
             })
         return {"items": enriched, "total": len(enriched), "status": "Success (Demo)"}
-    
+
     users, status = get_users_from_machine(ip)
     if status != "Success" and not users:
         raise HTTPException(status_code=500, detail=status)
-    
+
     # Enrich with Consolidated Registry metadata (Phase 4 table)
     registry_map = {str(r.employee_id): r for r in db.query(EmployeeLocalRegistry).all()}
     enriched = []
     for u in users:
         emp_id = str(u['user_id'])
         reg = registry_map.get(emp_id)
-        
+
         # Consistent status logic: map shift to display status if available
         # This will be used by the frontend to render badges
         enriched.append({
@@ -346,7 +346,7 @@ def trigger_bulk_global_delete(req: BulkDeleteRequest, background_tasks: Backgro
     """Start background global deletion for multiple employees."""
     if bulk_delete_status["is_running"]:
         raise HTTPException(status_code=400, detail="Another bulk operation is in progress")
-    
+
     background_tasks.add_task(bulk_delete_users_from_all_machines, req.employee_ids)
     return {"status": "Started", "count": len(req.employee_ids)}
 
@@ -489,7 +489,7 @@ def sync_employee_endpoint(req: SyncEmployeeRequest, background_tasks: Backgroun
                     sync_employee_status["processed_count"] = int(sync_employee_status["processed_count"]) + 1
             with sync_employee_status_lock:
                 sync_employee_status["is_running"] = False
-        
+
         background_tasks.add_task(run_demo)
         return {"status": "Success"}
 
