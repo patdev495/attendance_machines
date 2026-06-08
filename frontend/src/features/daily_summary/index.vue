@@ -76,6 +76,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationStore } from '@/stores/notification'
+import { createBackgroundOperation } from '@/composables/useBackgroundOperation.js'
 import AppModal from '@/components/shared/AppModal.vue'
 import { dailySummaryApi } from './api'
 import SummaryFilters from './components/SummaryFilters.vue'
@@ -98,8 +99,6 @@ const syncStatus = ref({
   current_step: '',
   error: null
 })
-
-let syncPollInterval = null
 
 const filters = reactive({
   employee_id: '',
@@ -163,7 +162,29 @@ const handleViewDetail = async (item) => {
   }
 }
 
-let exportPoller = null
+const exportOperation = createBackgroundOperation({
+  getStatus: dailySummaryApi.getExportStatus,
+  intervalMs: 1500,
+  requireRunningBeforeComplete: true,
+  maxInitialStalePolls: 2,
+  onStatus(status) {
+    exportStatus.value = status
+  },
+  onError(status) {
+    exporting.value = false
+    notify.error(t('attendance.export.error_prefix') + ': ' + status.error)
+  },
+  onComplete(status) {
+    exporting.value = false
+    if (status.progress === 100) {
+      dailySummaryApi.downloadExport()
+    }
+  },
+  onPollError(e) {
+    console.error('Export poll error', e)
+  },
+})
+
 const triggerExport = async () => {
     if (!filters.start_date || !filters.end_date) {
         notify.warn(t('export.error_missing_dates'))
@@ -176,32 +197,32 @@ const triggerExport = async () => {
             view_mode: exportMode.value
         })
         exporting.value = true
-        startExportPolling()
+        exportOperation.startPolling({ immediate: true })
     } catch (e) {
         notify.error(t('export.error_failed') + ': ' + e.message)
+        exporting.value = false
     }
 }
 
-const startExportPolling = () => {
-    if (exportPoller) clearInterval(exportPoller)
-    exportPoller = setInterval(async () => {
-        try {
-            const { data } = await dailySummaryApi.getExportStatus()
-            exportStatus.value = data
-            if (!data.is_running && data.progress === 100) {
-                clearInterval(exportPoller)
-                exporting.value = false
-                dailySummaryApi.downloadExport()
-            } else if (data.error) {
-                clearInterval(exportPoller)
-                exporting.value = false
-                notify.error(t('attendance.export.error_prefix') + ': ' + data.error)
-            }
-        } catch (e) {
-            console.error('Export poll error', e)
-        }
-    }, 1500)
-}
+const syncOperation = createBackgroundOperation({
+  getStatus: dailySummaryApi.getSyncStatus,
+  intervalMs: 2000,
+  requireRunningBeforeComplete: true,
+  maxInitialStalePolls: 2,
+  initialStatus: syncStatus.value,
+  onStatus(status) {
+    syncStatus.value = status
+  },
+  onComplete(status) {
+    syncStatus.value = status
+    if (!status.error) {
+      fetchData()
+    }
+  },
+  onPollError(err) {
+    console.error('Sync poll error', err)
+  },
+})
 
 const handleMachineSyncOnly = async () => {
   try {
@@ -211,29 +232,11 @@ const handleMachineSyncOnly = async () => {
     syncStatus.value.error = null
     
     await dailySummaryApi.syncExcel(null)
-    startSyncPolling()
+    syncOperation.startPolling({ immediate: true })
   } catch (err) {
     syncStatus.value.is_running = false
     syncStatus.value.error = err.response?.data?.detail || t('common.error')
   }
-}
-
-const startSyncPolling = () => {
-  if (syncPollInterval) clearInterval(syncPollInterval)
-  syncPollInterval = setInterval(async () => {
-    try {
-      const { data } = await dailySummaryApi.getSyncStatus()
-      syncStatus.value = data
-      if (!data.is_running) {
-        clearInterval(syncPollInterval)
-        if (!data.error) {
-          fetchData() // Refresh report data
-        }
-      }
-    } catch (err) {
-      console.error('Sync poll error', err)
-    }
-  }, 2000)
 }
 
 const formatDateTime = (timeStr) => {
@@ -264,8 +267,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-    if (exportPoller) clearInterval(exportPoller)
-    if (syncPollInterval) clearInterval(syncPollInterval)
+    exportOperation.dispose()
+    syncOperation.dispose()
 })
 </script>
 

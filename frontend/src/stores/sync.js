@@ -4,6 +4,7 @@ import { logsApi } from '@/features/logs/api.js'
 import { dailySummaryApi } from '@/features/daily_summary/api.js'
 import { employeesApi } from '@/features/employees/api.js'
 import { getDeleteStatus as apiGetDeleteStatus } from '@/features/machines/api.js'
+import { createBackgroundOperation } from '@/composables/useBackgroundOperation.js'
 import { useNotificationStore } from '@/stores/notification.js'
 import { i18n } from '@/i18n'
 
@@ -21,66 +22,98 @@ export const useSyncStore = defineStore('sync', () => {
   const deleteRunning = ref(false)
   const deleteMessage = ref('')
 
-  // Excel Sync State
   const excelSyncRunning = ref(false)
   const excelSyncProgress = ref(0)
   const excelSyncStep = ref('')
   const excelSyncTotal = ref(0)
   const excelSyncError = ref(null)
 
-  let syncPoller = null
-  let deletePoller = null
-  let excelPoller = null
+  let syncHideTimer = null
+  let deleteHideTimer = null
+  let excelHideTimer = null
+  let deleteOperation = null
+
+  const rawLogOperation = createBackgroundOperation({
+    getStatus: getSyncStatus,
+    intervalMs: 1500,
+    requireRunningBeforeComplete: true,
+    maxInitialStalePolls: 2,
+    onStatus(status) {
+      if (status.is_running) {
+        syncMessage.value = i18n.global.t('sync.progress', {
+          current: status.current_machine_index,
+          total: status.total_machines,
+          ip: status.current_machine_ip,
+          added: status.total_added || 0
+        })
+      }
+    },
+    onComplete() {
+      syncMessage.value = i18n.global.t('sync.completed')
+      syncHideTimer = setTimeout(() => { syncRunning.value = false }, 3000)
+    },
+    onPollError(error) {
+      console.error('Status poll failed', error)
+    },
+  })
+
+  const excelOperation = createBackgroundOperation({
+    getStatus: getExcelSyncStatus,
+    intervalMs: 1000,
+    requireRunningBeforeComplete: true,
+    maxInitialStalePolls: 2,
+    onStatus(status) {
+      excelSyncProgress.value = status.progress || 0
+      excelSyncStep.value = status.current_step || ''
+      excelSyncTotal.value = status.total || 0
+      excelSyncRunning.value = Boolean(status.is_running)
+    },
+    onError(status) {
+      excelSyncError.value = status.error
+      excelSyncRunning.value = false
+      notification.error('Sync failed: ' + status.error)
+    },
+    onComplete(status) {
+      if (status.progress === 100) {
+        const msg = status.current_step || i18n.global.t('sync.completed')
+        excelSyncStep.value = msg
+        notification.success(msg)
+        excelHideTimer = setTimeout(() => { excelSyncRunning.value = false }, 5000)
+      } else {
+        excelSyncRunning.value = false
+      }
+    },
+    onPollError(error) {
+      console.error('Excel sync status poll failed', error)
+    },
+  })
 
   async function startSync(filters = {}) {
     if (syncRunning.value) return
+    if (syncHideTimer) clearTimeout(syncHideTimer)
+
     syncRunning.value = true
     syncMessage.value = i18n.global.t('sync.initiating')
+
     const syncParams = {
       start_date: filters.start_date,
       end_date: filters.end_date
     }
-    
-    // Start polling immediately so the UI reflects the first machine connection
-    const poll = async () => {
-      try {
-        const res = await getSyncStatus()
-        const status = res.data
-        if (!status.is_running) {
-          syncMessage.value = i18n.global.t('sync.completed')
-          clearInterval(syncPoller)
-          syncPoller = null
-          setTimeout(() => { syncRunning.value = false }, 3000)
-        } else {
-          syncMessage.value = i18n.global.t('sync.progress', { 
-            current: status.current_machine_index, 
-            total: status.total_machines, 
-            ip: status.current_machine_ip, 
-            added: status.total_added || 0 
-          })
-        }
-      } catch (e) {
-        console.error('Status poll failed', e)
-      }
-    }
 
-    if (syncPoller) clearInterval(syncPoller)
-    syncPoller = setInterval(poll, 1500)
-    
     try {
       await triggerSync(syncParams)
-      // Initial poll after trigger to catch immediate state change
-      await poll()
+      rawLogOperation.startPolling({ immediate: true })
     } catch (e) {
       syncMessage.value = 'Sync failed: ' + e.message
       syncRunning.value = false
-      if (syncPoller) clearInterval(syncPoller)
+      rawLogOperation.stopPolling()
     }
   }
 
   async function syncExcelFile(file) {
     if (excelSyncRunning.value) return
-    
+    if (excelHideTimer) clearTimeout(excelHideTimer)
+
     excelSyncError.value = null
     excelSyncProgress.value = 0
     excelSyncStep.value = i18n.global.t('sync.uploading')
@@ -88,94 +121,69 @@ export const useSyncStore = defineStore('sync', () => {
 
     try {
       await syncEmployeesExcel(file)
-      startExcelPolling()
+      excelOperation.startPolling({ immediate: true })
     } catch (e) {
       excelSyncError.value = e.message
       excelSyncRunning.value = false
+      excelOperation.stopPolling()
       throw e
     }
   }
 
-  function startExcelPolling() {
-    if (excelPoller) clearInterval(excelPoller)
-    excelPoller = setInterval(async () => {
-      try {
-        const status = await getExcelSyncStatus()
-        excelSyncProgress.value = status.progress
-        excelSyncStep.value = status.current_step
-        excelSyncTotal.value = status.total
-        excelSyncRunning.value = status.is_running
-        
-        if (status.error) {
-          excelSyncError.value = status.error
-          stopExcelPolling()
-          notification.error('Sync failed: ' + status.error)
-        } else if (!status.is_running) {
-          stopExcelPolling()
-          if (status.progress === 100) {
-            const msg = status.current_step || i18n.global.t('sync.completed')
-            excelSyncStep.value = msg
-            notification.success(msg)
-            // Hide banner after 5 seconds
-            setTimeout(() => { excelSyncRunning.value = false }, 5000)
-          } else {
-            // Task stopped without finishing (e.g. server reset)
-            excelSyncRunning.value = false
-          }
-        }
-      } catch (e) {
-        console.error('Excel sync status poll failed', e)
-      }
-    }, 1000)
-  }
-
-  function stopExcelPolling() {
-    if (excelPoller) clearInterval(excelPoller)
-    excelPoller = null
-  }
-
   async function startDeleteEmployee(employeeId) {
     if (deleteRunning.value) return
+    if (deleteHideTimer) clearTimeout(deleteHideTimer)
+
     deleteRunning.value = true
     deleteMessage.value = i18n.global.t('actions.delete_initiating', { id: employeeId })
-    
-    const poll = async () => {
-      try {
-        const status = await getDeleteStatus(employeeId)
-        if (!status.is_running) {
-          deleteMessage.value = i18n.global.t('actions.delete_completed', { id: employeeId })
-          clearInterval(deletePoller)
-          deletePoller = null
-          setTimeout(() => { deleteRunning.value = false }, 3000)
-        } else {
-          deleteMessage.value = i18n.global.t('actions.delete_progress', { 
-            id: employeeId, 
-            current: status.processed_count, 
-            total: status.total_machines, 
-            ip: status.current_ip 
+
+    deleteOperation?.stopPolling()
+    deleteOperation = createBackgroundOperation({
+      getStatus: () => getDeleteStatus(employeeId),
+      intervalMs: 1500,
+      requireRunningBeforeComplete: true,
+      maxInitialStalePolls: 2,
+      onStatus(status) {
+        if (status.is_running) {
+          deleteMessage.value = i18n.global.t('actions.delete_progress', {
+            id: employeeId,
+            current: status.processed_count,
+            total: status.total_machines,
+            ip: status.current_ip
           })
         }
-      } catch (e) {
-        console.error('Delete status poll failed', e)
-      }
-    }
-
-    if (deletePoller) clearInterval(deletePoller)
-    deletePoller = setInterval(poll, 1500)
+      },
+      onComplete() {
+        deleteMessage.value = i18n.global.t('actions.delete_completed', { id: employeeId })
+        deleteHideTimer = setTimeout(() => { deleteRunning.value = false }, 3000)
+      },
+      onPollError(error) {
+        console.error('Delete status poll failed', error)
+      },
+    })
 
     try {
       await deleteEmployeeFromAllMachines(employeeId)
-      await poll()
+      deleteOperation.startPolling({ immediate: true })
     } catch (e) {
       deleteMessage.value = 'Error: ' + e.message
       deleteRunning.value = false
-      if (deletePoller) clearInterval(deletePoller)
+      deleteOperation.stopPolling()
     }
   }
 
-  return { 
-    syncRunning, syncMessage, deleteRunning, deleteMessage, 
-    excelSyncRunning, excelSyncProgress, excelSyncStep, excelSyncTotal, excelSyncError,
-    startSync, syncExcelFile, startDeleteEmployee 
+  return {
+    syncRunning,
+    syncMessage,
+    deleteRunning,
+    deleteMessage,
+    excelSyncRunning,
+    excelSyncProgress,
+    excelSyncStep,
+    excelSyncTotal,
+    excelSyncError,
+    startSync,
+    syncExcelFile,
+    startDeleteEmployee
   }
 })

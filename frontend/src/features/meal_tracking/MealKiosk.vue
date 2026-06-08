@@ -256,6 +256,7 @@ import { useRouter } from 'vue-router'
 import { mealApi } from './api'
 import { getLiveStatus, reconnectMachine } from '@/features/machines/api'
 import { useLiveLogs } from '@/features/logs/composables/useLiveLogs'
+import { createBackgroundInterval } from '@/composables/useBackgroundOperation.js'
 import { useUIStore } from '@/stores/ui'
 import { setLanguage } from '@/i18n/index.js'
 
@@ -335,9 +336,25 @@ const historyList = ref([])
 const loadingHistory = ref(false)
 
 const currentTime = ref('')
-let timeInterval = null
-let statsInterval = null
-let liveStatusInterval = null
+
+const clockTicker = createBackgroundInterval({
+  run: updateClock,
+  intervalMs: 1000,
+  immediate: true,
+})
+
+const statsPolling = createBackgroundInterval({
+  run: fetchStats,
+  intervalMs: 60000,
+  immediate: true,
+  onError: (e) => console.error('Failed to fetch stats', e),
+})
+
+const liveStatusPolling = createBackgroundInterval({
+  run: fetchLiveStatus,
+  intervalMs: 10000,
+  onError: (e) => console.error('Error fetching machine status:', e),
+})
 
 const activeMachines = computed(() => {
   if (selectedMachine.value === 'all') {
@@ -772,13 +789,10 @@ onMounted(() => {
   startDate.value = today
   endDate.value = today
   
-  updateClock()
-  timeInterval = setInterval(updateClock, 1000)
-  
-  fetchStats()
+  clockTicker.start()
+  statsPolling.start()
   loadTodayPickups()
-  statsInterval = setInterval(fetchStats, 60000)
-  liveStatusInterval = setInterval(fetchLiveStatus, 10000)
+  liveStatusPolling.start()
   
   fetchCanteenMachines().then(() => {
     if (showHistory.value) handleSearch()
@@ -787,9 +801,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  clearInterval(timeInterval)
-  clearInterval(statsInterval)
-  clearInterval(liveStatusInterval)
+  clockTicker.dispose()
+  statsPolling.dispose()
+  liveStatusPolling.dispose()
   disconnect()
   uiStore.setSidebar(true)
 })

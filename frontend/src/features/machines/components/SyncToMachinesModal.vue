@@ -113,9 +113,10 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as machinesApi from '../api.js'
+import { createBackgroundOperation } from '@/composables/useBackgroundOperation.js'
 
 const props = defineProps({
   isOpen: { type: Boolean, default: false },
@@ -140,8 +141,6 @@ const syncStatus = ref({
   current_ip: '',
   results: {},
 })
-
-let pollTimer = null
 
 const targetMachines = computed(() =>
   machines.value.filter(m => m.ip !== props.sourceIp)
@@ -174,7 +173,7 @@ function toggleAll() {
 
 function close() {
   if (!isRunning.value) {
-    stopPolling()
+    syncOperation.stopPolling()
     emit('close')
   }
 }
@@ -210,37 +209,33 @@ async function startSync() {
       props.employeeName,
       selectedIps.value
     )
-    startPolling()
+    syncOperation.startPolling({ immediate: true })
   } catch (err) {
     isRunning.value = false
     syncStatus.value.results.General = t('device.sync_modal.general_error', { err: err.message })
     isDone.value = true
+    syncOperation.stopPolling()
   }
 }
 
-function startPolling() {
-  stopPolling()
-  pollTimer = setInterval(async () => {
-    try {
-      const status = await machinesApi.getSyncEmployeeStatus()
-      syncStatus.value = status
-      if (!status.is_running) {
-        stopPolling()
-        isRunning.value = false
-        isDone.value = true
-      }
-    } catch (err) {
-      console.error('Poll error', err)
-    }
-  }, 800)
-}
-
-function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+const syncOperation = createBackgroundOperation({
+  getStatus: machinesApi.getSyncEmployeeStatus,
+  intervalMs: 800,
+  initialStatus: syncStatus.value,
+  requireRunningBeforeComplete: true,
+  maxInitialStalePolls: 2,
+  onStatus(status) {
+    syncStatus.value = status
+  },
+  onComplete(status) {
+    syncStatus.value = status
+    isRunning.value = false
+    isDone.value = true
+  },
+  onPollError(err) {
+    console.error('Poll error', err)
+  },
+})
 
 watch(() => props.isOpen, (open) => {
   if (open) {
@@ -250,8 +245,12 @@ watch(() => props.isOpen, (open) => {
     syncStatus.value = { is_running: false, processed_count: 0, total_machines: 0, current_ip: '', results: {} }
     fetchMachines()
   } else {
-    stopPolling()
+    syncOperation.stopPolling()
   }
+})
+
+onUnmounted(() => {
+  syncOperation.dispose()
 })
 </script>
 

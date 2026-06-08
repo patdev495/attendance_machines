@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { dailySummaryApi } from '@/features/daily_summary/api.js'
+import { createBackgroundOperation } from '@/composables/useBackgroundOperation.js'
 import { i18n } from '@/i18n'
 
 const apiStart = dailySummaryApi.startExport
@@ -15,7 +16,30 @@ export const useExportStore = defineStore('export', () => {
   const error = ref(null)
   const filename = ref(null)
   
-  let poller = null
+  const exportOperation = createBackgroundOperation({
+    getStatus: apiStatus,
+    intervalMs: 1500,
+    requireRunningBeforeComplete: true,
+    maxInitialStalePolls: 2,
+    onStatus(status) {
+      progress.value = status.progress || 0
+      currentStep.value = status.current_step || ''
+      isRunning.value = Boolean(status.is_running)
+    },
+    onError(status) {
+      error.value = status.error
+      isRunning.value = false
+    },
+    onComplete(status) {
+      isRunning.value = false
+      if (status.progress === 100) {
+        triggerDownload()
+      }
+    },
+    onPollError(e) {
+      console.error('Export status poll failed', e)
+    },
+  })
 
   async function start(startDate, endDate, viewMode) {
     if (isRunning.value) return
@@ -28,45 +52,18 @@ export const useExportStore = defineStore('export', () => {
 
     try {
       await apiStart(startDate, endDate, viewMode)
-      startPolling()
+      exportOperation.startPolling({ immediate: true })
     } catch (e) {
       error.value = e.message
       isRunning.value = false
     }
   }
 
-  function startPolling() {
-    if (poller) clearInterval(poller)
-    poller = setInterval(async () => {
-      try {
-        const status = await apiStatus()
-        progress.value = status.progress
-        currentStep.value = status.current_step
-        isRunning.value = status.is_running
-        
-        if (status.error) {
-          error.value = status.error
-          stopPolling()
-        } else if (!status.is_running && status.progress === 100) {
-          stopPolling()
-          triggerDownload()
-        }
-      } catch (e) {
-        console.error('Export status poll failed', e)
-      }
-    }, 1500)
-  }
-
-  function stopPolling() {
-    if (poller) clearInterval(poller)
-    poller = null
-  }
-
   async function cancel() {
     try {
       await apiCancel()
       isRunning.value = false
-      stopPolling()
+      exportOperation.stopPolling()
       currentStep.value = i18n.global.t('export.cancelled')
     } catch (e) {
       console.error('Cancel failed', e)
