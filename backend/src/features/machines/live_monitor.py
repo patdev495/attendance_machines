@@ -38,7 +38,7 @@ class LiveMonitorManager:
         self._last_real_event = {} # ip -> timestamp of last real event (not None)
 
     @staticmethod
-    def _test_network_reach(ip, port=4370, timeout=3):
+    def _test_network_reach(ip, port=9922, timeout=3):
         """Quick TCP reachability test — returns (ok, error_msg)."""
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -88,7 +88,6 @@ class LiveMonitorManager:
 
                 for cfg in live_configs:
                     ip = cfg['ip']
-                    protocol = cfg.get('protocol', 'hanvon')
                     self.meal_configs[ip] = cfg['meal_url']
                     if cfg.get('is_canteen'):
                         self.canteen_ips.add(ip)
@@ -96,8 +95,8 @@ class LiveMonitorManager:
                         self.canteen_ips.discard(ip)
                     # Start monitor if it's new or the previous thread died
                     if ip not in self.active_monitors or not self.active_monitors[ip].is_alive():
-                        logger.info(f"[MGMT] Starting {protocol} monitor thread for {ip} (canteen={cfg.get('is_canteen', False)})")
-                        self._start_monitor(ip, protocol)
+                        logger.info(f"[MGMT] Starting Hanvon monitor thread for {ip} (canteen={cfg.get('is_canteen', False)})")
+                        self._start_monitor(ip)
                 
                 # Stop monitors for IPs that are no longer marked as live
                 # (either removed from file or marked with # nolive)
@@ -137,82 +136,14 @@ class LiveMonitorManager:
         logger.info("Stopping Live Monitor Manager...")
         # Threads will exit on their next loop iteration or timeout
 
-    def _start_monitor(self, ip, protocol="hanvon"):
+    def _start_monitor(self, ip):
         if ip in self.active_monitors and self.active_monitors[ip].is_alive():
             return
-        
-        thread = threading.Thread(target=self._monitor_loop, args=(ip, protocol), daemon=True)
+
+        thread = threading.Thread(target=self._monitor_hanvon_loop, args=(ip,), daemon=True)
         thread.start()
         self.active_monitors[ip] = thread
-        logger.info(f"Started {protocol} live monitor thread for {ip}")
-
-    def _monitor_loop(self, ip, protocol="hanvon"):
-        self._monitor_hanvon_loop(ip)
-
-    def _monitor_zkteco_loop(self, ip):
-        """Background loop for a single machine."""
-        retry_count = 0
-        logger.info(f"[MONITOR {ip}] Thread started")
-        # Thread exits if manager stops OR if this IP is no longer in active_monitors
-        while self.is_running and ip in self.active_monitors:
-            retry_count += 1
-            
-            # Quick network reachability test before attempting ZK connection
-            ok, err = self._test_network_reach(ip)
-            if not ok:
-                logger.error(f"[MONITOR {ip}] Network unreachable (attempt #{retry_count}): {err}")
-                time.sleep(10)  # Back off longer when network is down
-                continue
-            
-            logger.info(f"[MONITOR {ip}] Connecting (attempt #{retry_count})...")
-            zk = ZK(ip, port=4370, timeout=10, force_udp=False)
-            conn = None
-            try:
-                conn = zk.connect()
-                retry_count = 0  # Reset on successful connect
-                self._status[ip] = "connected"
-                self._last_activity[ip] = time.time()
-                logger.info(f"[MONITOR {ip}] Connected OK — entering live_capture")
-                
-                # Ignore buffered/replayed events that arrive immediately upon connection
-                ignore_until = time.time() + 2
-                
-                # live_capture is a generator that yields attendance records
-                for event in conn.live_capture():
-                    # Update activity timestamp every time we get something (even None on timeout)
-                    self._last_activity[ip] = time.time()
-
-                    if not self.is_running or ip not in self.active_monitors:
-                        logger.info(f"[MONITOR {ip}] Stopping (manager stopped or IP removed)")
-                        break
-                    
-                    if event is None:
-                        # This happens on timeout (10s), just keep waiting
-                        continue
-                    
-                    # Update last real event time
-                    self._last_real_event[ip] = time.time()
-                        
-                    if time.time() < ignore_until:
-                        logger.debug(f"[MONITOR {ip}] Skipping replayed event: {event}")
-                        continue
-                        
-                    logger.info(f"[MONITOR {ip}] EVENT: user_id={event.user_id}, time={event.timestamp}")
-                    self._process_event(ip, event)
-                    
-            except Exception as e:
-                if self.is_running:
-                    self._status[ip] = "disconnected"
-                    logger.error(f"[MONITOR {ip}] Error (attempt #{retry_count}): {e}")
-                    time.sleep(5)
-            finally:
-                if conn:
-                    try: 
-                        # Ensure we really clear the SDK state
-                        conn.disconnect()
-                    except: pass
-                logger.info(f"[MONITOR {ip}] Disconnected — cooldown 5s before reconnect")
-                time.sleep(5) # Cooldown before reconnect
+        logger.info(f"Started Hanvon live monitor thread for {ip}")
 
     def _monitor_hanvon_loop(self, ip):
         retry_count = 0
@@ -468,7 +399,7 @@ class LiveMonitorManager:
                 if cfg["ip"] == ip:
                     protocol = cfg.get("protocol", "hanvon")
                     break
-            self._start_monitor(ip, protocol)
+            self._start_monitor(ip)
             return True, "Started monitor thread"
 
 # Global instance
