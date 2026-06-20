@@ -14,7 +14,14 @@ from .schema import (
     UpdateHardwareOut,
     BiometricCoverageOut
 )
-from .service import update_registry, delete_user_from_hardware, update_employee_info, export_employees_to_excel
+from .service import (
+    update_registry, 
+    delete_user_from_hardware, 
+    update_employee_info, 
+    export_employees_to_excel,
+    run_bulk_push_on_machines,
+    bulk_push_status
+)
 from .registry_service import filter_registry_by_employee_search
 from features.machines.service import (
     get_biometric_coverage, 
@@ -118,25 +125,26 @@ def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Dep
     results = {}
     if payload.emp_name:
         results = update_employee_info(employee_id, payload.emp_name, db)
-    
+
     # Also update other fields locally
     registry_entry = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id == employee_id).first()
     if not registry_entry:
         raise HTTPException(status_code=404, detail="Employee not found")
-        
+
     if payload.department is not None:
-        registry_entry.department = payload.department
+        registry_entry.department = payload.department  # type: ignore[assignment]
     if payload.group_name is not None:
-        registry_entry.group_name = payload.group_name
+        registry_entry.group_name = payload.group_name  # type: ignore[assignment]
     if payload.shift is not None:
-        registry_entry.shift = payload.shift
-        
+        registry_entry.shift = payload.shift  # type: ignore[assignment]
+
     db.commit()
-    
+
     return UpdateHardwareOut(results=results)
 
 @router.get("/{employee_id}/biometric-coverage", response_model=List[BiometricCoverageOut])
 def get_biometric_coverage_endpoint(employee_id: str):
+
     results = get_biometric_coverage(employee_id)
     return results
 
@@ -164,3 +172,37 @@ async def bulk_delete_hardware_endpoint(
         
     bg_tasks.add_task(run_bulk_delete_on_machines, employee_ids, ips)
     return {"status": "Started", "count": len(employee_ids), "total_machines": len(ips)}
+
+@router.post("/bulk-push-hardware")
+async def bulk_push_hardware_endpoint(
+    bg_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    machine_ips: str = Form(...)
+):
+    # 1. Parse IDs from file
+    content = await file.read()
+    try:
+        text = content.decode('utf-8')
+    except UnicodeDecodeError:
+        text = content.decode('latin-1')
+        
+    # Filter out empty lines and strip whitespace
+    employee_ids = [line.strip() for line in text.splitlines() if line.strip()]
+    
+    if not employee_ids:
+        raise HTTPException(status_code=400, detail="No valid Employee IDs found in file")
+        
+    ips = [ip.strip() for ip in machine_ips.split(",") if ip.strip()]
+    if not ips:
+        raise HTTPException(status_code=400, detail="No target machines selected")
+
+    if bulk_push_status["is_running"]:
+        raise HTTPException(status_code=400, detail="Another bulk push operation is in progress")
+        
+    bg_tasks.add_task(run_bulk_push_on_machines, employee_ids, ips)
+    return {"status": "Started", "count": len(employee_ids), "total_machines": len(ips)}
+
+@router.get("/bulk-push-status")
+def get_bulk_push_status_endpoint():
+    return bulk_push_status
+

@@ -166,7 +166,24 @@
         "deleted": "Deleted",
         "status": "Result"
       }
-    }
+    },
+    "bulk_hardware_push": {
+      "title": "Bulk Push to Machines",
+      "subtitle": "Select a TXT file with employee IDs and target machines to push data",
+      "upload_label": "Upload TXT file (one employee ID per line)",
+      "file_help": "Click to select a .txt file",
+      "select_machines": "Select Target Machines",
+      "start": "Start Push",
+      "initializing": "Initializing...",
+      "status_running": "Processing machine {current} / {total}",
+      "missing_warning": "{count} IDs not found in DB — will be created on machines",
+      "results_table": {
+        "ip": "Machine IP",
+        "pushed": "Pushed",
+        "status": "Status"
+      }
+    },
+    "bulk_push_progress_detail": "Machine {current}/{total} — IP: {ip}"
   },
   "attendance": {
     "raw_logs": "Raw Logs",

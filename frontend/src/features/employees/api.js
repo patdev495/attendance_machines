@@ -50,5 +50,20 @@ export const employeesApi = {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
     return response.data
+  },
+
+  bulkPushHardware: async (file, machineIps) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('machine_ips', machineIps.join(','))
+    const response = await axios.post(`${BASE}/bulk-push-hardware`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    return response.data
+  },
+
+  getBulkPushStatus: async () => {
+    const response = await axios.get(`${BASE}/bulk-push-status`)
+    return response.data
   }
 }

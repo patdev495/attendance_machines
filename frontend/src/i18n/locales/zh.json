@@ -165,7 +165,24 @@
         "deleted": "已删除",
         "status": "结果"
       }
-    }
+    },
+    "bulk_hardware_push": {
+      "title": "批量推送到设备",
+      "subtitle": "选择包含员工编号的TXT文件和目标设备进行批量推送",
+      "upload_label": "上传TXT文件（每行一个员工编号）",
+      "file_help": "点击选择 .txt 文件",
+      "select_machines": "选择目标设备",
+      "start": "开始推送",
+      "initializing": "初始化中...",
+      "status_running": "正在处理设备 {current} / {total}",
+      "missing_warning": "{count} 个编号在系统中不存在 — 将在设备上新建",
+      "results_table": {
+        "ip": "设备IP",
+        "pushed": "已推送",
+        "status": "状态"
+      }
+    },
+    "bulk_push_progress_detail": "设备 {current}/{total} — IP: {ip}"
   },
   "attendance": {
     "raw_logs": "原始记录",
@@ -320,9 +337,9 @@
       "choose_new_photo": "选择新照片（可选）",
       "clear_new_photo": "清除新照片",
       "preserve_existing_photo": "留空则保留机器上现有的人脸/模板。",
-      "loading_current_photo": "\u6b63\u5728\u52a0\u8f7d\u5f53\u524d\u7167\u7247...",
-      "no_current_photo": "\u6b64\u673a\u5668\u4e0a\u6ca1\u6709\u5f53\u524d\u7167\u7247\u3002",
-      "current_photo_failed": "\u65e0\u6cd5\u4ece\u6b64\u673a\u5668\u52a0\u8f7d\u5f53\u524d\u7167\u7247\u3002",
+      "loading_current_photo": "正在加载当前照片...",
+      "no_current_photo": "此机器上没有当前照片。",
+      "current_photo_failed": "无法从此机器加载当前照片。",
       "photo_drop": "点击或拖拽图片到这里",
       "photo_manager_hint": "JPEG/JPG，≥15KB（管理员必填）",
       "photo_optional_hint": "JPEG/JPG，可选",

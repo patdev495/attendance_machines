@@ -26,6 +26,9 @@
           <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
             <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
           </button>
+          <button class="btn-secondary btn-green" @click="isBulkPushModalOpen = true">
+            <span class="icon">📤</span> {{ $t('employees.bulk_hardware_push.title') }}
+          </button>
         </div>
 
         <!-- Bulk Delete (Selected) -->
@@ -116,6 +119,11 @@
       @close="isBulkDeleteModalOpen = false"
     />
 
+    <BulkPushHardwareModal
+      :isOpen="isBulkPushModalOpen"
+      @close="isBulkPushModalOpen = false"
+    />
+
   </div>
 </template>
 
@@ -127,6 +135,7 @@ import EditEmployeeModal from './components/EditEmployeeModal.vue'
 import EmployeeDetailsModal from './components/EmployeeDetailsModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
 import BulkDeleteHardwareModal from './components/BulkDeleteHardwareModal.vue'
+import BulkPushHardwareModal from './components/BulkPushHardwareModal.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
 import { useI18n } from 'vue-i18n'
@@ -320,6 +329,7 @@ const isEditModalOpen = ref(false)
 const isDetailsModalOpen = ref(false)
 const isCoverageModalOpen = ref(false)
 const isBulkDeleteModalOpen = ref(false)
+const isBulkPushModalOpen = ref(false)
 const selectedEmployee = ref(null)
 
 const onView = (emp) => {

@@ -167,7 +167,24 @@
         "deleted": "Đã xóa",
         "status": "Kết quả"
       }
-    }
+    },
+    "bulk_hardware_push": {
+      "title": "Đẩy Hàng Loạt Lên Máy",
+      "subtitle": "Chọn file TXT chứa mã nhân viên và chọn máy đích để đẩy dữ liệu",
+      "upload_label": "Tải lên file TXT (mỗi dòng 1 mã NV)",
+      "file_help": "Click để chọn file .txt",
+      "select_machines": "Chọn Máy Đích",
+      "start": "Bắt Đầu Đẩy",
+      "initializing": "Đang khởi tạo...",
+      "status_running": "Đang xử lý máy {current} / {total}",
+      "missing_warning": "{count} mã NV chưa có thông tin — sẽ tạo mới trên máy",
+      "results_table": {
+        "ip": "IP Máy",
+        "pushed": "Đã Đẩy",
+        "status": "Trạng Thái"
+      }
+    },
+    "bulk_push_progress_detail": "Máy {current}/{total} — IP: {ip}"
   },
   "attendance": {
     "raw_logs": "Log Thô",
@@ -326,9 +343,9 @@
       "choose_new_photo": "Chọn ảnh mới (tùy chọn)",
       "clear_new_photo": "Bỏ ảnh mới",
       "preserve_existing_photo": "Để trống để backend giữ ảnh/template hiện có trên máy.",
-      "loading_current_photo": "\u0110ang t\u1ea3i \u1ea3nh hi\u1ec7n t\u1ea1i...",
-      "no_current_photo": "M\u00e1y n\u00e0y ch\u01b0a c\u00f3 \u1ea3nh hi\u1ec7n t\u1ea1i.",
-      "current_photo_failed": "Kh\u00f4ng th\u1ec3 t\u1ea3i \u1ea3nh hi\u1ec7n t\u1ea1i t\u1eeb m\u00e1y n\u00e0y.",
+      "loading_current_photo": "Đang tải ảnh hiện tại...",
+      "no_current_photo": "Máy này chưa có ảnh hiện tại.",
+      "current_photo_failed": "Không thể tải ảnh hiện tại từ máy này.",
       "photo_drop": "Click hoặc kéo ảnh vào đây",
       "photo_manager_hint": "JPEG/JPG, ≥15KB (bắt buộc cho manager)",
       "photo_optional_hint": "JPEG/JPG, tùy chọn",
