@@ -2,10 +2,11 @@
 Meal Tracking API Router
 Provides endpoints for meal registration lookup and kiosk WebSocket support.
 """
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, HTTPException
 from typing import Optional
 from datetime import date as date_type
 import logging
+from utils.date_utils import parse_date_robust
 
 from pydantic import BaseModel
 from datetime import datetime
@@ -76,12 +77,17 @@ def manual_swipe(req: ManualSwipeRequest):
 
 
 @router.get("/check/{emp_id}")
-def check_meal(emp_id: str, check_date: Optional[date_type] = Query(None)):
+def check_meal(emp_id: str, check_date: Optional[str] = Query(None)):
     """
     Check meal registration for an employee.
     Tries both direct EMP_NO match and machine-ID-to-employee mapping.
     """
-    result = check_meal_by_machine_id(emp_id, check_date)
+    try:
+        parsed_check_date = parse_date_robust(check_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    result = check_meal_by_machine_id(emp_id, parsed_check_date)
     if result:
         return {"found": True, **result}
     
@@ -95,18 +101,24 @@ def check_meal(emp_id: str, check_date: Optional[date_type] = Query(None)):
 
 @router.get("/list")
 def list_meals(
-    start_date: date_type = Query(...),
-    end_date: date_type = Query(...),
+    start_date: str = Query(...),
+    end_date: str = Query(...),
     emp_no: Optional[str] = Query(None)
 ):
     """
     List meal registrations for a date range, optionally filtered by employee.
     """
+    try:
+        parsed_start = parse_date_robust(start_date)
+        parsed_end = parse_date_robust(end_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     target_ids = None
     if emp_no:
         target_ids = resolve_emp_no(emp_no)
         
-    items = get_meal_list(start_date, end_date, target_ids)
+    items = get_meal_list(parsed_start, parsed_end, target_ids)
     return {
         "items": items,
         "total_count": len(items)

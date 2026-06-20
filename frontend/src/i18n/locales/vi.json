@@ -552,6 +552,12 @@
     "last_event": "Lần cuối:",
     "no_event": "Chưa nhận lượt chấm",
     "reconnect_btn": "Reset",
-    "reconnect_title": "Kết nối lại luồng live-monitor cho máy"
+    "reconnect_title": "Kết nối lại luồng live-monitor cho máy",
+    "add_machine": "Thêm Máy Mới",
+    "delete_machine": "Xóa Máy",
+    "delete_machine_confirm": "Bạn có chắc chắn muốn xóa máy chấm công này khỏi hệ thống không? Hành động này cũng sẽ dừng theo dõi trực tiếp đối với IP này.",
+    "ip_placeholder": "Ví dụ: 192.168.1.100",
+    "add_btn": "Thêm",
+    "ip_invalid": "Định dạng địa chỉ IP không hợp lệ"
   }
 }

@@ -155,3 +155,36 @@ def update_machine_tags(ip, is_live, is_canteen, file_path=config.MACHINES_FILE)
     except Exception as e:
         logger.error(f"Error updating machine tags: {e}")
         return False, str(e)
+
+def delete_machine_config(ip, file_path=config.MACHINES_FILE):
+    """
+    Deletes the configuration for a specific machine IP from machines.txt.
+    """
+    try:
+        lines = []
+        with open(file_path, "r") as f:
+            lines = f.readlines()
+            
+        new_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                new_lines.append(line)
+                continue
+                
+            if stripped.startswith('#'):
+                new_lines.append(line)
+                continue
+                
+            line_ip = stripped.split('#')[0].strip()
+            if line_ip == ip:
+                continue
+            new_lines.append(line)
+            
+        with open(file_path, "w") as f:
+            f.writelines(new_lines)
+        return True, "Success"
+    except Exception as e:
+        logger.error(f"Error deleting machine config: {e}")
+        return False, str(e)
+

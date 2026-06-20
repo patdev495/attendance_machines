@@ -11,6 +11,7 @@ from datetime import date, datetime
 
 from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftDefinition
 from features.employees.registry_service import find_employee_ids_for_search, normalize_employee_id
+from utils.date_utils import parse_date_robust
 
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
 from .export_service import export_status, export_lock, run_export_task
@@ -38,8 +39,8 @@ def get_unique_shifts(db: Session = Depends(get_db)):
 
 @router.get("")
 def get_daily_summary(
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     employee_id: Optional[str] = Query(None),
     machine_ip: Optional[str] = Query(None),
     shift: Optional[str] = Query(None),
@@ -54,7 +55,13 @@ def get_daily_summary(
     size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    parts = build_daily_summary_query(db, start_date, end_date)
+    try:
+        parsed_start = parse_date_robust(start_date)
+        parsed_end = parse_date_robust(end_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    parts = build_daily_summary_query(db, parsed_start, parsed_end)
     query = parts.query
     union_keys = parts.union_keys
     agg_logs_sub = parts.agg_logs_sub
@@ -80,7 +87,7 @@ def get_daily_summary(
         query = query.filter(dynamic_status == status)
 
     if shift:
-        valid_shift_ids = db.query(ShiftDefinition.shift_code).subquery()
+        valid_shift_ids = db.query(ShiftDefinition.shift_code)
         effective_shift = func.coalesce(roster_sub.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift)
         mapped_shift = case(
             (effective_shift.in_(valid_shift_ids), effective_shift),
@@ -130,15 +137,20 @@ def get_daily_summary(
 @router.get("/detail")
 def get_daily_detail(
     employee_id: str = Query(...),
-    work_date: date = Query(...),
+    work_date: str = Query(...),
     db: Session = Depends(get_db)
 ):
+    try:
+        parsed_work_date = parse_date_robust(work_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     base_calc_sub = build_log_work_date_subquery(db)
 
     logs = db.query(AttendanceLog) \
              .join(base_calc_sub, AttendanceLog.id == base_calc_sub.c.id) \
              .filter(func.ltrim(func.rtrim(base_calc_sub.c.employee_id)) == employee_id.strip()) \
-             .filter(base_calc_sub.c.work_date == work_date) \
+             .filter(base_calc_sub.c.work_date == parsed_work_date) \
              .order_by(AttendanceLog.attendance_time) \
              .all()
     return logs
@@ -146,14 +158,23 @@ def get_daily_detail(
 @router.post("/export")
 def start_export(
     background_tasks: BackgroundTasks,
-    start_date: date = Query(...),
-    end_date: date = Query(...),
+    start_date: str = Query(...),
+    end_date: str = Query(...),
     view_mode: str = Query(..., description="'time', 'hours', or 'both'")
 ):
+    try:
+        parsed_start = parse_date_robust(start_date)
+        parsed_end = parse_date_robust(end_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if parsed_start is None or parsed_end is None:
+        raise HTTPException(status_code=400, detail="Start date and end date are required.")
+
     with export_lock:
         if export_status["is_running"]:
             return {"message": "Export already running", "status": export_status}
-    background_tasks.add_task(run_export_task, start_date, end_date, view_mode)
+    background_tasks.add_task(run_export_task, parsed_start, parsed_end, view_mode)
     return {"message": "Export started"}
 
 @router.get("/export/status")

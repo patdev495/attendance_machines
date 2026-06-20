@@ -113,7 +113,7 @@ async function fetchLiveStatus() {
 
 function getMachineStatusIcon(ip) {
   const m = machineStatus.value[ip]
-  if (!m) return '' // Only show icon for machines that HAVE a live monitor
+  if (!m) return '⚫' // No live monitor = nolive machine
   const status = typeof m === 'object' ? m.status : m
   if (status === 'connected') return '🟢'
   if (status === 'stuck') return '🟡'

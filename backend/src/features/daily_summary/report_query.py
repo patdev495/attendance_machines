@@ -1,5 +1,5 @@
 from datetime import date, time, timedelta
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Any
 
 from sqlalchemy import Date, Time, case, func, literal, text, true, union_all
 from sqlalchemy.orm import Session, aliased
@@ -14,10 +14,10 @@ from features.employees.registry_service import REPORT_SOURCE_STATUSES
 
 
 class DailySummaryQueryParts(NamedTuple):
-    query: object
-    union_keys: object
-    agg_logs_sub: object
-    roster_sub: object
+    query: Any
+    union_keys: Any
+    agg_logs_sub: Any
+    roster_sub: Any
 
 
 def date_range_subquery(

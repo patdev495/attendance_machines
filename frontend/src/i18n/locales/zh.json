@@ -512,6 +512,12 @@
     "last_event": "最后打卡:",
     "no_event": "尚未收到打卡",
     "reconnect_btn": "重连",
-    "reconnect_title": "重新连接该考勤机的实时监控线程"
+    "reconnect_title": "重新连接该考勤机的实时监控线程",
+    "add_machine": "添加新考勤机",
+    "delete_machine": "删除考勤机",
+    "delete_machine_confirm": "您确定要删除此考勤机吗？这也会停止该 IP 的实时监控。",
+    "ip_placeholder": "例如：192.168.1.100",
+    "add_btn": "添加",
+    "ip_invalid": "IP 地址格式无效"
   }
 }

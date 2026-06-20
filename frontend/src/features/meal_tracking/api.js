@@ -35,5 +35,9 @@ export const mealApi = {
 
   updateMachineConfig(ip, config) {
     return axios.post(`/api/machines/${ip}/config`, config)
+  },
+
+  deleteMachineConfig(ip) {
+    return axios.delete(`/api/machines/${ip}`)
   }
 }

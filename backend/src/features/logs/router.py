@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, WebSocket, WebSocketDisconnect, HTTPException
 import logging
 from sqlalchemy.orm import Session
 from shared.socket_manager import manager
@@ -9,6 +9,7 @@ from datetime import date as date_type
 from database import get_db, AttendanceLog
 from .service import sync_all_machines, sync_status, status_lock
 from features.employees.registry_service import employee_name_map, find_employee_ids_for_search, normalize_employee_id
+from utils.date_utils import parse_date_robust
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +19,18 @@ router = APIRouter(prefix="/api/logs", tags=["Logs"])
 def get_logs(
     employee_id: Optional[str] = Query(None),
     machine_ip: Optional[str] = Query(None),
-    start_date: Optional[date_type] = Query(None),
-    end_date: Optional[date_type] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
+    try:
+        parsed_start = parse_date_robust(start_date)
+        parsed_end = parse_date_robust(end_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     query = db.query(AttendanceLog)
 
     if employee_id:
@@ -37,10 +44,10 @@ def get_logs(
     if machine_ip:
         query = query.filter(AttendanceLog.machine_ip == machine_ip)
 
-    if start_date:
-        query = query.filter(AttendanceLog.attendance_date >= start_date)
-    if end_date:
-        query = query.filter(AttendanceLog.attendance_date <= end_date)
+    if parsed_start:
+        query = query.filter(AttendanceLog.attendance_date >= parsed_start)
+    if parsed_end:
+        query = query.filter(AttendanceLog.attendance_date <= parsed_end)
 
     total = query.count()
     logs = query.order_by(desc(AttendanceLog.attendance_time)) \
@@ -81,9 +88,15 @@ def get_date_range(db: Session = Depends(get_db)):
 @router.post("/sync")
 def start_sync(
     background_tasks: BackgroundTasks,
-    start_date: Optional[date_type] = Query(None),
-    end_date: Optional[date_type] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
 ):
+    try:
+        parsed_start = parse_date_robust(start_date)
+        parsed_end = parse_date_robust(end_date)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     from shared.hardware import get_all_machine_configs
     # Set running state BEFORE background task starts to avoid race condition
     # where the first poll sees is_running=False and thinks sync is complete
@@ -97,7 +110,7 @@ def start_sync(
         sync_status["current_machine_ip"] = ""
         sync_status["total_added"] = 0
         sync_status["fail_count"] = 0
-    background_tasks.add_task(sync_all_machines, start_date, end_date)
+    background_tasks.add_task(sync_all_machines, parsed_start, parsed_end)
     return {"message": "Sync started"}
 
 @router.get("/sync/status")

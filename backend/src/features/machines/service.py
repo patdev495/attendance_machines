@@ -2,7 +2,7 @@ from config import config, DEMO_MODE
 
 from database import SessionLocal, EmployeeMetadata
 from features.hanvon.client import HanvonClient
-from shared.hardware import get_machine_list, update_machine_tags, get_all_machine_configs
+from shared.hardware import get_machine_list, update_machine_tags, get_all_machine_configs, delete_machine_config
 import logging
 import threading
 import concurrent.futures

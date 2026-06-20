@@ -112,6 +112,10 @@ class LiveMonitorManager:
                             del self.meal_configs[ip]
                         if ip in self._last_activity:
                             del self._last_activity[ip]
+                        if ip in self._status:
+                            del self._status[ip]
+                        if ip in self._last_real_event:
+                            del self._last_real_event[ip]
 
                 # Watchdog: If a thread is alive but hasn't seen any activity for > 60s,
                 # it's likely stuck in a blocking read. We should restart it.

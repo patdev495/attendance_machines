@@ -39,27 +39,54 @@
                   {{ $t('meal.no_event') }}
                 </div>
               </div>
-              <div class="m-toggles">
-                <label class="toggle-switch">
-                  <input type="checkbox" v-model="m.is_live" @change="toggleMachineConfig(m)">
-                  <span class="slider"></span>
-                  <span class="label">Live</span>
-                </label>
-                <label class="toggle-switch">
-                  <input type="checkbox" v-model="m.is_canteen" @change="toggleMachineConfig(m)">
-                  <span class="slider"></span>
-                  <span class="label">{{ $t('meal.toggle_canteen') || 'Canteen' }}</span>
-                </label>
-                <button 
-                  v-if="m.is_live"
-                  class="btn btn-reconnect-small" 
-                  @click="handleReconnect(m.ip)"
-                  :disabled="reconnectingIps.includes(m.ip)"
-                  :title="$t('meal.reconnect_title') + ' ' + m.ip"
-                >
-                  🔄 {{ reconnectingIps.includes(m.ip) ? '...' : $t('meal.reconnect_btn') }}
-                </button>
-              </div>
+                <div class="m-toggles">
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="m.is_live" @change="toggleMachineConfig(m)">
+                    <span class="slider"></span>
+                    <span class="label">Live</span>
+                  </label>
+                  <label class="toggle-switch">
+                    <input type="checkbox" v-model="m.is_canteen" @change="toggleMachineConfig(m)">
+                    <span class="slider"></span>
+                    <span class="label">{{ $t('meal.toggle_canteen') || 'Canteen' }}</span>
+                  </label>
+                  <button 
+                    v-if="m.is_live"
+                    class="btn btn-reconnect-small" 
+                    @click="handleReconnect(m.ip)"
+                    :disabled="reconnectingIps.includes(m.ip)"
+                    :title="$t('meal.reconnect_title') + ' ' + m.ip"
+                  >
+                    🔄 {{ reconnectingIps.includes(m.ip) ? '...' : $t('meal.reconnect_btn') }}
+                  </button>
+                  <button
+                    class="btn btn-delete-machine"
+                    @click="handleDeleteMachine(m.ip)"
+                    :disabled="deletingIps.includes(m.ip)"
+                    :title="$t('meal.delete_machine') || 'Xóa máy'"
+                  >
+                    🗑️
+                  </button>
+                </div>
+            </div>
+          </div>
+          <div class="add-machine-section">
+            <div class="add-machine-title">➕ {{ $t('meal.add_machine') || 'Thêm Máy Mới' }}</div>
+            <div class="add-machine-row">
+              <input
+                v-model="newMachineIp"
+                class="add-machine-input"
+                type="text"
+                :placeholder="$t('meal.ip_placeholder') || 'VD: 192.168.1.100'"
+                @keyup.enter="handleAddMachine"
+              />
+              <button
+                class="btn btn-add-machine"
+                @click="handleAddMachine"
+                :disabled="addingMachine"
+              >
+                {{ addingMachine ? '...' : ($t('meal.add_btn') || 'Thêm') }}
+              </button>
             </div>
           </div>
           <div class="modal-note">
@@ -114,7 +141,7 @@ const attendanceStore = useAttendanceStore()
 const router = useRouter()
 const route = useRoute()
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 const currentLang = ref(locale.value)
 
 function changeLanguage() {
@@ -129,6 +156,9 @@ const showMachineSettings = ref(false)
 const allMachineConfigs = ref([])
 const machineStatus = ref({})
 const reconnectingIps = ref([])
+const deletingIps = ref([])
+const newMachineIp = ref('')
+const addingMachine = ref(false)
 let statusInterval = null
 
 async function fetchLiveStatus() {
@@ -212,6 +242,43 @@ async function toggleMachineConfig(machine) {
     console.error('Error updating machine config:', e)
     alert('Lỗi khi cập nhật cấu hình máy')
     openMachineSettings()
+  }
+}
+
+async function handleAddMachine() {
+  const ip = newMachineIp.value.trim()
+  if (!ip) return
+  // Basic IP validation
+  const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+  if (!ipRegex.test(ip)) {
+    alert(t('meal.ip_invalid') || 'Định dạng IP không hợp lệ')
+    return
+  }
+  addingMachine.value = true
+  try {
+    await mealApi.updateMachineConfig(ip, { is_live: false, is_canteen: false })
+    newMachineIp.value = ''
+    await openMachineSettings()
+  } catch (e) {
+    console.error('Error adding machine:', e)
+    alert('Lỗi khi thêm máy: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    addingMachine.value = false
+  }
+}
+
+async function handleDeleteMachine(ip) {
+  const msg = t('meal.delete_machine_confirm') || `Bạn có chắc chắn muốn xóa máy ${ip} không?`
+  if (!confirm(msg)) return
+  deletingIps.value.push(ip)
+  try {
+    await mealApi.deleteMachineConfig(ip)
+    await openMachineSettings()
+  } catch (e) {
+    console.error('Error deleting machine:', e)
+    alert('Lỗi khi xóa máy: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    deletingIps.value = deletingIps.value.filter(i => i !== ip)
   }
 }
 </script>
@@ -415,4 +482,75 @@ option {
 .toggle-switch input:checked ~ .label { color: #10b981; }
 
 .modal-note { padding: 12px 20px; font-size: 0.75rem; color: #64748b; font-style: italic; border-top: 1px solid rgba(255, 255, 255, 0.05); }
+
+/* Add Machine Section */
+.add-machine-section {
+  padding: 14px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(99, 102, 241, 0.04);
+}
+.add-machine-title {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.add-machine-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.add-machine-input {
+  flex: 1;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: white;
+  font-size: 0.85rem;
+  font-family: monospace;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.add-machine-input:focus {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.08);
+}
+.add-machine-input::placeholder { color: #475569; }
+.btn-add-machine {
+  padding: 7px 16px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #818cf8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-add-machine:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
+  border-color: rgba(99, 102, 241, 0.5);
+}
+.btn-add-machine:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Delete Machine Button */
+.btn-delete-machine {
+  padding: 4px 8px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+.btn-delete-machine:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+.btn-delete-machine:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>

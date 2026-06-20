@@ -14,7 +14,7 @@ if not DEMO_MODE:
         get_biometric_coverage,
         delete_status, delete_user_from_all_machines,
         bulk_delete_status, bulk_delete_users_from_all_machines,
-        update_machine_tags, get_all_machine_configs,
+        update_machine_tags, get_all_machine_configs, delete_machine_config,
         sync_employee_status, sync_employee_to_machines,
         get_user_photo_from_machine
     )
@@ -26,7 +26,7 @@ if not DEMO_MODE:
     )
 else:
     # In DEMO_MODE, hardware service is not available
-    from shared.hardware import get_machine_list, get_all_machine_configs, update_machine_tags
+    from shared.hardware import get_machine_list, get_all_machine_configs, update_machine_tags, delete_machine_config
     import threading
     sync_employee_status: Dict[str, Any] = {
         "is_running": False,
@@ -105,7 +105,7 @@ def _record_machine_employee_name(db: Session, employee_id: str, name: str) -> N
     ).first()
     if registry_entry:
         if not registry_entry.emp_name:
-            registry_entry.emp_name = name
+            registry_entry.emp_name = name  # type: ignore[assignment]
     else:
         db.add(EmployeeLocalRegistry(
             employee_id=employee_id,
@@ -308,7 +308,7 @@ def delete_machine_employee(ip: str, employee_id: str):
 @router.post("/{ip}/employees/bulk-delete")
 def bulk_delete_machine_employees(ip: str, req: BulkDeleteRequest):
     """Delete multiple employees from a machine."""
-    count, status = bulk_delete_users_from_machine(ip, req.employee_ids)
+    count, status, _ = bulk_delete_users_from_machine(ip, req.employee_ids)
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)
     return {"count": count, "status": status}
@@ -439,6 +439,14 @@ class MachineConfigUpdate(BaseModel):
 def update_machine_cfg(ip: str, req: MachineConfigUpdate):
     """Update machine configuration (live/canteen tags)."""
     success, msg = update_machine_tags(ip, req.is_live, req.is_canteen)
+    if not success:
+        raise HTTPException(status_code=500, detail=msg)
+    return {"status": "success"}
+
+@router.delete("/{ip}")
+def delete_machine_endpoint(ip: str):
+    """Delete a machine configuration entirely from machines.txt."""
+    success, msg = delete_machine_config(ip)
     if not success:
         raise HTTPException(status_code=500, detail=msg)
     return {"status": "success"}
