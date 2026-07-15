@@ -49,3 +49,10 @@ class BiometricCoverageOut(BaseModel):
     role: str
     has_face: bool
     error: Optional[str] = None
+
+class CardPrintRequest(BaseModel):
+    employee_ids: List[str]
+
+class CardPrintBtxmlOut(BaseModel):
+    btxml: str
+

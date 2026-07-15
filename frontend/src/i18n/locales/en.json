@@ -183,7 +183,37 @@
         "status": "Status"
       }
     },
-    "bulk_push_progress_detail": "Machine {current}/{total} — IP: {ip}"
+    "bulk_push_progress_detail": "Machine {current}/{total} — IP: {ip}",
+    "card_print": {
+      "button_title": "Print BarTender Cards",
+      "modal_title": "Print Employee Cards via BarTender",
+      "tab_select": "Select from List",
+      "tab_upload": "Upload ID File (.txt)",
+      "select_none_hint": "Please select employees from the list (max 6) before opening print.",
+      "select_count_hint": "Selected {count} employees from list to print.",
+      "preview_list": "Preview List (Max 6)",
+      "more_ignored": "more ignored (max 6)",
+      "limit_exceeded_title": "Limit Exceeded",
+      "limit_exceeded_desc": "Each A4 sheet only supports a maximum of 6 cards. Please deselect some employees from the table.",
+      "drop_hint": "Drag and drop a .txt file containing employee IDs here or click to choose (one per line, max 6)",
+      "browse": "Browse File",
+      "parsed_ids": "Parsed {count} employee IDs from file",
+      "limit_warn": "Note: File contains {count} IDs. Only the first 6 will be printed.",
+      "settings_title": "BarTender Printing Configuration",
+      "agent_url": "Print Agent URL (Client):",
+      "btw_path": "Design File Path (.btw) on Client Workstation:",
+      "printer_select": "Select Card Printer:",
+      "fetching_printers": "Fetching printers...",
+      "no_printers": "No printers found",
+      "agent_offline_error": "Cannot connect to Print Agent (Port 8080). Please check if the Print Agent service is running on the client machine.",
+      "status": "Print Progress",
+      "button_print": "Start Printing",
+      "log_generating_btxml": "Fetching print XML data from server...",
+      "log_sending_agent": "Sending print job to Print Agent...",
+      "log_success": "Print job sent successfully to printer!",
+      "log_agent_conn_failed": "Cannot connect to Print Agent. Make sure the agent is running on port 8080.",
+      "log_failed": "Print failed"
+    }
   },
   "attendance": {
     "raw_logs": "Raw Logs",

@@ -184,7 +184,37 @@
         "status": "Trạng Thái"
       }
     },
-    "bulk_push_progress_detail": "Máy {current}/{total} — IP: {ip}"
+    "bulk_push_progress_detail": "Máy {current}/{total} — IP: {ip}",
+    "card_print": {
+      "button_title": "In thẻ BarTender",
+      "modal_title": "In Thẻ Nhân Viên qua BarTender",
+      "tab_select": "Chọn từ danh sách",
+      "tab_upload": "Tải tệp ID (.txt)",
+      "select_none_hint": "Vui lòng chọn nhân viên ở bảng danh sách phía sau (tối đa 6 người) trước khi mở in.",
+      "select_count_hint": "Đã chọn {count} nhân viên từ bảng dữ liệu để in thẻ.",
+      "preview_list": "Danh sách xem trước (Tối đa 6 người)",
+      "more_ignored": "người tiếp theo bị ẩn (tối đa 6)",
+      "limit_exceeded_title": "Vượt quá giới hạn in",
+      "limit_exceeded_desc": "Mỗi trang in A4 chỉ hỗ trợ tối đa 6 thẻ nhân viên. Vui lòng bỏ chọn bớt nhân viên trên bảng để thực hiện in.",
+      "drop_hint": "Kéo thả file .txt chứa mã nhân viên vào đây hoặc click để chọn (mỗi dòng 1 mã, tối đa 6 mã)",
+      "browse": "Chọn file",
+      "parsed_ids": "Đã đọc được {count} mã nhân viên từ file",
+      "limit_warn": "Lưu ý: Tệp chứa {count} mã nhân viên. Hệ thống sẽ chỉ in 6 mã nhân viên đầu tiên.",
+      "settings_title": "Cấu hình in BarTender",
+      "agent_url": "Địa chỉ Print Agent (Client):",
+      "btw_path": "Đường dẫn tệp thiết kế (.btw) trên máy trạm:",
+      "printer_select": "Chọn máy in thẻ:",
+      "fetching_printers": "Đang lấy danh sách máy in...",
+      "no_printers": "Không tìm thấy máy in nào",
+      "agent_offline_error": "Không kết nối được đến Print Agent (Cổng 8080). Vui lòng kiểm tra lại dịch vụ Agent trên máy trạm.",
+      "status": "Tiến trình in",
+      "button_print": "Bắt đầu in",
+      "log_generating_btxml": "Đang lấy dữ liệu in XML từ máy chủ...",
+      "log_sending_agent": "Đang truyền lệnh in xuống Print Agent...",
+      "log_success": "Đã gửi lệnh in thành công đến máy in!",
+      "log_agent_conn_failed": "Không thể kết nối đến Print Agent. Hãy đảm bảo Agent đang chạy trên cổng 8080.",
+      "log_failed": "In thất bại"
+    }
   },
   "attendance": {
     "raw_logs": "Log Thô",

@@ -36,6 +36,15 @@ _Avoid_: Work shift, schedule
 A verification system checking meal registration status for canteen pickups on canteen-enabled **Attendance Machines**.
 _Avoid_: Lunch log, food kiosk
 
+**BarTender Print Agent**:
+A lightweight client-side background service (running locally on port 8080) that automates BarTender card printing via COM.
+_Avoid_: Print service, local printer driver
+
+**Employee Card Printing**:
+The process of generating layout data (6-slot grid of name, ID, department, group, and photo URLs) to print employee badges on A4 templates.
+_Avoid_: Badge maker, card printing
+
+
 ## Relationships
 
 - An **Employee** registry entry is linked to many **Raw Logs**

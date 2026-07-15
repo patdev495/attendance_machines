@@ -14,7 +14,7 @@ for path in (ROOT_DIR, SRC_DIR):
     if path not in sys.path:
         sys.path.append(path)
 
-from backend.src.database import Base, get_db
+from database import Base, get_db
 from backend.src.main import app
 
 # Use in-memory SQLite for tests to keep them fast and independent of MSSQL

@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db, EmployeeLocalRegistry
 from typing import List, Optional
 import threading
+import logging
+import base64
+from config import config, DEMO_MODE
+
+logger = logging.getLogger(__name__)
 
 from .schema import (
     EmployeeOut, 
@@ -12,7 +17,9 @@ from .schema import (
     UpdateStatusOut, 
     DeleteHardwareOut, 
     UpdateHardwareOut,
-    BiometricCoverageOut
+    BiometricCoverageOut,
+    CardPrintRequest,
+    CardPrintBtxmlOut
 )
 from .service import (
     update_registry, 
@@ -26,7 +33,8 @@ from .registry_service import filter_registry_by_employee_search
 from features.machines.service import (
     get_biometric_coverage, 
     run_bulk_delete_on_machines,
-    bulk_delete_status
+    bulk_delete_status,
+    get_user_photo_from_machine
 )
 
 router = APIRouter(prefix="/api/employees", tags=["Employees"])
@@ -205,4 +213,114 @@ async def bulk_push_hardware_endpoint(
 @router.get("/bulk-push-status")
 def get_bulk_push_status_endpoint():
     return bulk_push_status
+
+
+def get_or_cache_employee_photo(employee_id: str, request: Request, db: Session) -> str:
+    """
+    Gets the cached employee photo URL. If not cached, fetches from machines on-demand and caches it.
+    Returns the public HTTP URL of the image, or "" if not found.
+    """
+    avatar_dir = config.STATIC_DIR / "assets" / "avatars"
+    avatar_dir.mkdir(parents=True, exist_ok=True)
+    
+    avatar_file = avatar_dir / f"{employee_id}.jpg"
+    
+    if avatar_file.exists():
+        return f"{request.base_url}assets/avatars/{employee_id}.jpg"
+        
+    if DEMO_MODE:
+        # Mock successful photo retrieval in demo mode
+        mock_jpg = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' ",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xc4\x00\x1f\x00\x00\x01\x05\x01\x01\x01\x01\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\xff\xda\x00\x0c\x01\x01\x11\x00?\x00\x37\x00\xff\xd9'
+        with open(avatar_file, "wb") as f:
+            f.write(mock_jpg)
+        return f"{request.base_url}assets/avatars/{employee_id}.jpg"
+
+    coverage = get_biometric_coverage(employee_id)
+    for machine in coverage:
+        if machine.get("registered") and machine.get("has_face") and machine.get("status") == "Online":
+            ip = machine["ip"]
+            photo_base64, status = get_user_photo_from_machine(ip, employee_id)
+            if status == "Success" and photo_base64:
+                try:
+                    img_data = base64.b64decode(photo_base64)
+                    with open(avatar_file, "wb") as f:
+                        f.write(img_data)
+                    return f"{request.base_url}assets/avatars/{employee_id}.jpg"
+                except Exception as e:
+                    logger.error(f"Failed to decode and save photo for {employee_id}: {e}")
+                    
+    return ""
+
+
+@router.post("/card-print-btxml", response_model=CardPrintBtxmlOut)
+def generate_card_print_btxml(
+    payload: CardPrintRequest,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    employee_ids = payload.employee_ids
+    print("PAYLOAD IDs:", employee_ids)
+    all_db = db.query(EmployeeLocalRegistry).all()
+    print("ALL REGISTRY IN DB:", [(e.employee_id, e.emp_name) for e in all_db])
+    if not employee_ids:
+        raise HTTPException(status_code=400, detail="No employee IDs provided")
+    if len(employee_ids) > 6:
+        raise HTTPException(status_code=400, detail="Maximum 6 employee IDs allowed")
+        
+    # Fetch employees
+    employees = db.query(EmployeeLocalRegistry).filter(
+        EmployeeLocalRegistry.employee_id.in_(employee_ids)
+    ).all()
+    print("MATCHED EMPLOYEES:", [e.employee_id for e in employees])
+
+    
+    # Map employees by ID to preserve the order in payload
+    emp_map = {emp.employee_id: emp for emp in employees}
+    
+    # Generate 6 slots of data
+    xml_substrings = []
+    for i in range(6):
+        idx = i + 1
+        if i < len(employee_ids):
+            emp_id = employee_ids[i]
+            emp = emp_map.get(emp_id)
+            if emp:
+                emp_name = emp.emp_name or ""
+                dept = emp.department or ""
+                group = emp.group_name or ""
+                # Get or cache photo URL
+                photo_url = get_or_cache_employee_photo(emp_id, request, db)
+            else:
+                emp_name = ""
+                dept = ""
+                group = ""
+                photo_url = ""
+                emp_id = ""
+        else:
+            emp_id = ""
+            emp_name = ""
+            dept = ""
+            group = ""
+            photo_url = ""
+            
+        xml_substrings.append(f'      <NamedSubString Name="id{idx}"><Value>{emp_id}</Value></NamedSubString>')
+        xml_substrings.append(f'      <NamedSubString Name="name{idx}"><Value>{emp_name}</Value></NamedSubString>')
+        xml_substrings.append(f'      <NamedSubString Name="dept{idx}"><Value>{dept}</Value></NamedSubString>')
+        xml_substrings.append(f'      <NamedSubString Name="group{idx}"><Value>{group}</Value></NamedSubString>')
+        xml_substrings.append(f'      <NamedSubString Name="image{idx}"><Value>{photo_url}</Value></NamedSubString>')
+        
+    substrings_str = "\n".join(xml_substrings)
+    
+    btxml = f"""<XMLScript Version="2.0">
+  <Command Name="PrintCards">
+    <Print>
+      <Format>C:\\templates\\employee_card.btw</Format>
+      <Printer>Default</Printer>
+{substrings_str}
+    </Print>
+  </Command>
+</XMLScript>"""
+    
+    return CardPrintBtxmlOut(btxml=btxml)
+
 

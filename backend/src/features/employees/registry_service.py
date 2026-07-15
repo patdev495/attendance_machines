@@ -1,6 +1,6 @@
 from typing import Iterable, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, true
 from sqlalchemy.orm import Session
 
 from compat import safe_ilike
@@ -115,19 +115,29 @@ def find_employee_ids_for_search(
     if not search:
         return set()
 
-    registry_rows = db.query(EmployeeLocalRegistry.employee_id).filter(
-        EmployeeLocalRegistry.employee_id.ilike(f"%{search}%")
-        | EmployeeLocalRegistry.full_emp_id.ilike(f"%{search}%")
-        | safe_ilike(EmployeeLocalRegistry.emp_name, f"%{search}%")
-    ).all()
+    words = search.split()
+    if not words:
+        return set()
+
+    registry_conditions = []
+    for word in words:
+        registry_conditions.append(
+            EmployeeLocalRegistry.employee_id.ilike(f"%{word}%")
+            | EmployeeLocalRegistry.full_emp_id.ilike(f"%{word}%")
+            | safe_ilike(EmployeeLocalRegistry.emp_name, f"%{word}%")
+        )
+    registry_rows = db.query(EmployeeLocalRegistry.employee_id).filter(*registry_conditions).all()
     found_ids = {normalize_employee_id(row[0]) for row in registry_rows}
 
     if include_metadata:
-        metadata_rows = db.query(EmployeeMetadata.employee_id).filter(
-            EmployeeMetadata.employee_id.ilike(f"%{search}%")
-            | EmployeeMetadata.full_emp_id.ilike(f"%{search}%")
-            | safe_ilike(EmployeeMetadata.emp_name, f"%{search}%")
-        ).all()
+        metadata_conditions = []
+        for word in words:
+            metadata_conditions.append(
+                EmployeeMetadata.employee_id.ilike(f"%{word}%")
+                | EmployeeMetadata.full_emp_id.ilike(f"%{word}%")
+                | safe_ilike(EmployeeMetadata.emp_name, f"%{word}%")
+            )
+        metadata_rows = db.query(EmployeeMetadata.employee_id).filter(*metadata_conditions).all()
         found_ids |= {normalize_employee_id(row[0]) for row in metadata_rows}
 
     found_ids.add(search)
@@ -139,8 +149,18 @@ def filter_registry_by_employee_search(query, db: Session, search: Optional[str]
     if not search:
         return query
 
-    target_ids = find_employee_ids_for_search(db, search, include_metadata=False)
-    return query.filter(func.ltrim(func.rtrim(EmployeeLocalRegistry.employee_id)).in_(list(target_ids)))
+    words = search.split()
+    if not words:
+        return query
+
+    conditions = []
+    for word in words:
+        conditions.append(
+            EmployeeLocalRegistry.employee_id.ilike(f"%{word}%")
+            | EmployeeLocalRegistry.full_emp_id.ilike(f"%{word}%")
+            | safe_ilike(EmployeeLocalRegistry.emp_name, f"%{word}%")
+        )
+    return query.filter(*conditions)
 
 
 def employee_name_map(db: Session, employee_ids: Iterable[str]) -> dict[str, str]:
@@ -172,3 +192,42 @@ def employee_name_map(db: Session, employee_ids: Iterable[str]) -> dict[str, str
         })
 
     return names
+
+
+def employee_search_filter(db: Session, search: str, column):
+    """
+    Returns an SQLAlchemy filter clause matching employees by keyword search.
+    The filter is applied to the given `column`.
+    """
+    search = normalize_employee_id(search)
+    if not search:
+        return true()
+
+    words = search.split()
+    if not words:
+        return true()
+
+    # Build subquery for EmployeeLocalRegistry matching all words
+    registry_conds = [
+        EmployeeLocalRegistry.employee_id.ilike(f"%{w}%")
+        | EmployeeLocalRegistry.full_emp_id.ilike(f"%{w}%")
+        | safe_ilike(EmployeeLocalRegistry.emp_name, f"%{w}%")
+        for w in words
+    ]
+    registry_subquery = db.query(EmployeeLocalRegistry.employee_id).filter(*registry_conds).scalar_subquery()
+
+    # Build subquery for EmployeeMetadata matching all words
+    metadata_conds = [
+        EmployeeMetadata.employee_id.ilike(f"%{w}%")
+        | EmployeeMetadata.full_emp_id.ilike(f"%{w}%")
+        | safe_ilike(EmployeeMetadata.emp_name, f"%{w}%")
+        for w in words
+    ]
+    metadata_subquery = db.query(EmployeeMetadata.employee_id).filter(*metadata_conds).scalar_subquery()
+
+    return (
+        column.in_(registry_subquery)
+        | column.in_(metadata_subquery)
+        | column.ilike(f"%{search}%")
+    )
+

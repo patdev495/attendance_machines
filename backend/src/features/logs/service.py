@@ -5,7 +5,6 @@ from config import config
 import logging
 import datetime
 import threading
-from sqlalchemy import func
 from shared.hardware import get_all_machine_configs, get_machine_list
 
 from features.hanvon.client import HanvonClient, iter_dates
@@ -100,18 +99,10 @@ def _sync_hanvon_machine(
     range_start = requested_start or config.HANVON_FULL_SYNC_START_DATE
     range_end = requested_end or today
 
-    existing_query = db.query(AttendanceLog.employee_id, AttendanceLog.attendance_time).filter(
-        AttendanceLog.machine_ip == ip
-    )
-    if range_start:
-        existing_query = existing_query.filter(AttendanceLog.attendance_date >= range_start)
-    if range_end:
-        existing_query = existing_query.filter(AttendanceLog.attendance_date <= range_end)
-    existing_keys = set(existing_query.all())
-
     added = 0
     new_logs = []
     device_seen_keys = set()
+    existing_keys_by_date: dict[datetime.date, set[tuple[str, datetime.datetime]]] = {}
     with HanvonClient(
         ip,
         port=config.HANVON_PORT,
@@ -151,12 +142,19 @@ def _sync_hanvon_machine(
                 device_seen_keys.add((user_id, timestamp))
                 if user_id == '1':
                     continue
+
+                attendance_date = timestamp.date()
+                existing_keys = existing_keys_by_date.get(attendance_date)
+                if existing_keys is None:
+                    existing_keys = load_existing_log_keys(db, ip, attendance_date)
+                    existing_keys_by_date[attendance_date] = existing_keys
+
                 if (user_id, timestamp) in existing_keys:
                     continue
 
                 new_item = AttendanceLog(
                     employee_id=user_id,
-                    attendance_date=timestamp.date(),
+                    attendance_date=attendance_date,
                     attendance_time=timestamp,
                     machine_ip=ip
                 )
@@ -181,6 +179,20 @@ def _sync_hanvon_machine(
         db.commit()
         added += len(new_logs)
     return added
+
+def load_existing_log_keys(
+    db,
+    ip: str,
+    attendance_date: datetime.date,
+) -> set[tuple[str, datetime.datetime]]:
+    rows = db.query(AttendanceLog.employee_id, AttendanceLog.attendance_time).filter(
+        AttendanceLog.machine_ip == ip,
+        AttendanceLog.attendance_date == attendance_date,
+    ).all()
+    return {
+        (employee_id, attendance_time.replace(tzinfo=None))
+        for employee_id, attendance_time in rows
+    }
 
 def _iter_dates_desc(start_date: datetime.date, end_date: datetime.date):
     current = start_date

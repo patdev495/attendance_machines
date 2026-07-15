@@ -65,5 +65,10 @@ export const employeesApi = {
   getBulkPushStatus: async () => {
     const response = await axios.get(`${BASE}/bulk-push-status`)
     return response.data
+  },
+
+  getCardPrintBtxml: async (employeeIds) => {
+    const response = await axios.post(`${BASE}/card-print-btxml`, { employee_ids: employeeIds })
+    return response.data
   }
 }

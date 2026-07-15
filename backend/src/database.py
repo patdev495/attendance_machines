@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, Column, Integer, String, Unicode, DateTime, Date, Time, Boolean, Float, func
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Mapped
 from config import config, DEMO_MODE
 
 # ── Activate MSSQL ↔ SQLite compiler extensions ──
@@ -98,7 +98,7 @@ class EmployeeLocalRegistry(Base):
     start_date   = Column(Date, nullable=True)
     shift        = Column(String(10), nullable=True, index=True)     # 'D' or 'N'
     # source_status: 'excel_synced' | 'machine_only' | 'log_only'
-    source_status = Column(String(20), nullable=False, default="log_only", index=True)
+    source_status: Mapped[str] = Column(String(20), nullable=False, default="log_only", index=True)
     full_emp_id   = Column(Unicode(50), nullable=True, index=True)
     privilege    = Column(Integer, default=0)         # 0=User, 14=Admin
     updated_at   = Column(DateTime, server_default=func.current_timestamp(),

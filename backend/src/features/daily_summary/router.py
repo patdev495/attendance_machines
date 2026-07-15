@@ -10,7 +10,7 @@ from typing import Optional
 from datetime import date, datetime
 
 from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftDefinition
-from features.employees.registry_service import find_employee_ids_for_search, normalize_employee_id
+from features.employees.registry_service import find_employee_ids_for_search, normalize_employee_id, employee_search_filter
 from utils.date_utils import parse_date_robust
 
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
@@ -69,12 +69,7 @@ def get_daily_summary(
 
     # 5. Filters
     if employee_id:
-        employee_id = normalize_employee_id(employee_id)
-        matched_ids = find_employee_ids_for_search(db, employee_id)
-        query = query.filter(
-            (union_keys.c.employee_id.in_(list(matched_ids))) |
-            (union_keys.c.employee_id.like(f"%{employee_id}%"))
-        )
+        query = query.filter(employee_search_filter(db, employee_id, union_keys.c.employee_id))
 
     if machine_ip: query = query.filter(agg_logs_sub.c.machine_ip == machine_ip)
 

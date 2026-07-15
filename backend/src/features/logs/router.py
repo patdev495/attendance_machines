@@ -8,7 +8,7 @@ from datetime import date as date_type
 
 from database import get_db, AttendanceLog
 from .service import sync_all_machines, sync_status, status_lock
-from features.employees.registry_service import employee_name_map, find_employee_ids_for_search, normalize_employee_id
+from features.employees.registry_service import employee_name_map, find_employee_ids_for_search, normalize_employee_id, employee_search_filter
 from utils.date_utils import parse_date_robust
 
 logger = logging.getLogger(__name__)
@@ -34,13 +34,7 @@ def get_logs(
     query = db.query(AttendanceLog)
 
     if employee_id:
-        employee_id = normalize_employee_id(employee_id)
-        found_ids = find_employee_ids_for_search(db, employee_id)
-
-        query = query.filter(
-            (AttendanceLog.employee_id.in_(list(found_ids))) |
-            (AttendanceLog.employee_id.ilike(f"%{employee_id}%"))
-        )
+        query = query.filter(employee_search_filter(db, employee_id, AttendanceLog.employee_id))
     if machine_ip:
         query = query.filter(AttendanceLog.machine_ip == machine_ip)
 
@@ -54,7 +48,7 @@ def get_logs(
                 .offset((page - 1) * size) \
                 .limit(size) \
                 .all()
-    names = employee_name_map(db, (log.employee_id for log in logs))
+    names = employee_name_map(db, (normalize_employee_id(log.employee_id) for log in logs))
 
     items = []
     for log in logs:
@@ -76,13 +70,33 @@ def get_logs(
 @router.get("/date-range")
 def get_date_range(db: Session = Depends(get_db)):
     from sqlalchemy import func as sqlfunc
+    from datetime import datetime as datetime_class, date as date_class
     result = db.query(
         sqlfunc.min(AttendanceLog.attendance_time).label("min_dt"),
         sqlfunc.max(AttendanceLog.attendance_time).label("max_dt")
     ).first()
+    if not result:
+        return {"min_date": None, "max_date": None}
+
+    def safe_date(val):
+        if not val:
+            return None
+        if isinstance(val, datetime_class):
+            return val.date()
+        if isinstance(val, date_class):
+            return val
+        if isinstance(val, str):
+            try:
+                return parse_date_robust(val)
+            except Exception:
+                return val[:10]
+        if hasattr(val, "date") and callable(val.date):
+            return val.date()
+        return None
+
     return {
-        "min_date": result.min_dt.date() if result.min_dt else None,
-        "max_date": result.max_dt.date() if result.max_dt else None
+        "min_date": safe_date(result.min_dt),
+        "max_date": safe_date(result.max_dt)
     }
 
 @router.post("/sync")

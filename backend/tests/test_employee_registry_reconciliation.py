@@ -87,6 +87,15 @@ def test_registry_lookup_and_name_enrichment_share_precedence(db_session):
 
     assert "1001" in find_employee_ids_for_search(db_session, "NY1001")
     assert "2002" in find_employee_ids_for_search(db_session, "Metadata Bob")
+    assert "1001" in find_employee_ids_for_search(db_session, "Alice Registry")
+    assert "2002" in find_employee_ids_for_search(db_session, "Bob Metadata")
+
+    # Test direct registry filter
+    from features.employees.registry_service import filter_registry_by_employee_search
+    query = db_session.query(EmployeeLocalRegistry)
+    filtered = filter_registry_by_employee_search(query, db_session, "Alice Registry").all()
+    assert len(filtered) == 1
+    assert filtered[0].employee_id == "1001"
 
     names = employee_name_map(db_session, ["1001", "2002"])
     assert names["1001"] == "Registry Alice"

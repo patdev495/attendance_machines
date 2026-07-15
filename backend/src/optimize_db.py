@@ -39,6 +39,18 @@ def optimize():
         except Exception as e:
             logger.warning(f"Could not create idx_attendance_logs_lookup: {e}")
 
+        # AttendanceLogs: Optimize Hanvon sync duplicate checks by machine and day
+        try:
+            db.execute(text("""
+                IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'idx_attendance_logs_machine_date_employee_time' AND object_id = OBJECT_ID('AttendanceLogs'))
+                BEGIN
+                    CREATE INDEX idx_attendance_logs_machine_date_employee_time ON AttendanceLogs (machine_ip, attendance_date, employee_id, attendance_time)
+                END
+            """))
+            logger.info("Index idx_attendance_logs_machine_date_employee_time created/verified.")
+        except Exception as e:
+            logger.warning(f"Could not create idx_attendance_logs_machine_date_employee_time: {e}")
+
         # EmployeeDailyShifts: Optimize roster joins
         try:
             db.execute(text("""

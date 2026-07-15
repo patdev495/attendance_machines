@@ -31,6 +31,13 @@
           </button>
         </div>
 
+        <!-- Group 3: Printing Cards -->
+        <div class="action-group">
+          <button class="btn-primary btn-purple" @click="isPrintModalOpen = true">
+            <span class="icon">🖨️</span> {{ $t('employees.card_print.button_title') }}
+          </button>
+        </div>
+
         <!-- Bulk Delete (Selected) -->
         <transition name="fade">
           <button v-if="selectedIds.length > 0" class="btn-danger" @click="handleBulkDeleteGlobal" :disabled="bulkActionStatus.is_running">
@@ -65,7 +72,7 @@
       </div>
     </div>
     <div class="filter-bar">
-      <input type="text" v-model="searchQuery" :placeholder="$t('employees.search_placeholder')" @input="resetAndFetch" />
+      <input type="text" v-model="searchQuery" :placeholder="$t('employees.search_placeholder')" @input="resetAndFetchDebounced" />
       <select v-model="statusFilter" @change="resetAndFetch">
         <option value="">{{ $t('attendance.filters.all_status') }}</option>
         <option value="excel_synced">{{ $t('attendance.filters.status_excel') }}</option>
@@ -124,6 +131,12 @@
       @close="isBulkPushModalOpen = false"
     />
 
+    <PrintCardsModal
+      :isOpen="isPrintModalOpen"
+      :selectedEmployeeIds="selectedIds"
+      @close="isPrintModalOpen = false"
+    />
+
   </div>
 </template>
 
@@ -136,6 +149,7 @@ import EmployeeDetailsModal from './components/EmployeeDetailsModal.vue'
 import BiometricCoverageModal from './components/BiometricCoverageModal.vue'
 import BulkDeleteHardwareModal from './components/BulkDeleteHardwareModal.vue'
 import BulkPushHardwareModal from './components/BulkPushHardwareModal.vue'
+import PrintCardsModal from './components/PrintCardsModal.vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { dailySummaryApi } from '@/features/daily_summary/api'
 import { useI18n } from 'vue-i18n'
@@ -155,6 +169,7 @@ const idSortOrder = ref('asc')
 const PAGE_SIZE = 50
 
 const selectedIds = ref([])
+const isPrintModalOpen = ref(false)
 const bulkActionStatus = ref({
   is_running: false,
   total_machines: 0,
@@ -316,6 +331,15 @@ const resetAndFetch = () => {
   fetchEmployees()
 }
 
+let searchTimeout = null
+const resetAndFetchDebounced = () => {
+  currentPage.value = 1
+  if (searchTimeout) clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    fetchEmployees()
+  }, 400)
+}
+
 const handleSort = (key) => {
   if (key === 'id') {
     idSortOrder.value = idSortOrder.value === 'asc' ? 'desc' : 'asc'
@@ -378,6 +402,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (syncPollInterval) clearInterval(syncPollInterval)
+  if (searchTimeout) clearTimeout(searchTimeout)
 })
 </script>
 

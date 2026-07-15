@@ -182,7 +182,37 @@
         "status": "状态"
       }
     },
-    "bulk_push_progress_detail": "设备 {current}/{total} — IP: {ip}"
+    "bulk_push_progress_detail": "设备 {current}/{total} — IP: {ip}",
+    "card_print": {
+      "button_title": "打印 BarTender 卡片",
+      "modal_title": "通过 BarTender 打印员工卡",
+      "tab_select": "从列表选择",
+      "tab_upload": "上传编号文件 (.txt)",
+      "select_none_hint": "请在打开打印之前，从列表中选择员工（最多6个）。",
+      "select_count_hint": "已从列表选择 {count} 名员工进行打印。",
+      "preview_list": "预览列表（最多6个）",
+      "more_ignored": "更多员工已忽略（最多6个）",
+      "limit_exceeded_title": "超出限制",
+      "limit_exceeded_desc": "每张 A4 纸最多仅支持 6 张卡片。请在表格中取消选择部分员工。",
+      "drop_hint": "拖拽或点击上传包含员工编号的 .txt 文件（每行一个，最多6个）",
+      "browse": "浏览文件",
+      "parsed_ids": "已从文件中解析出 {count} 个员工编号",
+      "limit_warn": "注意：文件包含 {count} 个编号。将只打印前 6 个。",
+      "settings_title": "BarTender 打印配置",
+      "agent_url": "Print Agent URL (客户端):",
+      "btw_path": "客户端工作站上的设计 file 路径 (.btw):",
+      "printer_select": "选择卡片打印机:",
+      "fetching_printers": "正在获取打印机...",
+      "no_printers": "未找到打印机",
+      "agent_offline_error": "无法连接到 Print Agent (端口 8080)。请检查客户端计算机上是否运行了 Print Agent 服务。",
+      "status": "打印进度",
+      "button_print": "开始打印",
+      "log_generating_btxml": "正在从服务器获取打印 XML 数据...",
+      "log_sending_agent": "正在将打印任务发送到 Print Agent...",
+      "log_success": "打印任务已成功发送到打印机！",
+      "log_agent_conn_failed": "无法连接到 Print Agent。请确保 agent 运行在 8080 端口。",
+      "log_failed": "打印失败"
+    }
   },
   "attendance": {
     "raw_logs": "原始记录",
