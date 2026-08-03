@@ -140,11 +140,16 @@ def get_daily_detail(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    base_calc_sub = build_log_work_date_subquery(db)
+    base_calc_sub = build_log_work_date_subquery(
+        db,
+        start_date=parsed_work_date,
+        end_date=parsed_work_date,
+        date_padding_days=1,
+    )
 
     logs = db.query(AttendanceLog) \
              .join(base_calc_sub, AttendanceLog.id == base_calc_sub.c.id) \
-             .filter(func.ltrim(func.rtrim(base_calc_sub.c.employee_id)) == employee_id.strip()) \
+             .filter(employee_search_filter(db, employee_id, base_calc_sub.c.employee_id)) \
              .filter(base_calc_sub.c.work_date == parsed_work_date) \
              .order_by(AttendanceLog.attendance_time) \
              .all()

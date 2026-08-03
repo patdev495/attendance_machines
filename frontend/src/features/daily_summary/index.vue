@@ -62,11 +62,14 @@
       <div v-if="detailLoading" class="loader-container">
         <div class="loader"></div>
       </div>
-      <div v-else class="detail-list">
+      <div v-else-if="detailLogs && detailLogs.length > 0" class="detail-list">
         <div v-for="log in detailLogs" :key="log.id" class="detail-item">
           <span class="detail-time">{{ formatDateTime(log.attendance_time) }}</span>
           <span class="detail-machine">{{ log.machine_name || log.machine_ip }}</span>
         </div>
+      </div>
+      <div v-else class="empty-state">
+        {{ $t('common.no_data') }}
       </div>
     </AppModal>
   </div>
