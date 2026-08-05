@@ -100,7 +100,7 @@ def get_daily_summary(
         # But we still only fetch what is needed. For now, fetch ALL then filter.
         # POTENTIAL FUTURE OPTIMIZATION: Push metrics into SQL.
         all_results = query.all()
-        processed_items = process_summary_rows(all_results, rules_pool=rules_pool)
+        processed_items = process_summary_rows(all_results, rules_pool=rules_pool, db=db)
 
         filtered_items = []
         for item in processed_items:
@@ -119,7 +119,8 @@ def get_daily_summary(
         # Standard case: Use database-level pagination
         total = query.count()
         results = query.offset((page - 1) * size).limit(size).all()
-        summary_items = process_summary_rows(results, rules_pool=rules_pool)
+        summary_items = process_summary_rows(results, rules_pool=rules_pool, db=db)
+
 
     return {
         "items": summary_items,

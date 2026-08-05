@@ -7,10 +7,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
-from database import EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, SessionLocal
+from database import EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog, SessionLocal
 
-from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap
+from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap, extract_lunch_swipes
 from .report_query import REPORT_SOURCE_STATUSES, build_log_work_date_subquery
+
 
 EXPORT_DATA_CELL_STYLES = os.getenv("EXPORT_DATA_CELL_STYLES", "false").lower() == "true"
 
@@ -141,6 +142,19 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         white_font = Font(color="FFFFFF")
         bold_font = Font(bold=True)
 
+        # Pre-fetch all raw logs for the export date range
+        raw_logs = db.query(AttendanceLog).filter(
+            AttendanceLog.attendance_date >= start_date - timedelta(days=1),
+            AttendanceLog.attendance_date <= end_date + timedelta(days=1)
+        ).all()
+        logs_by_emp_date = {}
+        for log in raw_logs:
+            log_date = log.attendance_time.date() if hasattr(log, "attendance_time") and log.attendance_time else getattr(log, "attendance_date", None)
+            key = (log.employee_id, log_date)
+            if key not in logs_by_emp_date:
+                logs_by_emp_date[key] = []
+            logs_by_emp_date[key].append(log.attendance_time)
+
         processed_data = {}
         with export_lock: export_status["current_step"] = "Preparing attendance statistics..."
 
@@ -174,6 +188,16 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             std_expected = 8.0
             workday_base = 8.0
             note = ""
+
+            # Extract lunch info
+            day_taps = logs_by_emp_date.get((emp_id, w_date), [])
+            if not day_taps and row.tap_count >= 1:
+                day_taps = [row.first_tap] if row.tap_count == 1 else [row.first_tap, row.last_tap]
+            lunch_info = extract_lunch_swipes(day_taps)
+            lunch_out_str = lunch_info["lunch_out"].strftime("%H:%M") if lunch_info["lunch_out"] else "-"
+            lunch_in_str = lunch_info["lunch_in"].strftime("%H:%M") if lunch_info["lunch_in"] else "-"
+            lunch_dur_str = str(lunch_info["lunch_duration_minutes"]) if lunch_info["lunch_duration_minutes"] is not None else "-"
+            lunch_status_str = lunch_info["lunch_status"]
 
             # Check for full-day leave
             if effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
@@ -249,6 +273,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             processed_data[emp_id]["days"][w_date] = {
                 "first": first_val, "last": last_val,
+                "lunch_out_str": lunch_out_str, "lunch_in_str": lunch_in_str,
+                "lunch_dur_str": lunch_dur_str, "lunch_status_str": lunch_status_str,
                 "std": std, "ot": ot, "late": late, "early": early,
                 "shift": shift_code_display,
                 "shift_code": shift_code_display,
@@ -262,6 +288,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "ot_normal_day": ot_normal_day, "ot_holiday_day": ot_holiday_day, "ot_rotation_day": ot_rotation_day,
                 "ot_normal_night": ot_normal_night, "ot_holiday_night": ot_holiday_night, "ot_rotation_night": ot_rotation_night,
             }
+
             if full_emp_id:
                 processed_data[emp_id]["full_id"] = full_emp_id
 
@@ -404,10 +431,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
         ws2 = wb.create_sheet(title="Thông tin chi tiết")
-        # Added "Ngày vào làm" to Sheet 2
+        # Added "Ngày vào làm" & Lunch Monitoring columns to Sheet 2
         ws2.append([
             "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
-            "Ngày", "Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
+            "Ngày", "Giờ In", "Giờ Out", "Ra trưa", "Vào trưa", "Phút trưa", "Trạng thái trưa",
+            "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
             "Công tiêu chuẩn",
             "Giờ trợ cấp ca đêm",
             # 9 cột phân loại theo shift_category
@@ -440,6 +468,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     ds = {
                         "first": "-",
                         "last": "-",
+                        "lunch_out_str": "-",
+                        "lunch_in_str": "-",
+                        "lunch_dur_str": "-",
+                        "lunch_status_str": "NO_LUNCH_SWIPE",
                         "std": 0,
                         "ot": 0,
                         "late": 0,
@@ -469,7 +501,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     emp_m.group_name if emp_m else "-",
                     hired_date_val,
                     d.strftime("%d/%m/%Y"),
-                    ds["first"], ds["last"], ds["std"], display_ot, ds["late"], ds["early"],
+                    ds["first"], ds["last"],
+                    ds.get("lunch_out_str", "-"), ds.get("lunch_in_str", "-"),
+                    ds.get("lunch_dur_str", "-"), ds.get("lunch_status_str", "-"),
+                    ds["std"], display_ot, ds["late"], ds["early"],
                     shift_code_val,
                     ds.get("std_expected", 8.0),
                     ds.get("night_subsidy", 0),
@@ -478,6 +513,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     ds.get("ot_normal_day", 0), ds.get("ot_holiday_day", 0), ds.get("ot_rotation_day", 0),
                     ds.get("ot_normal_night", 0), ds.get("ot_holiday_night", 0), ds.get("ot_rotation_night", 0),
                 ]
+
 
                 for c_idx, val in enumerate(row_data, 1):
                     cell = ws2.cell(row=ws2_row, column=c_idx, value=val)

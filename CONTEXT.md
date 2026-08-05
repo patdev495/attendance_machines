@@ -64,3 +64,6 @@ _Avoid_: Badge maker, card printing
 - "privilege" was used for ZKTeco-style employee permissions; resolved: Employee Management no longer uses global privilege filters, and Hanvon admin status is represented as per-machine **Machine Manager** coverage.
 
 - "user" was used to mean both **Employee** in the registry and **Operator** managing the dashboard — resolved: we use **Employee** for attendance/biometric tracking and **Operator** for system management.
+
+- "giờ quẹt trưa / lunch swipes": user requested monitoring lunch start and return times without changing existing work hour / payroll formulas — resolved: lunch swipes are captured as supplementary monitoring fields (`lunch_out`, `lunch_in`, `lunch_duration`, `lunch_status`) on **Daily Summary** and do not alter `work_hours` or `first_tap`/`last_tap` calculation. `lunch_out` is defined as the first **Raw Log** between 11:20 and 12:40. `lunch_in` is defined as the first **Raw Log** after `lunch_out` with a minimum 5-minute separation (`timestamp >= lunch_out + 5 min`). System explicitly separates work shift statuses (`MISSING_WORK_IN`, `MISSING_WORK_OUT`) from lunch break monitoring statuses (`MISSING_LUNCH_OUT`, `MISSING_LUNCH_IN`, `NO_LUNCH_SWIPE`, `OK`).
+

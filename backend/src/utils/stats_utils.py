@@ -198,3 +198,73 @@ def determine_missing_tap(tap_time, w_date, shift_code, department, rules_pool=N
             return "Missing Check-in"
     except Exception:
         return "Missing Check-in/out"
+
+
+def extract_lunch_swipes(taps: List[datetime]) -> dict:
+    """
+    Extract lunch break start (lunch_out) and return (lunch_in) from a list of datetime taps.
+
+    Rules:
+    1. lunch_out: First tap where 11:20 <= tap.time() < 12:40.
+    2. lunch_in: First tap after lunch_out where tap >= lunch_out + 5 min,
+       excluding evening work check-out taps (e.g. max tap when time >= 15:00).
+    3. lunch_status:
+       - 'OK': Both lunch_out and lunch_in present.
+       - 'MISSING_LUNCH_IN': lunch_out present, but no valid lunch_in.
+       - 'NO_LUNCH_SWIPE': No tap in 11:20 - 12:40 window.
+    """
+    if not taps:
+        return {
+            "lunch_out": None,
+            "lunch_in": None,
+            "lunch_duration_minutes": None,
+            "lunch_status": "NO_LUNCH_SWIPE",
+        }
+
+    sorted_taps = sorted(taps)
+    max_tap = sorted_taps[-1]
+
+    lunch_out = None
+    lunch_out_idx = -1
+
+    for idx, tap in enumerate(sorted_taps):
+        t = tap.time()
+        if time(11, 20) <= t < time(12, 40):
+            lunch_out = tap
+            lunch_out_idx = idx
+            break
+
+    if not lunch_out:
+        return {
+            "lunch_out": None,
+            "lunch_in": None,
+            "lunch_duration_minutes": None,
+            "lunch_status": "NO_LUNCH_SWIPE",
+        }
+
+    min_lunch_in_time = lunch_out + timedelta(minutes=5)
+    lunch_in = None
+
+    for tap in sorted_taps[lunch_out_idx + 1:]:
+        if tap < min_lunch_in_time:
+            continue
+        # Exclude evening work check-out tap if it's the last tap of the day and >= 15:00
+        if tap == max_tap and tap.time() >= time(15, 0):
+            continue
+        lunch_in = tap
+        break
+
+    if lunch_in:
+        duration_minutes = int((lunch_in - lunch_out).total_seconds() // 60)
+        status = "OK"
+    else:
+        duration_minutes = None
+        status = "MISSING_LUNCH_IN"
+
+    return {
+        "lunch_out": lunch_out,
+        "lunch_in": lunch_in,
+        "lunch_duration_minutes": duration_minutes,
+        "lunch_status": status,
+    }
+

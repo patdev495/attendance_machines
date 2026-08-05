@@ -1,16 +1,19 @@
 import logging
 import pandas as pd
 import threading
+import logging
+import pandas as pd
+import threading
 import io
 from typing import List, Dict, Any, Optional
 from datetime import date
 from sqlalchemy.orm import Session
 from sqlalchemy import exists, text
 
-from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition
+from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog
 from features.employees.registry_service import reconcile_employee_local_registry
 
-from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window
+from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window, extract_lunch_swipes
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +29,40 @@ sync_status = {
 }
 status_lock = threading.Lock()
 
-def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
+def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = None, db: Optional[Session] = None) -> List[Dict[str, Any]]:
     """
     Transform raw grouped SQLAlchemy rows into a list of summary dictionaries.
-    Supports dynamic daily shift codes (Phase 13).
+    Supports dynamic daily shift codes (Phase 13) and lunch monitoring (Phase 16).
     """
     from utils.stats_utils import FULL_DAY_LEAVE_CODES
 
     if rules_pool is None:
-        db = SessionLocal()
+        local_db = db or SessionLocal()
         try:
-            rules_pool = db.query(ShiftDefinition).all()
+            rules_pool = local_db.query(ShiftDefinition).all()
         finally:
-            db.close()
+            if not db:
+                local_db.close()
 
+    # Pre-fetch raw logs batch if DB session is available
+    logs_lookup = {}
+    if db and results:
+        emp_ids = list({row.employee_id for row in results if hasattr(row, "employee_id") and row.employee_id})
+        dates_set = list({row.work_date for row in results if hasattr(row, "work_date") and row.work_date})
+        if emp_ids and dates_set:
+            try:
+                raw_logs = db.query(AttendanceLog).filter(
+                    AttendanceLog.employee_id.in_(emp_ids)
+                ).all()
+                for log in raw_logs:
+                    log_date = log.attendance_time.date() if hasattr(log, "attendance_time") and log.attendance_time else getattr(log, "attendance_date", None)
+                    key = (log.employee_id, log_date)
+                    if key not in logs_lookup:
+                        logs_lookup[key] = []
+                    logs_lookup[key].append(log.attendance_time)
+
+            except Exception as e:
+                logger.warning(f"Error fetching raw logs for lunch swipes: {e}")
 
     summary_items = []
     for row in results:
@@ -47,6 +70,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         last       = getattr(row, "last_tap", None)
         count      = getattr(row, "tap_count", 0)
         w_date     = getattr(row, "work_date", None)
+        emp_id     = getattr(row, "employee_id", None)
         # Use the combined calculation shift from the row object
         row_shift  = getattr(row, "shift", None)
         department = getattr(row, "department", None)
@@ -74,10 +98,23 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
         # Check if this is a full-day leave code (Even if they quet)
         is_leave_code = calculation_shift.strip().upper() in FULL_DAY_LEAVE_CODES
-        
+
+        # Gather all taps for lunch extraction
+        taps_list = logs_lookup.get((emp_id, w_date), [])
+        if not taps_list:
+            if first and last:
+                taps_list = [first] if first == last else [first, last]
+            elif first:
+                taps_list = [first]
+            elif last:
+                taps_list = [last]
+
+        lunch_info = extract_lunch_swipes(taps_list)
+
         # 1. Handle Absent / No Taps
         if not first or not last or count == 0:
             window = parse_shift_window(calculation_shift, department, rules_pool=rules_pool)
+            note_str = calculation_shift.strip().upper() if window['is_leave'] else "Vắng"
             summary_items.append({
                 "employee_id": row.employee_id,
                 "full_emp_id": getattr(row, "full_emp_id", None),
@@ -98,16 +135,20 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "workday_base": window.get('workday_base', 8.0),
                 "shift": shift_code_display,
                 "status": (row.status if hasattr(row, "status") and row.status else "Active"),
-                "note": (calculation_shift.strip().upper() if window['is_leave'] else "Vắng"),
+                "note": note_str,
+                "work_status": "ABSENT" if note_str == "Vắng" else "LEAVE",
                 "minutes_late": 0,
                 "minutes_early_leave": 0,
                 "daily_shift_code": shift_code_display,
+                "lunch_out": lunch_info["lunch_out"],
+                "lunch_in": lunch_info["lunch_in"],
+                "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+                "lunch_status": lunch_info["lunch_status"],
             })
             continue
 
-        # 2. Handle known leave code with some quets (optional, usually they don't quet if leave)
+        # 2. Handle known leave code with some quets
         if is_leave_code:
-            # For now, follow the same logic as before for full-day leave
             window = parse_shift_window(calculation_shift, department, rules_pool=rules_pool)
             summary_items.append({
                 "employee_id": row.employee_id,
@@ -129,9 +170,14 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "shift": shift_code_display,
                 "status": (row.status if hasattr(row, "status") and row.status else "Active"),
                 "note": calculation_shift.strip().upper(),
+                "work_status": "LEAVE",
                 "minutes_late": 0,
                 "minutes_early_leave": 0,
                 "daily_shift_code": shift_code_display,
+                "lunch_out": lunch_info["lunch_out"],
+                "lunch_in": lunch_info["lunch_in"],
+                "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+                "lunch_status": lunch_info["lunch_status"],
             })
             continue
 
@@ -146,15 +192,18 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             first, last, w_date, department, calculation_shift, rules_pool=rules_pool
         )
         
+        work_status = "OK"
         if not (count > 1 and first != last and not is_double_checkin):
             note = determine_missing_tap(first, w_date, calculation_shift, department, rules_pool)
             # Single tap: suppress the metric we cannot know and set the missing tap to None for UI
             if note == "Missing Check-out":
                 minutes_early_lv = 0   # don't know when they left
                 last = None            # Hide the duplicate time on UI
+                work_status = "MISSING_WORK_OUT"
             elif note == "Missing Check-in":
                 minutes_late = 0       # don't know when they arrived
                 first = None           # Hide the duplicate time on UI
+                work_status = "MISSING_WORK_IN"
 
         emp_name = getattr(row, "emp_name", None)
         if not emp_name:
@@ -181,12 +230,17 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "shift": shift_code_display,
             "status": (row.status if hasattr(row, "status") and row.status else "Active"),
             "note": note,
+            "work_status": work_status,
             "minutes_late": minutes_late,
             "minutes_early_leave": minutes_early_lv,
             "daily_shift_code": shift_code_display,
             "night_subsidy": night_subsidy,
             "standard_hours_shift": std_hours_shift,
             "workday_base": workday_base,
+            "lunch_out": lunch_info["lunch_out"],
+            "lunch_in": lunch_info["lunch_in"],
+            "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+            "lunch_status": lunch_info["lunch_status"],
         })
 
     return summary_items

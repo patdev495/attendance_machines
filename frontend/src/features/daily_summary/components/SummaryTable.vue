@@ -17,6 +17,10 @@
             <th>{{ $t('attendance.table.shift') }}</th>
             <th>{{ $t('attendance.table.first_tap') }}</th>
             <th>{{ $t('attendance.table.last_tap') }}</th>
+            <th>{{ $t('attendance.table.lunch_out') }}</th>
+            <th>{{ $t('attendance.table.lunch_in') }}</th>
+            <th>{{ $t('attendance.table.lunch_duration') }}</th>
+            <th>{{ $t('attendance.table.lunch_status') }}</th>
             <th>{{ $t('attendance.table.work_hours') }}</th>
             <th>{{ $t('attendance.table.hours_ot') }}</th>
             <th class="text-center">P</th>
@@ -30,13 +34,13 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="14" class="empty-state">
+            <td colspan="18" class="empty-state">
               <div class="loader"></div>
               {{ $t('common.loading') }}
             </td>
           </tr>
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="14" class="empty-state">
+            <td colspan="18" class="empty-state">
               {{ $t('common.no_data') }}
             </td>
           </tr>
@@ -52,6 +56,14 @@
             </td>
             <td class="time">{{ item.first_tap ? formatTime(item.first_tap) : '-' }}</td>
             <td class="time">{{ item.last_tap ? formatTime(item.last_tap) : '-' }}</td>
+            <td class="time">{{ item.lunch_out ? formatTime(item.lunch_out) : '-' }}</td>
+            <td class="time">{{ item.lunch_in ? formatTime(item.lunch_in) : '-' }}</td>
+            <td class="text-center">{{ item.lunch_duration_minutes !== null && item.lunch_duration_minutes !== undefined ? item.lunch_duration_minutes + 'p' : '-' }}</td>
+            <td>
+              <span class="badge" :class="getLunchStatusClass(item.lunch_status)">
+                {{ getLunchStatusLabel(item.lunch_status) }}
+              </span>
+            </td>
             <td class="hours" :class="{ 'warning': typeof item.work_hours === 'number' && item.work_hours < 8 && item.work_hours > 0 }">
               {{ formatHours(item.work_hours) }}
             </td>
@@ -86,6 +98,7 @@
         </tbody>
       </table>
     </div>
+
 
     <div class="table-footer" v-if="totalCount > 0">
       <PaginationBar 
@@ -165,7 +178,24 @@ const translateNote = (note) => {
   if (n.includes('missing'))     return t('attendance.notes.missing_tap')
   return note
 }
+
+const getLunchStatusClass = (status) => {
+  if (status === 'OK') return 'badge-success'
+  if (status === 'MISSING_LUNCH_OUT') return 'badge-warning'
+  if (status === 'MISSING_LUNCH_IN') return 'badge-warning'
+  if (status === 'NO_LUNCH_SWIPE') return 'badge-secondary'
+  return 'badge-secondary'
+}
+
+const getLunchStatusLabel = (status) => {
+  if (status === 'OK') return t('attendance.table.lunch_status_ok')
+  if (status === 'MISSING_LUNCH_OUT') return t('attendance.table.lunch_status_missing_out')
+  if (status === 'MISSING_LUNCH_IN') return t('attendance.table.lunch_status_missing_in')
+  if (status === 'NO_LUNCH_SWIPE') return t('attendance.table.lunch_status_no_swipe')
+  return status || '-'
+}
 </script>
+
 
 <style scoped>
 .table-container {
