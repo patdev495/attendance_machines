@@ -14,7 +14,6 @@
             <th>{{ $t('attendance.table.emp_id') }}</th>
             <th>{{ $t('attendance.table.emp_name') }}</th>
             <th>{{ $t('attendance.table.date') }}</th>
-            <th>{{ $t('attendance.table.shift') }}</th>
             <th>{{ $t('attendance.table.first_tap') }}</th>
             <th>{{ $t('attendance.table.last_tap') }}</th>
             <th>{{ $t('attendance.table.lunch_out') }}</th>
@@ -26,7 +25,6 @@
             <th class="text-center">P</th>
             <th class="text-center">R</th>
             <th class="text-center">O</th>
-            <th>{{ $t('attendance.table.status') }}</th>
             <th>{{ $t('attendance.table.note') }}</th>
 
             <th class="actions-col">{{ $t('common.actions') }}</th>
@@ -34,13 +32,13 @@
         </thead>
         <tbody>
           <tr v-if="loading">
-            <td colspan="18" class="empty-state">
+            <td colspan="16" class="empty-state">
               <div class="loader"></div>
               {{ $t('common.loading') }}
             </td>
           </tr>
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="18" class="empty-state">
+            <td colspan="16" class="empty-state">
               {{ $t('common.no_data') }}
             </td>
           </tr>
@@ -49,11 +47,6 @@
             <td class="bold">{{ item.employee_id }}</td>
             <td>{{ item.emp_name || '-' }}</td>
             <td>{{ formatDate(item.attendance_date) }}</td>
-            <td>
-              <span class="badge" :class="getShiftClass(item.shift)">
-                {{ item.shift }}
-              </span>
-            </td>
             <td class="time">{{ item.first_tap ? formatTime(item.first_tap) : '-' }}</td>
             <td class="time">{{ item.last_tap ? formatTime(item.last_tap) : '-' }}</td>
             <td class="time">{{ item.lunch_out ? formatTime(item.lunch_out) : '-' }}</td>
@@ -78,11 +71,6 @@
             </td>
             <td class="text-center font-bold text-info" :class="{ 'dimmed': !item.hours_o }">
               {{ item.hours_o ? item.hours_o.toFixed(1) : '-' }}
-            </td>
-            <td>
-
-              <span class="status-indicator" :class="getStatusClass(item.status)"></span>
-              {{ getStatusLabel(item.status) }}
             </td>
             <td class="note">
               <span :class="{ 'error-text': item.note }">{{ translateNote(item.note) }}</span>
@@ -143,31 +131,6 @@ const formatHours = (val) => {
   if (typeof val === 'number') return val.toFixed(2)
   if (val === null || val === undefined) return '0.00'
   return '0.00'
-}
-
-const getShiftClass = (shift) => {
-  if (!shift) return 'badge-secondary'
-  const s = shift.toUpperCase()
-  if (s === 'N') return 'badge-success'
-  if (s === 'D') return 'badge-info'
-  if (s === 'TV') return 'badge-danger'
-  if (['P', 'O', 'T', 'C', 'R', 'K', 'X'].includes(s)) return 'badge-warning'
-  if (s.includes('N') || s.includes('D')) return 'badge-primary'
-  return 'badge-secondary'
-}
-
-const getStatusLabel = (status) => {
-  if (status === 'excel_synced') return t('attendance.filters.status_excel')
-  if (status === 'machine_only') return t('attendance.filters.status_machine')
-  if (status === 'log_only') return t('attendance.filters.status_log')
-  return status || t('attendance.filters.active')
-}
-
-const getStatusClass = (status) => {
-  if (status === 'excel_synced') return 'status-excel'
-  if (status === 'machine_only') return 'status-machine'
-  if (status === 'log_only') return 'status-log'
-  return 'status-default'
 }
 
 const translateNote = (note) => {
@@ -278,18 +241,6 @@ tr:hover td {
   font-size: 0.75rem;
   font-weight: 700;
 }
-
-.status-indicator {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 6px;
-}
-.status-indicator.status-excel { background: var(--success); }
-.status-indicator.status-machine { background: var(--primary); }
-.status-indicator.status-log { background: var(--secondary); }
-.status-indicator.status-default { background: var(--text-muted); }
 
 .empty-state {
   text-align: center;
