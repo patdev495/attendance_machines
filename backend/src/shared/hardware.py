@@ -1,8 +1,21 @@
 from config import config
+import ipaddress
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+def ip_sort_key(item: Any) -> tuple[int, Any]:
+    """
+    Returns a sort key that orders IP addresses numerically in ascending order.
+    Non-IP strings are sorted lexicographically afterwards.
+    """
+    ip_str = item.get("ip", "") if isinstance(item, dict) else str(item)
+    ip_str = ip_str.strip()
+    try:
+        return (0, ipaddress.ip_address(ip_str))
+    except ValueError:
+        return (1, ip_str)
 
 def _parse_machine_line(content: str) -> dict[str, Any] | None:
     raw = content.strip()
@@ -35,22 +48,23 @@ def _parse_machine_line(content: str) -> dict[str, Any] | None:
 
 def get_machine_list(file_path=config.MACHINES_FILE) -> list[str]:
     """
-    Reads all machine IPs, stripping comments.
+    Reads all machine IPs, stripping comments and sorting in ascending numeric order.
     """
     try:
         with open(file_path, "r") as f:
-            return [
+            ips = [
                 cfg["ip"]
                 for line in f
                 if (cfg := _parse_machine_line(line)) is not None
             ]
+            return sorted(ips, key=ip_sort_key)
     except Exception as e:
         logger.error(f"Could not read machines.txt: {e}")
         return []
 
 def get_live_machine_list(file_path=config.MACHINES_FILE):
     """
-    Returns a list of machine configurations that are NOT marked with # nolive.
+    Returns a list of machine configurations that are NOT marked with # nolive, sorted by IP.
     Each item: {"ip": "...", "meal_url": "..." or None, "is_canteen": bool}
     """
     try:
@@ -69,14 +83,14 @@ def get_live_machine_list(file_path=config.MACHINES_FILE):
                     "is_canteen": cfg["is_canteen"],
                     "protocol": cfg["protocol"],
                 })
-        return live_configs
+        return sorted(live_configs, key=ip_sort_key)
     except Exception as e:
         logger.error(f"Error filtering live machines: {e}")
         return []
 
 def get_all_machine_configs(file_path=config.MACHINES_FILE):
     """
-    Returns a list of ALL machine configurations, including nolive ones.
+    Returns a list of ALL machine configurations, including nolive ones, sorted by IP.
     """
     try:
         configs = []
@@ -92,7 +106,7 @@ def get_all_machine_configs(file_path=config.MACHINES_FILE):
                     "is_canteen": cfg["is_canteen"],
                     "protocol": cfg["protocol"],
                 })
-        return configs
+        return sorted(configs, key=ip_sort_key)
     except Exception as e:
         logger.error(f"Error reading all machine configs: {e}")
         return []

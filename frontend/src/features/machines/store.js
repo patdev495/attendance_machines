@@ -6,6 +6,15 @@ import {
   updateUserPrivilege, EXPORT_FINGERPRINTS_URL
 } from './api.js'
 
+export function sortMachinesByIp(list) {
+  if (!Array.isArray(list)) return []
+  return [...list].sort((a, b) => {
+    const ipA = typeof a === 'string' ? a : (a?.ip || '')
+    const ipB = typeof b === 'string' ? b : (b?.ip || '')
+    return ipA.localeCompare(ipB, undefined, { numeric: true, sensitivity: 'base' })
+  })
+}
+
 export const useMachineStore = defineStore('machines', () => {
   const machines = ref([])
   const machinesLoading = ref(false)
@@ -40,7 +49,8 @@ export const useMachineStore = defineStore('machines', () => {
   async function fetchMachines() {
     machinesLoading.value = true
     try {
-      machines.value = await getMachinesCapacity()
+      const data = await getMachinesCapacity()
+      machines.value = sortMachinesByIp(data)
     } catch (e) {
       console.error(e)
     } finally {

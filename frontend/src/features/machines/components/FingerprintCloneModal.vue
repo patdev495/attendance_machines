@@ -84,6 +84,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useNotificationStore } from '@/stores/notification.js'
 import * as machinesApi from '../api'
+import { sortMachinesByIp } from '../store.js'
 
 const notification = useNotificationStore()
 
@@ -130,7 +131,8 @@ function toggleAll() {
 async function fetchMachines() {
   try {
     loading.value = true
-    machines.value = await machinesApi.getMachinesCapacity()
+    const data = await machinesApi.getMachinesCapacity()
+    machines.value = sortMachinesByIp(data)
   } catch (err) {
     console.error('Failed to fetch machines', err)
   } finally {

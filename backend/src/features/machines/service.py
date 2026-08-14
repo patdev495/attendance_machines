@@ -2,7 +2,10 @@ from config import config, DEMO_MODE
 
 from database import SessionLocal, EmployeeMetadata
 from features.hanvon.client import HanvonClient
-from shared.hardware import get_machine_list, update_machine_tags, get_all_machine_configs, delete_machine_config
+from shared.hardware import (
+    get_machine_list, update_machine_tags, get_all_machine_configs, delete_machine_config,
+    ip_sort_key
+)
 import logging
 import threading
 import concurrent.futures
@@ -37,59 +40,82 @@ delete_status = {
 
 status_lock = threading.Lock()
 
-def get_devices_capacity_info():
-    """Checks Hanvon capacity for all configured machines."""
-    machines = get_all_machine_configs()
-    results = []
-    for machine in machines:
-        ip = machine["ip"] if isinstance(machine, dict) else str(machine)
-        try:
-            with HanvonClient(
-                ip,
-                port=config.HANVON_PORT,
-                secret_key=config.HANVON_SECRET_KEY,
-                timeout=5,
-            ) as client:
-                info = client.get_device_info()
+def _check_one_machine_capacity(ip: str) -> Dict[str, Any]:
+    """Check Hanvon capacity for a single machine IP. Designed for parallel fan-out."""
+    import time as _time
+    t0 = _time.monotonic()
+    try:
+        with HanvonClient(
+            ip,
+            port=config.HANVON_PORT,
+            secret_key=config.HANVON_SECRET_KEY,
+            timeout=5,
+        ) as client:
+            info = client.get_device_info()
+        elapsed = _time.monotonic() - t0
+        logger.info(f"[CAPACITY] {ip} OK in {elapsed:.2f}s")
 
-            users = _to_int(info.get("real_faceregist"))
-            users_cap = _to_int(info.get("max_faceregist"))
-            records = _to_int(info.get("real_facerecord"))
-            records_cap = _to_int(info.get("max_facerecord"))
-            admins = _to_int(info.get("managernum"))
-            admins_cap = _to_int(info.get("max_managernum"), 10)
-            results.append({
-                "ip": ip,
-                "status": "Online",
-                "protocol": "hanvon",
-                "model": info.get("model") or info.get("type") or "",
-                "sn": info.get("sn") or "",
-                "firmware": info.get("edition") or "",
-                "device_time": info.get("time") or "",
-                "users": users,
-                "users_cap": users_cap,
-                "fingers": users,
-                "fingers_cap": users_cap,
-                "records": records,
-                "records_cap": records_cap,
-                "admins": admins,
-                "admins_cap": admins_cap,
-            })
-        except Exception as e:
-            results.append({
-                "ip": ip,
-                "status": "Offline",
-                "protocol": "hanvon",
-                "users": 0,
-                "users_cap": 0,
-                "fingers": 0,
-                "fingers_cap": 0,
-                "records": 0,
-                "records_cap": 0,
-                "admins": 0,
-                "admins_cap": 0,
-                "error": str(e),
-            })
+        users = _to_int(info.get("real_faceregist"))
+        users_cap = _to_int(info.get("max_faceregist"))
+        records = _to_int(info.get("real_facerecord"))
+        records_cap = _to_int(info.get("max_facerecord"))
+        admins = _to_int(info.get("managernum"))
+        admins_cap = _to_int(info.get("max_managernum"), 10)
+        return {
+            "ip": ip,
+            "status": "Online",
+            "protocol": "hanvon",
+            "model": info.get("model") or info.get("type") or "",
+            "sn": info.get("sn") or "",
+            "firmware": info.get("edition") or "",
+            "device_time": info.get("time") or "",
+            "users": users,
+            "users_cap": users_cap,
+            "fingers": users,
+            "fingers_cap": users_cap,
+            "records": records,
+            "records_cap": records_cap,
+            "admins": admins,
+            "admins_cap": admins_cap,
+        }
+    except Exception as e:
+        elapsed = _time.monotonic() - t0
+        logger.error(
+            f"[CAPACITY] {ip} FAILED in {elapsed:.2f}s | "
+            f"error_type={type(e).__name__} | error={e}",
+            exc_info=True,
+        )
+        return {
+            "ip": ip,
+            "status": "Offline",
+            "protocol": "hanvon",
+            "users": 0,
+            "users_cap": 0,
+            "fingers": 0,
+            "fingers_cap": 0,
+            "records": 0,
+            "records_cap": 0,
+            "admins": 0,
+            "admins_cap": 0,
+            "error": str(e),
+        }
+
+
+def get_devices_capacity_info() -> list[Dict[str, Any]]:
+    """Checks Hanvon capacity for all configured machines in parallel."""
+    import socket as _socket
+    machines = get_all_machine_configs()
+    ips = [m["ip"] if isinstance(m, dict) else str(m) for m in machines]
+    try:
+        _src_ip = _socket.gethostbyname(_socket.gethostname())
+    except Exception:
+        _src_ip = "unknown"
+    logger.info(f"[CAPACITY] Starting capacity check for {len(ips)} machines (source_ip={_src_ip})")
+    with ThreadPoolExecutor(max_workers=max(1, len(ips))) as executor:
+        future_to_ip = {executor.submit(_check_one_machine_capacity, ip): ip for ip in ips}
+        results = [f.result() for f in concurrent.futures.as_completed(future_to_ip)]
+    results.sort(key=ip_sort_key)
+    logger.info(f"[CAPACITY] Done: {sum(1 for r in results if r['status'] == 'Online')}/{len(results)} online")
     return results
 
 def get_users_from_machine(ip: str):
@@ -417,6 +443,7 @@ def check_user_biometric_on_machine(ip: str, employee_id: str):
             is_employee = employee_id in employee_ids
             is_manager = employee_id in manager_ids
             role = "not_registered"
+            manager_has_face = False
 
             if is_manager:
                 role = "admin"

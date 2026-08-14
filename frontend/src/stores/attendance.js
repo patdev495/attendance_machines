@@ -3,6 +3,7 @@ import { ref, reactive } from 'vue'
 import { logsApi } from '@/features/logs/api.js'
 import { dailySummaryApi } from '@/features/daily_summary/api.js'
 import { getMachines } from '@/features/machines/api.js'
+import { sortMachinesByIp } from '@/features/machines/store.js'
 
 const getAttendance = logsApi.getLogs
 const getAttendanceSummary = dailySummaryApi.getSummary
@@ -61,7 +62,8 @@ export const useAttendanceStore = defineStore('attendance', () => {
 
   async function fetchMachines() {
     try {
-      machines.value = await getMachines()
+      const data = await getMachines()
+      machines.value = sortMachinesByIp(data)
     } catch (e) {
       console.error('Failed to load machines', e)
     }

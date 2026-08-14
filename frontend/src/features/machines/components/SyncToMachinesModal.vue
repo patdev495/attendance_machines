@@ -116,6 +116,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import * as machinesApi from '../api.js'
+import { sortMachinesByIp } from '../store.js'
 import { createBackgroundOperation } from '@/composables/useBackgroundOperation.js'
 
 const props = defineProps({
@@ -181,7 +182,8 @@ function close() {
 async function fetchMachines() {
   loadingMachines.value = true
   try {
-    machines.value = await machinesApi.getMachinesCapacity()
+    const data = await machinesApi.getMachinesCapacity()
+    machines.value = sortMachinesByIp(data)
   } catch (err) {
     console.error('Failed to fetch machines', err)
   } finally {

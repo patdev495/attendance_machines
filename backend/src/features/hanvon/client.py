@@ -1,9 +1,12 @@
 import json
+import logging
 import socket
 import struct
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any, Iterable
+
+logger = logging.getLogger(__name__)
 
 
 STATIC_KEY = [0, 1, 2, 4, 8, 16, 32, 64]
@@ -66,9 +69,20 @@ class HanvonClient:
     def connect(self):
         if self._sock:
             return
+        import time as _time
+        logger.info(f"[HANVON-CLIENT] Connecting to {self.ip}:{self.port} (timeout={self.timeout}s)")
+        t0 = _time.monotonic()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(self.timeout)
-        sock.connect((self.ip, self.port))
+        try:
+            sock.connect((self.ip, self.port))
+            elapsed = _time.monotonic() - t0
+            logger.info(f"[HANVON-CLIENT] TCP connected to {self.ip}:{self.port} in {elapsed:.2f}s")
+        except Exception as e:
+            elapsed = _time.monotonic() - t0
+            logger.error(f"[HANVON-CLIENT] TCP connect FAILED to {self.ip}:{self.port} in {elapsed:.2f}s | {type(e).__name__}: {e}")
+            sock.close()
+            raise
         self._sock = sock
 
     def close(self):
