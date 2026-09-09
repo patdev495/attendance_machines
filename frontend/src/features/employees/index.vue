@@ -1,55 +1,65 @@
 <template>
-  <div class="employees-view">
+  <div class="employees-view anim-up">
     <div class="header">
-      <h1>{{ $t('employees.title') }}</h1>
+      <div class="header-title-box">
+        <h1 class="title">{{ $t('employees.title') }}</h1>
+        <span class="badge badge-hours" v-if="totalCount > 0">{{ totalCount }} nhân viên</span>
+      </div>
       
       <div class="header-actions">
         <!-- Group 1: Sync & Export -->
         <div class="action-group">
           <input type="file" accept=".xlsx,.xls" hidden ref="fileInput" @change="handleFileSelect" />
           
-          <button class="btn-primary" @click="$refs.fileInput.click()" :disabled="syncStatus.is_running">
-            <span class="icon">📥</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.upload_sync') }}
+          <button class="btn btn-primary" @click="$refs.fileInput.click()" :disabled="syncStatus.is_running">
+            <UploadCloud :size="15" />
+            <span>{{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.upload_sync') }}</span>
           </button>
 
-          <button class="btn-primary btn-purple" @click="handleMachineSyncOnly" :disabled="syncStatus.is_running">
-            <span class="icon">🔄</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.sync_machines_only') }}
+          <button class="btn btn-purple" @click="handleMachineSyncOnly" :disabled="syncStatus.is_running">
+            <RotateCw :size="15" :class="{ 'spin-anim': syncStatus.is_running }" />
+            <span>{{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.sync_machines_only') }}</span>
           </button>
 
-          <a :href="exportUrl" class="btn-secondary">
-            <span class="icon">📊</span> {{ $t('employees.export_excel') }}
+          <a :href="exportUrl" class="btn btn-secondary">
+            <FileSpreadsheet :size="15" />
+            <span>{{ $t('employees.export_excel') }}</span>
           </a>
         </div>
 
         <!-- Group 2: Hardware Ops -->
         <div class="action-group">
-          <button class="btn-secondary" @click="isBulkDeleteModalOpen = true">
-            <span class="icon">📁</span> {{ $t('employees.bulk_hardware_delete.title') }}
+          <button class="btn btn-secondary" @click="isBulkDeleteModalOpen = true">
+            <Trash2 :size="15" />
+            <span>{{ $t('employees.bulk_hardware_delete.title') }}</span>
           </button>
-          <button class="btn-secondary btn-green" @click="isBulkPushModalOpen = true">
-            <span class="icon">📤</span> {{ $t('employees.bulk_hardware_push.title') }}
+          <button class="btn btn-green" @click="isBulkPushModalOpen = true">
+            <HardDriveUpload :size="15" />
+            <span>{{ $t('employees.bulk_hardware_push.title') }}</span>
           </button>
         </div>
 
         <!-- Group 3: Printing Cards -->
         <div class="action-group">
-          <button class="btn-primary btn-purple" @click="isPrintModalOpen = true">
-            <span class="icon">🖨️</span> {{ $t('employees.card_print.button_title') }}
+          <button class="btn btn-purple" @click="isPrintModalOpen = true">
+            <Printer :size="15" />
+            <span>{{ $t('employees.card_print.button_title') }}</span>
           </button>
         </div>
 
         <!-- Bulk Delete (Selected) -->
         <transition name="fade">
-          <button v-if="selectedIds.length > 0" class="btn-danger" @click="handleBulkDeleteGlobal" :disabled="bulkActionStatus.is_running">
-            <span class="icon">🗑️</span> {{ $t('employees.bulk_delete_all', { count: selectedIds.length }) }}
+          <button v-if="selectedIds.length > 0" class="btn btn-danger" @click="handleBulkDeleteGlobal" :disabled="bulkActionStatus.is_running">
+            <Trash2 :size="15" />
+            <span>{{ $t('employees.bulk_delete_all', { count: selectedIds.length }) }}</span>
           </button>
         </transition>
       </div>
     </div>
     
-    <div v-if="bulkActionStatus.is_running" class="status-banner animate-in bulk-banner">
+    <div v-if="bulkActionStatus.is_running" class="status-banner delete-banner anim-up">
       <div class="banner-content">
-        <div class="spinner-small"></div>
+        <div class="spinner-sm"></div>
         <span>
           {{ $t('employees.bulk_delete_progress', { current: bulkActionStatus.processed_count + 1, total: bulkActionStatus.total_machines, ip: bulkActionStatus.current_ip }) }}
         </span>
@@ -57,9 +67,9 @@
     </div>
 
     <!-- Inline Progress Banner -->
-    <div v-if="syncStatus.is_running || syncStatus.progress > 0" class="status-banner animate-in" :class="{ 'status-success': syncStatus.progress === 100 && !syncStatus.is_running }">
+    <div v-if="syncStatus.is_running || syncStatus.progress > 0" class="status-banner anim-up" :class="{ 'status-success': syncStatus.progress === 100 && !syncStatus.is_running, 'sync-banner': syncStatus.is_running }">
       <div class="banner-content">
-        <div class="spinner-small" v-if="syncStatus.is_running"></div>
+        <div class="spinner-sm" v-if="syncStatus.is_running"></div>
         <span v-if="syncStatus.is_running">
           {{ $t('sync.syncing') }}: <strong>{{ syncStatus.current_step }}</strong> ({{ syncStatus.progress }}%)
         </span>
@@ -71,15 +81,21 @@
         </span>
       </div>
     </div>
-    <div class="filter-bar">
-      <input type="text" v-model="searchQuery" :placeholder="$t('employees.search_placeholder')" @input="resetAndFetchDebounced" />
-      <select v-model="statusFilter" @change="resetAndFetch">
-        <option value="">{{ $t('attendance.filters.all_status') }}</option>
-        <option value="excel_synced">{{ $t('attendance.filters.status_excel') }}</option>
-        <option value="machine_only">{{ $t('attendance.filters.status_machine') }}</option>
-        <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
-      </select>
 
+    <div class="filter-bar card glow">
+      <div class="search-input-box">
+        <Search :size="15" class="search-icon" />
+        <input type="text" v-model="searchQuery" :placeholder="$t('employees.search_placeholder')" @input="resetAndFetchDebounced" />
+      </div>
+      <div class="select-box">
+        <Filter :size="14" class="filter-icon" />
+        <select v-model="statusFilter" @change="resetAndFetch">
+          <option value="">{{ $t('attendance.filters.all_status') }}</option>
+          <option value="excel_synced">{{ $t('attendance.filters.status_excel') }}</option>
+          <option value="machine_only">{{ $t('attendance.filters.status_machine') }}</option>
+          <option value="log_only">{{ $t('attendance.filters.status_log') }}</option>
+        </select>
+      </div>
     </div>
 
 
@@ -142,6 +158,16 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { 
+  UploadCloud, 
+  RotateCw, 
+  FileSpreadsheet, 
+  Trash2, 
+  HardDriveUpload, 
+  Printer, 
+  Search, 
+  Filter 
+} from 'lucide-vue-next'
 import { employeesApi } from './api'
 import EmployeesTable from './components/EmployeesTable.vue'
 import EditEmployeeModal from './components/EditEmployeeModal.vue'
@@ -408,22 +434,31 @@ onUnmounted(() => {
 
 <style scoped>
 .employees-view {
-  padding: 24px;
   color: #e2e8f0;
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.header-title-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .header h1 {
-  font-size: 1.8rem;
+  font-size: 1.7rem;
+  font-weight: 800;
+  color: #ffffff;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .btn-primary {
@@ -583,19 +618,58 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   margin-bottom: 20px;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  align-items: center;
+  flex-wrap: wrap;
 }
 
-.filter-bar input, .filter-bar select {
-  padding: 10px 14px;
-  border-radius: 6px;
-  border: 1px solid #475569;
-  background-color: #1e293b;
-  color: white;
-  outline: none;
+.search-input-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 240px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 14px;
+}
+.search-input-box:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+.search-icon {
+  color: var(--cyan);
+}
+.search-input-box input {
+  background: transparent;
+  border: none;
+  padding: 9px 0;
+  width: 100%;
+}
+.search-input-box input:focus {
+  box-shadow: none;
 }
 
-.filter-bar input:focus, .filter-bar select:focus {
-  border-color: #3b82f6;
+.select-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+}
+.filter-icon {
+  color: var(--text-dim);
+}
+.select-box select {
+  background: transparent;
+  border: none;
+  padding: 9px 0;
+  cursor: pointer;
+  width: auto;
 }
 </style>
 <style scoped>

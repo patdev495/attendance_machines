@@ -1,40 +1,90 @@
 <template>
-  <div class="daily-summary-feature">
-    <div class="page-header animate-in">
+  <div class="daily-summary-feature anim-up">
+    <!-- Page Header -->
+    <div class="page-header">
       <div class="header-content">
-        <h1>{{ $t('attendance.summary_title') }}</h1>
+        <h1 class="title">{{ $t('attendance.summary_title') }}</h1>
         <p class="subtitle">{{ $t('attendance.summary_subtitle') }}</p>
       </div>
-        <div class="header-actions">
-          <button class="btn btn-primary btn-purple sync-btn" @click="handleMachineSyncOnly" :disabled="syncStatus.is_running">
-            <span class="icon">🔄</span> {{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.sync_machines_only') }}
-          </button>
 
-          <div class="export-group">
-            <select v-model="exportMode" class="export-select" :disabled="exporting">
-              <option value="both">{{ $t('export.both') }}</option>
-              <option value="time">{{ $t('export.time') }}</option>
-              <option value="hours">{{ $t('export.hours') }}</option>
-            </select>
-            <button class="btn btn-primary export-btn" :disabled="exporting" @click="triggerExport">
-              <span class="icon" v-if="!exporting">📊</span>
-              <div class="spinner-small" v-else></div>
-              {{ exporting ? $t('attendance.export.exporting') : $t('attendance.export.btn') }}
-            </button>
-          </div>
+      <div class="header-actions">
+        <!-- Sync Machines Button -->
+        <button class="btn btn-purple sync-btn" @click="handleMachineSyncOnly" :disabled="syncStatus.is_running">
+          <RotateCw :size="16" :class="{ 'spin-anim': syncStatus.is_running }" />
+          <span>{{ syncStatus.is_running ? $t('employees.syncing') : $t('employees.sync_machines_only') }}</span>
+        </button>
+
+        <!-- Export Group -->
+        <div class="export-group">
+          <select v-model="exportMode" class="export-select" :disabled="exporting">
+            <option value="both">{{ $t('export.both') }}</option>
+            <option value="time">{{ $t('export.time') }}</option>
+            <option value="hours">{{ $t('export.hours') }}</option>
+          </select>
+          <button class="btn btn-primary export-btn" :disabled="exporting" @click="triggerExport">
+            <FileSpreadsheet :size="16" v-if="!exporting" />
+            <div class="spinner-sm" v-else></div>
+            <span>{{ exporting ? $t('attendance.export.exporting') : $t('attendance.export.btn') }}</span>
+          </button>
         </div>
+      </div>
+    </div>
+
+    <!-- KPI Metric Summary Row -->
+    <div class="kpi-grid">
+      <div class="kpi-card card glow">
+        <div class="kpi-icon-box emerald-box">
+          <Users :size="20" />
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-label">Tổng lượt tổng hợp</span>
+          <div class="kpi-val">{{ pagination.totalCount }}</div>
+        </div>
+      </div>
+
+      <div class="kpi-card card glow">
+        <div class="kpi-icon-box cyan-box">
+          <Clock :size="20" />
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-label">Tổng giờ làm việc</span>
+          <div class="kpi-val">{{ totalWorkHours.toFixed(1) }}h</div>
+        </div>
+      </div>
+
+      <div class="kpi-card card glow">
+        <div class="kpi-icon-box purple-box">
+          <TrendingUp :size="20" />
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-label">Tổng giờ tăng ca (OT)</span>
+          <div class="kpi-val text-ot">{{ totalOtHours.toFixed(1) }}h</div>
+        </div>
+      </div>
+
+      <div class="kpi-card card glow">
+        <div class="kpi-icon-box amber-box">
+          <AlertTriangle :size="20" />
+        </div>
+        <div class="kpi-details">
+          <span class="kpi-label">Cảnh báo ăn trưa / muộn</span>
+          <div class="kpi-val text-alert">{{ totalAlerts }}</div>
+        </div>
+      </div>
     </div>
 
     <!-- Export Loading Banner -->
-    <div v-if="exporting" class="status-banner animate-in">
+    <div v-if="exporting" class="status-banner sync-banner anim-up">
       <div class="banner-content">
-        <div class="spinner-small"></div>
+        <div class="spinner-sm"></div>
         <span>{{ $t('attendance.export.status_banner', { step: exportStatus.current_step, progress: exportStatus.progress }) }}</span>
       </div>
     </div>
 
+    <!-- Filters Component -->
     <SummaryFilters :initialFilters="filters" @change="handleFilterChange" />
 
+    <!-- Summary Data Table -->
     <SummaryTable 
       :items="items" 
       :loading="loading" 
@@ -47,7 +97,7 @@
     >
       <template #actions>
         <div class="table-counts" v-if="pagination.totalCount > 0">
-          <span class="count-item">{{ $t('attendance.table.total_records', { count: pagination.totalCount }) }}</span>
+          <span class="badge badge-hours">{{ $t('attendance.table.total_records', { count: pagination.totalCount }) }}</span>
         </div>
       </template>
     </SummaryTable>
@@ -57,15 +107,18 @@
       :show="!!selectedDetail" 
       :title="selectedDetail ? $t('attendance.detail_modal_title', { id: selectedDetail.employee_id, date: selectedDetail.attendance_date }) : ''"
       @close="selectedDetail = null"
-      width="450px"
+      width="480px"
     >
       <div v-if="detailLoading" class="loader-container">
-        <div class="loader"></div>
+        <div class="spinner-sm"></div>
       </div>
       <div v-else-if="detailLogs && detailLogs.length > 0" class="detail-list">
         <div v-for="log in detailLogs" :key="log.id" class="detail-item">
-          <span class="detail-time">{{ formatDateTime(log.attendance_time) }}</span>
-          <span class="detail-machine">{{ log.machine_name || log.machine_ip }}</span>
+          <div class="detail-time-box">
+            <Clock :size="14" class="time-icon" />
+            <span class="detail-time">{{ formatDateTime(log.attendance_time) }}</span>
+          </div>
+          <span class="detail-machine badge-ip">{{ log.machine_name || log.machine_ip }}</span>
         </div>
       </div>
       <div v-else class="empty-state">
@@ -76,7 +129,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useNotificationStore } from '@/stores/notification'
 import { createBackgroundOperation } from '@/composables/useBackgroundOperation.js'
@@ -84,6 +137,15 @@ import AppModal from '@/components/shared/AppModal.vue'
 import { dailySummaryApi } from './api'
 import SummaryFilters from './components/SummaryFilters.vue'
 import SummaryTable from './components/SummaryTable.vue'
+import { 
+  RotateCw, 
+  FileSpreadsheet, 
+  Users, 
+  Clock, 
+  TrendingUp, 
+  AlertTriangle 
+} from 'lucide-vue-next'
+
 const { t } = useI18n()
 const notify = useNotificationStore()
 
@@ -121,6 +183,24 @@ const pagination = reactive({
   size: 20,
   totalCount: 0,
   totalPages: 0
+})
+
+// KPI Metrics Computations
+const totalWorkHours = computed(() => {
+  return items.value.reduce((sum, item) => sum + (Number(item.work_hours) || 0), 0)
+})
+
+const totalOtHours = computed(() => {
+  return items.value.reduce((sum, item) => sum + (Number(item.hours_ot) || 0), 0)
+})
+
+const totalAlerts = computed(() => {
+  return items.value.filter(item => 
+    item.lunch_status === 'overdue' || 
+    item.minutes_late > 0 || 
+    item.minutes_early_leave > 0 ||
+    item.note
+  ).length
 })
 
 const fetchData = async () => {
@@ -189,22 +269,22 @@ const exportOperation = createBackgroundOperation({
 })
 
 const triggerExport = async () => {
-    if (!filters.start_date || !filters.end_date) {
-        notify.warn(t('export.error_missing_dates'))
-        return
-    }
-    try {
-        await dailySummaryApi.startExport({
-            start_date: filters.start_date,
-            end_date: filters.end_date,
-            view_mode: exportMode.value
-        })
-        exporting.value = true
-        exportOperation.startPolling({ immediate: true })
-    } catch (e) {
-        notify.error(t('export.error_failed') + ': ' + e.message)
-        exporting.value = false
-    }
+  if (!filters.start_date || !filters.end_date) {
+    notify.warn(t('export.error_missing_dates'))
+    return
+  }
+  try {
+    await dailySummaryApi.startExport({
+      start_date: filters.start_date,
+      end_date: filters.end_date,
+      view_mode: exportMode.value
+    })
+    exporting.value = true
+    exportOperation.startPolling({ immediate: true })
+  } catch (e) {
+    notify.error(t('export.error_failed') + ': ' + e.message)
+    exporting.value = false
+  }
 }
 
 const syncOperation = createBackgroundOperation({
@@ -243,7 +323,7 @@ const handleMachineSyncOnly = async () => {
 }
 
 const formatDateTime = (timeStr) => {
-  if (!timeStr) return '-'
+  if (!timeStr) return '—'
   const d = new Date(timeStr)
   return d.toLocaleString('vi-VN', { 
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -255,7 +335,6 @@ onMounted(() => {
   const today = new Date()
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
   
-  // Simple YYYY-MM-DD formatting
   const formatDate = (date) => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -270,8 +349,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-    exportOperation.dispose()
-    syncOperation.dispose()
+  exportOperation.dispose()
+  syncOperation.dispose()
 })
 </script>
 
@@ -279,29 +358,29 @@ onUnmounted(() => {
 .daily-summary-feature {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 20px;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
-.header-content h1 {
-  margin: 0;
-  font-size: 1.8rem;
+.title {
+  font-size: 1.7rem;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
-  margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 0.95rem;
+  font-size: 0.88rem;
+  margin-top: 2px;
 }
 
 .header-actions {
@@ -313,43 +392,20 @@ onUnmounted(() => {
 .export-group {
   display: flex;
   align-items: center;
-  background: var(--bg-card);
+  background: rgba(15, 23, 42, 0.8);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  transition: all 0.2s;
-  height: 42px;
-}
-
-.sync-btn {
-  height: 42px;
-  padding: 0 16px !important;
-  font-size: 0.9rem !important;
-  border-radius: 10px !important;
-}
-
-.btn-purple {
-  background-color: #8b5cf6 !important;
-  border: none !important;
-  color: white !important;
-}
-.btn-purple:hover:not(:disabled) {
-  background-color: #7c3aed !important;
-}
-
-.export-group:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  height: 38px;
 }
 
 .export-select {
-  background: #1e293b; /* Dark slate background */
+  background: transparent;
   border: none;
   color: #f8fafc;
   padding: 0 12px;
-  font-size: 0.9rem;
-  font-family: 'Outfit', sans-serif;
-  font-weight: 500;
+  font-size: 0.85rem;
+  font-weight: 600;
   cursor: pointer;
   outline: none;
   border-right: 1px solid var(--border);
@@ -360,38 +416,73 @@ onUnmounted(() => {
   border-radius: 0 !important;
   height: 100%;
   padding: 0 16px !important;
-  font-size: 0.9rem !important;
+  font-size: 0.85rem !important;
 }
 
-.status-banner {
-  padding: 12px 20px;
-  background: var(--bg-hover);
-  border-left: 4px solid var(--primary);
-  margin-bottom: 20px;
-  border-radius: 8px;
+.sync-btn {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-md);
 }
 
-.banner-content {
+.spin-anim {
+  animation: spin 0.8s linear infinite;
+}
+
+/* KPI Summary Cards Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.kpi-card {
+  padding: 16px 20px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 0.9rem;
+  gap: 16px;
+  border-radius: var(--radius-lg);
 }
 
-.spinner-small {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--bg-hover);
-  border-top: 2px solid var(--primary);
-  border-radius: 50%;
-  animation: rotate 1s linear infinite;
+.kpi-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.emerald-box { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+.cyan-box { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
+.purple-box { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+.amber-box { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+
+.kpi-details {
+  display: flex;
+  flex-direction: column;
 }
 
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+.kpi-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
 }
 
+.kpi-val {
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #fff;
+  margin-top: 2px;
+}
+.text-ot { color: #c084fc; }
+.text-alert { color: #fbbf24; }
+
+/* Detail modal list */
 .detail-list {
   display: flex;
   flex-direction: column;
@@ -401,34 +492,28 @@ onUnmounted(() => {
 .detail-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 12px 16px;
-  background: var(--bg-main);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
 }
 
+.detail-time-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.time-icon { color: var(--cyan); }
 .detail-time {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  color: var(--primary);
-}
-
-.detail-machine {
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: #e2e8f0;
 }
 
 .loader-container {
   padding: 40px;
   display: flex;
   justify-content: center;
-}
-
-.animate-in {
-  animation: slideUp 0.5s ease-out forwards;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(15px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 </style>

@@ -1,7 +1,9 @@
 <template>
   <div class="table-container card glow">
     <div class="table-header">
-      <h3 class="table-title">{{ $t('attendance.summary_table') }}</h3>
+      <div class="header-left-title">
+        <h3 class="table-title">{{ $t('attendance.summary_table') }}</h3>
+      </div>
       <div class="table-actions">
         <slot name="actions"></slot>
       </div>
@@ -11,82 +13,117 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>{{ $t('attendance.table.emp_id') }}</th>
+            <th style="width: 120px;">{{ $t('attendance.table.emp_id') }}</th>
             <th>{{ $t('attendance.table.emp_name') }}</th>
-            <th>{{ $t('attendance.table.date') }}</th>
-            <th>{{ $t('attendance.table.first_tap') }}</th>
-            <th>{{ $t('attendance.table.last_tap') }}</th>
-            <th>{{ $t('attendance.table.lunch_out') }}</th>
-            <th>{{ $t('attendance.table.lunch_in') }}</th>
-            <th>{{ $t('attendance.table.lunch_duration') }}</th>
-            <th>{{ $t('attendance.table.lunch_status') }}</th>
-            <th>{{ $t('attendance.table.work_hours') }}</th>
-            <th>{{ $t('attendance.table.hours_ot') }}</th>
-            <th class="text-center">P</th>
-            <th class="text-center">R</th>
-            <th class="text-center">O</th>
+            <th style="width: 110px;">{{ $t('attendance.table.date') }}</th>
+            <th style="width: 90px;">{{ $t('attendance.table.first_tap') }}</th>
+            <th style="width: 90px;">{{ $t('attendance.table.last_tap') }}</th>
+            <th style="width: 90px;">{{ $t('attendance.table.lunch_out') }}</th>
+            <th style="width: 90px;">{{ $t('attendance.table.lunch_in') }}</th>
+            <th style="width: 90px;" class="text-center">{{ $t('attendance.table.lunch_duration') }}</th>
+            <th style="width: 120px;">{{ $t('attendance.table.lunch_status') }}</th>
+            <th style="width: 100px;">{{ $t('attendance.table.work_hours') }}</th>
+            <th style="width: 90px;">{{ $t('attendance.table.hours_ot') }}</th>
+            <th class="text-center" style="width: 50px;" :title="'Phép năm (P)'">P</th>
+            <th class="text-center" style="width: 50px;" :title="'Nghỉ bù/chế độ (R)'">R</th>
+            <th class="text-center" style="width: 50px;" :title="'Nghỉ không lương (O)'">O</th>
             <th>{{ $t('attendance.table.note') }}</th>
-
-            <th class="actions-col">{{ $t('common.actions') }}</th>
+            <th class="actions-col" style="width: 70px;">{{ $t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
+          <!-- Loading State -->
           <tr v-if="loading">
             <td colspan="16" class="empty-state">
-              <div class="loader"></div>
-              {{ $t('common.loading') }}
-            </td>
-          </tr>
-          <tr v-else-if="!items || items.length === 0">
-            <td colspan="16" class="empty-state">
-              {{ $t('common.no_data') }}
+              <div class="spinner-sm"></div>
+              <span>{{ $t('common.loading') }}</span>
             </td>
           </tr>
 
-          <tr v-for="item in items" :key="item.employee_id + item.attendance_date">
-            <td class="bold">{{ item.employee_id }}</td>
-            <td>{{ item.emp_name || '-' }}</td>
-            <td>{{ formatDate(item.attendance_date) }}</td>
-            <td class="time">{{ item.first_tap ? formatTime(item.first_tap) : '-' }}</td>
-            <td class="time">{{ item.last_tap ? formatTime(item.last_tap) : '-' }}</td>
-            <td class="time">{{ item.lunch_out ? formatTime(item.lunch_out) : '-' }}</td>
-            <td class="time">{{ item.lunch_in ? formatTime(item.lunch_in) : '-' }}</td>
-            <td class="text-center">{{ item.lunch_duration_minutes !== null && item.lunch_duration_minutes !== undefined ? item.lunch_duration_minutes + 'p' : '-' }}</td>
+          <!-- Empty State -->
+          <tr v-else-if="!items || items.length === 0">
+            <td colspan="16" class="empty-state">
+              <Inbox :size="36" class="empty-icon" />
+              <span>{{ $t('common.no_data') }}</span>
+            </td>
+          </tr>
+
+          <!-- Data Rows -->
+          <tr v-for="item in items" :key="item.employee_id + item.attendance_date" class="summary-row-item">
+            <td class="emp-id-cell">
+              <span class="id-badge">{{ item.employee_id }}</span>
+            </td>
+            <td class="emp-name-cell">
+              <span class="name-text">{{ item.emp_name || '—' }}</span>
+            </td>
+            <td class="date-cell">
+              <span class="mono-text">{{ formatDate(item.attendance_date) }}</span>
+            </td>
+            <td class="time-cell">
+              <span class="mono-text in-time" v-if="item.first_tap">{{ formatTime(item.first_tap) }}</span>
+              <span class="dimmed" v-else>—</span>
+            </td>
+            <td class="time-cell">
+              <span class="mono-text out-time" v-if="item.last_tap">{{ formatTime(item.last_tap) }}</span>
+              <span class="dimmed" v-else>—</span>
+            </td>
+            <td class="time-cell">
+              <span class="mono-text" v-if="item.lunch_out">{{ formatTime(item.lunch_out) }}</span>
+              <span class="dimmed" v-else>—</span>
+            </td>
+            <td class="time-cell">
+              <span class="mono-text" v-if="item.lunch_in">{{ formatTime(item.lunch_in) }}</span>
+              <span class="dimmed" v-else>—</span>
+            </td>
+            <td class="text-center">
+              <span v-if="item.lunch_duration_minutes !== null && item.lunch_duration_minutes !== undefined" class="lunch-pill">
+                {{ item.lunch_duration_minutes }}p
+              </span>
+              <span class="dimmed" v-else>—</span>
+            </td>
             <td>
               <span class="badge" :class="getLunchStatusClass(item.lunch_status)">
                 {{ getLunchStatusLabel(item.lunch_status) }}
               </span>
             </td>
-            <td class="hours" :class="{ 'warning': typeof item.work_hours === 'number' && item.work_hours < 8 && item.work_hours > 0 }">
-              {{ formatHours(item.work_hours) }}
+            <td>
+              <span class="hours-badge" :class="{ 'warning-hours': typeof item.work_hours === 'number' && item.work_hours < 8 && item.work_hours > 0 }">
+                {{ formatHours(item.work_hours) }}h
+              </span>
             </td>
-            <td class="hours ot">
-              {{ formatHours(item.hours_ot) }}
+            <td>
+              <span v-if="item.hours_ot && item.hours_ot > 0" class="ot-badge-glow">
+                +{{ formatHours(item.hours_ot) }}h
+              </span>
+              <span v-else class="dimmed">—</span>
             </td>
             <td class="text-center font-bold text-success" :class="{ 'dimmed': !item.hours_p }">
-              {{ item.hours_p ? item.hours_p.toFixed(1) : '-' }}
+              {{ item.hours_p ? item.hours_p.toFixed(1) : '—' }}
             </td>
             <td class="text-center font-bold text-warning" :class="{ 'dimmed': !item.hours_r }">
-              {{ item.hours_r ? item.hours_r.toFixed(1) : '-' }}
+              {{ item.hours_r ? item.hours_r.toFixed(1) : '—' }}
             </td>
             <td class="text-center font-bold text-info" :class="{ 'dimmed': !item.hours_o }">
-              {{ item.hours_o ? item.hours_o.toFixed(1) : '-' }}
+              {{ item.hours_o ? item.hours_o.toFixed(1) : '—' }}
             </td>
-            <td class="note">
+            <td class="note-cell">
               <span :class="{ 'error-text': item.note }">{{ translateNote(item.note) }}</span>
-              <div v-if="item.minutes_late" class="sub-note late">{{ $t('attendance.table.late', { m: item.minutes_late }) }}</div>
-              <div v-if="item.minutes_early_leave" class="sub-note early">{{ $t('attendance.table.early', { m: item.minutes_early_leave }) }}</div>
+              <div v-if="item.minutes_late" class="sub-note late">
+                {{ $t('attendance.table.late', { m: item.minutes_late }) }}
+              </div>
+              <div v-if="item.minutes_early_leave" class="sub-note early">
+                {{ $t('attendance.table.early', { m: item.minutes_early_leave }) }}
+              </div>
             </td>
             <td class="actions-col">
-              <button class="btn-icon" @click="$emit('view-detail', item)">
-                <span class="icon">🔍</span>
+              <button class="btn-icon" :title="$t('common.info') || 'Xem chi tiết'" @click="$emit('view-detail', item)">
+                <Eye :size="15" />
               </button>
             </td>
           </tr>
         </tbody>
       </table>
     </div>
-
 
     <div class="table-footer" v-if="totalCount > 0">
       <PaginationBar 
@@ -101,6 +138,7 @@
 
 <script setup>
 import PaginationBar from '@/components/shared/PaginationBar.vue'
+import { Eye, Inbox } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 const { t } = useI18n()
 
@@ -116,155 +154,136 @@ const props = defineProps({
 defineEmits(['page-change', 'view-detail'])
 
 const formatDate = (dateStr) => {
-  if (!dateStr) return '-'
+  if (!dateStr) return '—'
   const d = new Date(dateStr)
-  return d.toLocaleDateString('vi-VN')
+  return d.toLocaleDateString('vi-VN', { month: '2-digit', day: '2-digit' })
 }
 
 const formatTime = (timeStr) => {
-  if (!timeStr) return '-'
-  const d = new Date(timeStr)
-  return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+  if (!timeStr) return '—'
+  return timeStr.slice(11, 16)
 }
 
-const formatHours = (val) => {
-  if (typeof val === 'number') return val.toFixed(2)
-  if (val === null || val === undefined) return '0.00'
-  return '0.00'
-}
-
-const translateNote = (note) => {
-  if (!note) return '-'
-  const n = note.toLowerCase()
-  if (n === 'missing check-out') return t('attendance.notes.missing_checkout')
-  if (n === 'missing check-in')  return t('attendance.notes.missing_checkin')
-  if (n.includes('missing'))     return t('attendance.notes.missing_tap')
-  return note
+const formatHours = (hours) => {
+  if (hours === undefined || hours === null) return '—'
+  return typeof hours === 'number' ? hours.toFixed(1) : hours
 }
 
 const getLunchStatusClass = (status) => {
-  if (status === 'OK') return 'badge-success'
-  if (status === 'MISSING_LUNCH_OUT') return 'badge-warning'
-  if (status === 'MISSING_LUNCH_IN') return 'badge-warning'
-  if (status === 'NO_LUNCH_SWIPE') return 'badge-secondary'
-  return 'badge-secondary'
+  if (status === 'normal') return 'badge-excel'
+  if (status === 'overdue') return 'badge-status-tv'
+  if (status === 'missing_in' || status === 'missing_out') return 'badge-warning'
+  return 'badge-log'
 }
 
 const getLunchStatusLabel = (status) => {
-  if (status === 'OK') return t('attendance.table.lunch_status_ok')
-  if (status === 'MISSING_LUNCH_OUT') return t('attendance.table.lunch_status_missing_out')
-  if (status === 'MISSING_LUNCH_IN') return t('attendance.table.lunch_status_missing_in')
-  if (status === 'NO_LUNCH_SWIPE') return t('attendance.table.lunch_status_no_swipe')
-  return status || '-'
+  if (!status) return '—'
+  return t(`attendance.lunch_status.${status}`) || status
+}
+
+const translateNote = (note) => {
+  if (!note) return ''
+  return note
 }
 </script>
 
-
 <style scoped>
-.table-container {
-  display: flex;
-  flex-direction: column;
-}
-
 .table-header {
-  padding: 20px 24px;
+  padding: 16px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border);
 }
 
 .table-title {
-  margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--text-main);
+  color: white;
+  margin: 0;
 }
 
-.scrollable {
-  overflow-x: auto;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-th {
-  background: var(--bg-main);
-  text-align: left;
-  padding: 14px 16px;
-  font-size: 0.8rem;
+.id-badge {
+  font-family: var(--font-mono);
   font-weight: 700;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  border-bottom: 2px solid var(--border-light);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.84rem;
 }
 
-td {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border-light);
-  font-size: 0.95rem;
-  color: var(--text-main);
+.name-text {
+  font-weight: 600;
+  color: #f1f5f9;
 }
 
-tr:hover td {
-  background: var(--bg-hover);
+.mono-text {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+.in-time { color: #34d399; }
+.out-time { color: #38bdf8; }
+
+.lunch-pill {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fcd34d;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
-.bold { font-weight: 600; }
-.time { font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; }
-.hours { font-weight: 700; color: var(--primary); }
-.hours.ot { color: #f59e0b; } /* Amber-500 for OT */
-.hours.warning { color: var(--warning); }
-.error-text { color: var(--danger); font-size: 0.85rem; font-weight: 500; }
+.hours-badge {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+}
 
-.text-center { text-align: center; }
-.text-success { color: #2ecc71; }
-.text-warning { color: #f1c40f; }
-.text-info { color: #3498db; }
-.font-bold { font-weight: 700; }
-.dimmed { opacity: 0.15; font-weight: 400 !important; }
+.warning-hours {
+  color: #fb923c;
+  font-weight: 700;
+}
 
+.ot-badge-glow {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: #34d399;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.dimmed {
+  opacity: 0.35;
+}
+
+.text-success { color: #34d399; }
+.text-warning { color: #fbbf24; }
+.text-info { color: #38bdf8; }
 
 .sub-note {
-  font-size: 0.75rem;
-  margin-top: 4px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  margin-top: 2px;
 }
-.sub-note.late { color: var(--warning); }
-.sub-note.early { color: var(--secondary); }
+.sub-note.late { color: #f87171; }
+.sub-note.early { color: #fb923c; }
 
-.badge {
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 0;
-  color: var(--text-muted);
+.error-text {
+  color: #f87171;
+  font-weight: 600;
 }
 
 .table-footer {
-  padding: 0px 24px;
-  border-top: 1px solid var(--border-light);
-}
-
-.loader {
-  border: 3px solid var(--bg-hover);
-  border-top: 3px solid var(--primary);
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 10px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

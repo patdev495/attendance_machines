@@ -32,21 +32,21 @@ const route = useRoute()
 .app-layout {
   display: flex;
   min-height: 100vh;
-  background-color: #020617; /* Darker slate/black */
+  background-color: transparent;
 }
 
 .main-content {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* Prevent flex blowout */
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .container {
-  max-width: 1400px;
-  margin: 20px auto;
-  padding: 0 40px;
+  max-width: 1600px;
+  margin: 16px auto 32px;
+  padding: 0 32px;
   width: 100%;
   flex: 1;
 }
@@ -60,14 +60,22 @@ const route = useRoute()
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.fade-enter-from,
+.fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
 .fade-leave-to {
   opacity: 0;
+  transform: translateY(-8px);
+}
+
+@media (max-width: 1024px) {
+  .container { padding: 0 20px; margin-top: 12px; }
 }
 
 @media (max-width: 768px) {
-  .container { padding: 0 15px; }
+  .container { padding: 0 14px; margin-top: 8px; }
 }
 </style>

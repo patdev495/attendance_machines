@@ -1,18 +1,22 @@
 <template>
-  <div class="kiosk-container">
+  <div class="kiosk-container anim-up">
     <header class="kiosk-header">
       <div class="logo-area">
-        <h1>🍽️ {{ $t('meal.kiosk_title') }}</h1>
+        <div class="kiosk-title-box">
+          <UtensilsCrossed :size="24" class="kiosk-brand-icon" />
+          <h1>{{ $t('meal.kiosk_title') }}</h1>
+        </div>
         <div class="clock">{{ currentTime }}</div>
       </div>
       <div class="controls">
         <button class="btn toggle-history-btn" @click="toggleHistory">
-          {{ $t('meal.search_btn') }}
+          <Search :size="14" />
+          <span>{{ $t('meal.search_btn') }}</span>
         </button>
         <select v-model="selectedMachine" class="machine-select">
           <option value="all">{{ $t('meal.all_machines') }}</option>
           <option v-for="ip in canteenMachines" :key="ip" :value="ip">
-            {{ getMachineStatusIcon(ip) }} {{ ip }}
+            {{ formatMachineLabel(ip) }}
           </option>
         </select>
         <button 
@@ -23,21 +27,23 @@
           <span class="dot"></span> LIVE
         </button>
         <select v-model="currentLang" @change="changeLanguage" class="lang-select">
-          <option value="vi">🇻🇳 VI</option>
-          <option value="en">🇬🇧 EN</option>
-          <option value="zh">🇨🇳 ZH</option>
+          <option value="vi">Tiếng Việt</option>
+          <option value="en">English</option>
+          <option value="zh">中文</option>
         </select>
-        <button class="btn" :class="isMuted ? 'btn-danger' : 'btn-secondary'" @click="toggleMute" :title="isMuted ? 'Unmute' : 'Mute'">
-          {{ isMuted ? '🔇' : '🔊' }}
+        <button class="btn" :class="isMuted ? 'btn-danger' : 'btn-secondary'" @click="toggleMute" :title="isMuted ? 'Bật âm thanh' : 'Tắt âm thanh'">
+          <VolumeX :size="16" v-if="isMuted" />
+          <Volume2 :size="16" v-else />
         </button>
-        <button class="btn fullscreen-btn" @click="enterFullscreen" title="Fullscreen">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <button class="btn fullscreen-btn" @click="enterFullscreen" title="Toàn màn hình">
+          <Maximize2 :size="16" />
         </button>
         <button class="btn btn-secondary home-btn" @click="goHome">
-          🏠 {{ $t('common.home') }}
+          <Home :size="15" />
+          <span>{{ $t('common.home') }}</span>
         </button>
-        <button class="btn btn-secondary settings-btn" @click="openMachineSettings" title="Cấu hình máy">
-          ⚙️
+        <button class="btn btn-secondary settings-btn" @click="openMachineSettings" :title="$t('meal.machine_settings') || 'Cấu hình máy'">
+          <SlidersHorizontal :size="15" />
         </button>
       </div>
     </header>
@@ -47,7 +53,10 @@
       <div v-if="showMachineSettings" class="modal-overlay" @click.self="showMachineSettings = false">
         <div class="modal-content machine-settings-modal">
           <div class="modal-header">
-            <h3>⚙️ {{ $t('meal.machine_settings') || 'Cấu hình máy chấm công' }}</h3>
+            <h3>
+              <SlidersHorizontal :size="18" style="display:inline-block; vertical-align:middle; margin-right:6px;" />
+              {{ $t('meal.machine_settings') || 'Cấu hình máy chấm công' }}
+            </h3>
             <button class="close-btn" @click="showMachineSettings = false">&times;</button>
           </div>
           <div class="modal-body">
@@ -126,11 +135,15 @@
                   </div>
                   <div class="meal-info">
                     <template v-if="latestSwipes[ip].meal_info && latestSwipes[ip].meal_info.is_registered !== false">
-                      <div class="meal-icon">🍱</div>
+                      <div class="meal-icon">
+                        <Utensils :size="34" />
+                      </div>
                       <h3 class="meal-name">{{ getMealName(latestSwipes[ip].meal_info) }}</h3>
                     </template>
                     <template v-else>
-                      <div class="meal-icon error">❌</div>
+                      <div class="meal-icon error">
+                        <AlertCircle :size="34" />
+                      </div>
                       <h3 class="meal-name">{{ $t('meal.not_registered') }}</h3>
                     </template>
                   </div>
@@ -204,7 +217,9 @@
                 <input type="text" v-model="searchQuery" :placeholder="$t('meal.search_placeholder')" @keyup.enter="handleSearch" />
                 <button @click="handleSearch">{{ $t('meal.find_btn') }}</button>
               </div>
-              <button class="close-history-btn" @click="showHistory = false">✖</button>
+              <button class="close-history-btn" @click="showHistory = false" title="Đóng">
+                <X :size="16" />
+              </button>
             </div>
           </div>
 
@@ -253,6 +268,18 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
+import { 
+  UtensilsCrossed, 
+  Utensils, 
+  Volume2, 
+  VolumeX, 
+  Maximize2, 
+  Home, 
+  SlidersHorizontal, 
+  AlertCircle, 
+  Search, 
+  X 
+} from 'lucide-vue-next'
 import { mealApi } from './api'
 import { getLiveStatus, reconnectMachine } from '@/features/machines/api'
 import { useLiveLogs } from '@/features/logs/composables/useLiveLogs'
@@ -261,6 +288,16 @@ import { useUIStore } from '@/stores/ui'
 import { setLanguage } from '@/i18n/index.js'
 
 const { t, locale } = useI18n()
+
+function formatMachineLabel(ip) {
+  const m = machineStatus.value[ip]
+  if (!m) return `⚪ ${ip}`
+  const status = typeof m === 'object' ? m.status : m
+  if (status === 'connected') return `🟢 ${ip}`
+  if (status === 'stuck') return `🟡 ${ip}`
+  if (status === 'disconnected') return `🔴 ${ip}`
+  return `⚪ ${ip}`
+}
 const uiStore = useUIStore()
 const router = useRouter()
 

@@ -1,54 +1,70 @@
 <template>
-  <div class="table-wrap card">
+  <div class="table-wrap card glow">
+    <!-- Loading Overlay -->
     <div v-if="loading" class="loading-overlay">
-      <div class="spinner"></div>
+      <div class="spinner-sm"></div>
       <p>{{ $t('attendance.table.loading') }}</p>
     </div>
     
+    <!-- Error State -->
     <div v-else-if="error" class="error-state">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="error-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      {{ error }}
+      <AlertCircle :size="24" class="error-icon" />
+      <span>{{ error }}</span>
     </div>
 
+    <!-- Table Content -->
     <template v-else>
       <div class="table-scroll">
-        <table>
+        <table class="data-table">
           <thead>
             <tr>
-              <th>{{ $t('attendance.table.emp_id') }}</th>
+              <th style="width: 140px;">{{ $t('attendance.table.emp_id') }}</th>
               <th>{{ $t('attendance.table.emp_name') }}</th>
-              <th>{{ $t('attendance.table.attendance_time') }}</th>
-              <th>Ca làm việc</th>
-              <th>{{ $t('attendance.table.machine_ip') }}</th>
+              <th style="width: 180px;">{{ $t('attendance.table.attendance_time') }}</th>
+              <th style="width: 150px;">{{ $t('attendance.table.shift') || 'Ca làm việc' }}</th>
+              <th style="width: 160px;">{{ $t('attendance.table.machine_ip') }}</th>
             </tr>
           </thead>
-          <transition-group name="list" tag="tbody">
+          <transition-group name="row-slide" tag="tbody">
             <tr v-if="items.length === 0" key="empty">
-              <td colspan="4" class="empty-state">
-                <div class="empty-content">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="empty-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
-                  <p>{{ $t('attendance.table.no_records') }}</p>
-                </div>
+              <td colspan="5" class="empty-state">
+                <Inbox :size="42" class="empty-icon" />
+                <p>{{ $t('attendance.table.no_records') }}</p>
               </td>
             </tr>
-            <tr v-for="row in items" :key="row.id || row.attendance_time" :class="{ 'live-row': row.is_live }">
-              <td class="emp-id">
-                {{ row.employee_id }}
+            <tr 
+              v-for="row in items" 
+              :key="row.id || row.attendance_time" 
+              :class="['log-row', { 'live-row': row.is_live }]"
+            >
+              <td class="emp-id-cell">
+                <span class="id-badge">{{ row.employee_id }}</span>
               </td>
-              <td class="emp-name">
-                <span v-if="row.emp_name">{{ row.emp_name }}</span>
-                <span v-else class="text-muted italic">-</span>
-                <span v-if="row.is_live" class="badge-live">LIVE</span>
+              <td class="emp-name-cell">
+                <span v-if="row.emp_name" class="emp-name-text">{{ row.emp_name }}</span>
+                <span v-else class="text-muted italic">—</span>
+                <span v-if="row.is_live" class="badge-live">
+                  <span class="live-dot-ping"></span>
+                  LIVE
+                </span>
               </td>
-              <td class="time-col">{{ formatDateTime(row.attendance_time) }}</td>
-              <td><span class="badge-shift" v-if="row.shift">{{ row.shift }}</span><span v-else class="text-muted italic">-</span></td>
-              <td><span class="badge-ip">{{ row.machine_ip }}</span></td>
+              <td class="time-cell">
+                <span class="mono-time">{{ formatDateTime(row.attendance_time) }}</span>
+              </td>
+              <td>
+                <span class="badge-shift" v-if="row.shift">{{ row.shift }}</span>
+                <span v-else class="text-muted italic">—</span>
+              </td>
+              <td>
+                <span class="badge-ip">{{ row.machine_ip }}</span>
+              </td>
             </tr>
           </transition-group>
         </table>
       </div>
       
-      <div class="pagination-container" v-if="!liveMode">
+      <!-- Footer: Pagination or Live Tracker -->
+      <div class="table-footer-bar" v-if="!liveMode">
         <PaginationBar
           :currentPage="currentPage"
           :totalPages="totalPages"
@@ -58,8 +74,8 @@
       </div>
       <div v-else class="live-status-bar">
         <div class="live-indicator">
-          <span class="pulse-dot"></span>
-          Đang theo dõi trực tiếp...
+          <span class="pulse-dot-red"></span>
+          <span class="live-status-text">Đang nhận dữ liệu trực tiếp từ các máy chấm công...</span>
         </div>
       </div>
     </template>
@@ -69,6 +85,7 @@
 <script setup>
 import { defineProps, defineEmits } from 'vue'
 import PaginationBar from '@/components/shared/PaginationBar.vue'
+import { AlertCircle, Inbox } from 'lucide-vue-next'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -87,54 +104,114 @@ function emitPageChange(page) {
 }
 
 function formatDateTime(dt) {
-  if (!dt) return '-'
-  return dt.replace('T', ' ').substring(0, 16)
+  if (!dt) return '—'
+  return dt.replace('T', ' ').substring(0, 19)
 }
 </script>
 
 <style scoped>
-.table-wrap { position: relative; min-height: 200px; display: flex; flex-direction: column; }
-.table-scroll { overflow-x: auto; flex: 1; }
-
-.emp-name { color: white; display: flex; align-items: center; gap: 8px; }
-.italic { font-style: italic; opacity: 0.5; font-size: 0.85rem; }
-
-.badge-live { background: #ef4444; color: white; font-size: 0.65rem; font-weight: 800; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; }
-.badge-ip { background: rgba(59, 130, 246, 0.1); color: #60a5fa; padding: 4px 10px; border-radius: 6px; font-size: 0.8rem; font-weight: 500; border: 1px solid rgba(59, 130, 246, 0.2); }
-.badge-shift { background: rgba(16, 185, 129, 0.1); color: #34d399; padding: 4px 8px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; border: 1px solid rgba(16, 185, 129, 0.2); }
-
-/* Live Row and Animations */
-.live-row { background: rgba(239, 68, 68, 0.05); animation: highlight 2s ease-out; }
-
-@keyframes highlight {
-  from { background: rgba(239, 68, 68, 0.2); }
-  to { background: rgba(239, 68, 68, 0.05); }
+.table-wrap {
+  position: relative;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
 }
 
-.list-enter-active, .list-leave-active { transition: all 0.5s ease; }
-.list-enter-from { opacity: 0; transform: translateX(-30px); }
-.list-leave-to { opacity: 0; transform: translateX(30px); }
-
-.live-status-bar { padding: 16px 24px; border-top: 1px solid var(--border); background: rgba(0, 0, 0, 0.2); }
-.live-indicator { display: flex; align-items: center; gap: 10px; color: #94a3b8; font-size: 0.9rem; font-weight: 500; }
-.pulse-dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; box-shadow: 0 0 0 rgba(239, 68, 68, 0.4); animation: dotPulse 1.5s infinite; }
-
-@keyframes dotPulse {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+.loading-overlay {
+  padding: 60px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
 }
 
-.loading-overlay { position: absolute; inset: 0; background: rgba(15, 23, 42, 0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; border-radius: var(--radius); }
-.spinner { width: 40px; height: 40px; border: 3px solid rgba(255, 255, 255, 0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.error-state {
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--rose);
+}
 
-.error-state { padding: 40px; text-align: center; color: #f87171; display: flex; flex-direction: column; align-items: center; gap: 12px; }
-.error-icon { color: #ef4444; }
+.emp-id-cell .id-badge {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
 
-.empty-state { padding: 80px 0; }
-.empty-content { display: flex; flex-direction: column; align-items: center; color: var(--text-muted); gap: 16px; }
-.empty-icon { opacity: 0.3; }
+.emp-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.emp-name-text {
+  font-weight: 600;
+  color: #ffffff;
+}
 
-.pagination-container { padding: 20px 24px; border-top: 1px solid var(--border); }
+.time-cell .mono-time {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  color: #cbd5e1;
+}
+
+.live-row {
+  background: rgba(244, 63, 94, 0.08) !important;
+  border-left: 3px solid var(--rose);
+}
+
+.live-dot-ping {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f43f5e;
+  display: inline-block;
+  animation: livePulse 1.5s infinite;
+}
+
+.table-footer-bar {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.live-status-bar {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(244, 63, 94, 0.04);
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-status-text {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #fb7185;
+  letter-spacing: 0.02em;
+}
+
+/* Row animations */
+.row-slide-enter-active {
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.row-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-12px);
+  background: rgba(99, 102, 241, 0.2);
+}
 </style>
