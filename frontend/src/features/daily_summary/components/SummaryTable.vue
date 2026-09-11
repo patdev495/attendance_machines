@@ -140,7 +140,7 @@
 import PaginationBar from '@/components/shared/PaginationBar.vue'
 import { Eye, Inbox } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const props = defineProps({
   items: Array,
@@ -170,15 +170,31 @@ const formatHours = (hours) => {
 }
 
 const getLunchStatusClass = (status) => {
-  if (status === 'normal') return 'badge-excel'
-  if (status === 'overdue') return 'badge-status-tv'
-  if (status === 'missing_in' || status === 'missing_out') return 'badge-warning'
+  const s = String(status || '').toUpperCase()
+  if (s === 'OK' || s === 'NORMAL') return 'badge-excel'
+  if (s === 'OVERDUE') return 'badge-status-tv'
+  if (s.includes('MISSING')) return 'badge-warning'
   return 'badge-log'
 }
 
 const getLunchStatusLabel = (status) => {
   if (!status) return '—'
-  return t(`attendance.lunch_status.${status}`) || status
+  const key = `attendance.lunch_status.${status}`
+  if (te && te(key)) return t(key)
+  const upper = String(status).toUpperCase()
+  const upperKey = `attendance.lunch_status.${upper}`
+  if (te && te(upperKey)) return t(upperKey)
+  const legacyMap = {
+    OK: 'attendance.table.lunch_status_ok',
+    MISSING_LUNCH_OUT: 'attendance.table.lunch_status_missing_out',
+    MISSING_LUNCH_IN: 'attendance.table.lunch_status_missing_in',
+    NO_LUNCH_SWIPE: 'attendance.table.lunch_status_no_swipe'
+  }
+  if (legacyMap[upper] && te && te(legacyMap[upper])) return t(legacyMap[upper])
+  const translated = t(key)
+  if (translated && translated !== key) return translated
+  if (legacyMap[upper]) return t(legacyMap[upper])
+  return status
 }
 
 const translateNote = (note) => {

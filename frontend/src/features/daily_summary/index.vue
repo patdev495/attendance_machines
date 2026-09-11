@@ -197,6 +197,8 @@ const totalOtHours = computed(() => {
 const totalAlerts = computed(() => {
   return items.value.filter(item => 
     item.lunch_status === 'overdue' || 
+    item.lunch_status === 'MISSING_LUNCH_IN' ||
+    item.lunch_status === 'MISSING_LUNCH_OUT' ||
     item.minutes_late > 0 || 
     item.minutes_early_leave > 0 ||
     item.note

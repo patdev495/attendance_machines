@@ -217,6 +217,16 @@
     }
   },
   "attendance": {
+    "lunch_status": {
+      "OK": "Đủ Quẹt",
+      "MISSING_LUNCH_OUT": "Thiếu Quẹt Ra",
+      "MISSING_LUNCH_IN": "Thiếu Quẹt Vào",
+      "NO_LUNCH_SWIPE": "Không Quẹt Trưa",
+      "ok": "Đủ Quẹt",
+      "missing_lunch_out": "Thiếu Quẹt Ra",
+      "missing_lunch_in": "Thiếu Quẹt Vào",
+      "no_lunch_swipe": "Không Quẹt Trưa"
+    },
     "raw_logs": "Log Thô",
     "logs_subtitle": "Xem và đồng bộ dữ liệu chấm công thô từ các máy",
     "daily_summary": "Báo Cáo Ngày",

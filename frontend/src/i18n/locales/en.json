@@ -216,6 +216,16 @@
     }
   },
   "attendance": {
+    "lunch_status": {
+      "OK": "Complete",
+      "MISSING_LUNCH_OUT": "Missing Out",
+      "MISSING_LUNCH_IN": "Missing Return",
+      "NO_LUNCH_SWIPE": "No Lunch Swipes",
+      "ok": "Complete",
+      "missing_lunch_out": "Missing Out",
+      "missing_lunch_in": "Missing Return",
+      "no_lunch_swipe": "No Lunch Swipes"
+    },
     "raw_logs": "Raw Logs",
     "logs_subtitle": "View and synchronize raw attendance records from machines",
     "daily_summary": "Daily Report",

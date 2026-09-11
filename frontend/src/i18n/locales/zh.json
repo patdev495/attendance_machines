@@ -215,6 +215,16 @@
     }
   },
   "attendance": {
+    "lunch_status": {
+      "OK": "打卡完整",
+      "MISSING_LUNCH_OUT": "缺外出卡",
+      "MISSING_LUNCH_IN": "缺返回卡",
+      "NO_LUNCH_SWIPE": "无午休打卡",
+      "ok": "打卡完整",
+      "missing_lunch_out": "缺外出卡",
+      "missing_lunch_in": "缺返回卡",
+      "no_lunch_swipe": "无午休打卡"
+    },
     "raw_logs": "原始记录",
     "logs_subtitle": "查看并同步来自考勤机的原始打卡记录",
     "daily_summary": "每日报告",
