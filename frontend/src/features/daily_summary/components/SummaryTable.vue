@@ -20,13 +20,8 @@
             <th style="width: 90px;">{{ $t('attendance.table.last_tap') }}</th>
             <th style="width: 90px;">{{ $t('attendance.table.lunch_out') }}</th>
             <th style="width: 90px;">{{ $t('attendance.table.lunch_in') }}</th>
-            <th style="width: 90px;" class="text-center">{{ $t('attendance.table.lunch_duration') }}</th>
-            <th style="width: 120px;">{{ $t('attendance.table.lunch_status') }}</th>
             <th style="width: 100px;">{{ $t('attendance.table.work_hours') }}</th>
             <th style="width: 90px;">{{ $t('attendance.table.hours_ot') }}</th>
-            <th class="text-center" style="width: 50px;" :title="'Phép năm (P)'">P</th>
-            <th class="text-center" style="width: 50px;" :title="'Nghỉ bù/chế độ (R)'">R</th>
-            <th class="text-center" style="width: 50px;" :title="'Nghỉ không lương (O)'">O</th>
             <th>{{ $t('attendance.table.note') }}</th>
             <th class="actions-col" style="width: 70px;">{{ $t('common.actions') }}</th>
           </tr>
@@ -34,7 +29,7 @@
         <tbody>
           <!-- Loading State -->
           <tr v-if="loading">
-            <td colspan="16" class="empty-state">
+            <td colspan="11" class="empty-state">
               <div class="spinner-sm"></div>
               <span>{{ $t('common.loading') }}</span>
             </td>
@@ -42,7 +37,7 @@
 
           <!-- Empty State -->
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="16" class="empty-state">
+            <td colspan="11" class="empty-state">
               <Inbox :size="36" class="empty-icon" />
               <span>{{ $t('common.no_data') }}</span>
             </td>
@@ -75,17 +70,6 @@
               <span class="mono-text" v-if="item.lunch_in">{{ formatTime(item.lunch_in) }}</span>
               <span class="dimmed" v-else>—</span>
             </td>
-            <td class="text-center">
-              <span v-if="item.lunch_duration_minutes !== null && item.lunch_duration_minutes !== undefined" class="lunch-pill">
-                {{ item.lunch_duration_minutes }}p
-              </span>
-              <span class="dimmed" v-else>—</span>
-            </td>
-            <td>
-              <span class="badge" :class="getLunchStatusClass(item.lunch_status)">
-                {{ getLunchStatusLabel(item.lunch_status) }}
-              </span>
-            </td>
             <td>
               <span class="hours-badge" :class="{ 'warning-hours': typeof item.work_hours === 'number' && item.work_hours < 8 && item.work_hours > 0 }">
                 {{ formatHours(item.work_hours) }}h
@@ -96,15 +80,6 @@
                 +{{ formatHours(item.hours_ot) }}h
               </span>
               <span v-else class="dimmed">—</span>
-            </td>
-            <td class="text-center font-bold text-success" :class="{ 'dimmed': !item.hours_p }">
-              {{ item.hours_p ? item.hours_p.toFixed(1) : '—' }}
-            </td>
-            <td class="text-center font-bold text-warning" :class="{ 'dimmed': !item.hours_r }">
-              {{ item.hours_r ? item.hours_r.toFixed(1) : '—' }}
-            </td>
-            <td class="text-center font-bold text-info" :class="{ 'dimmed': !item.hours_o }">
-              {{ item.hours_o ? item.hours_o.toFixed(1) : '—' }}
             </td>
             <td class="note-cell">
               <span :class="{ 'error-text': item.note }">{{ translateNote(item.note) }}</span>
