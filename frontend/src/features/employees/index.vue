@@ -500,20 +500,6 @@ onUnmounted(() => {
   background-color: #64748b;
 }
 
-.btn-purple {
-  background-color: #8b5cf6 !important;
-}
-.btn-purple:hover:not(:disabled) {
-  background-color: #7c3aed !important;
-}
-
-.btn-green {
-  border-color: #10b981 !important;
-  color: #10b981 !important;
-}
-.btn-green:hover:not(:disabled) {
-  background-color: rgba(16, 185, 129, 0.1) !important;
-}
 
 .btn-outline-danger {
   border-color: #ef4444 !important;
