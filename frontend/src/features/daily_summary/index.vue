@@ -30,49 +30,6 @@
       </div>
     </div>
 
-    <!-- KPI Metric Summary Row -->
-    <div class="kpi-grid">
-      <div class="kpi-card card glow">
-        <div class="kpi-icon-box emerald-box">
-          <Users :size="20" />
-        </div>
-        <div class="kpi-details">
-          <span class="kpi-label">Tổng lượt tổng hợp</span>
-          <div class="kpi-val">{{ pagination.totalCount }}</div>
-        </div>
-      </div>
-
-      <div class="kpi-card card glow">
-        <div class="kpi-icon-box cyan-box">
-          <Clock :size="20" />
-        </div>
-        <div class="kpi-details">
-          <span class="kpi-label">Tổng giờ làm việc</span>
-          <div class="kpi-val">{{ totalWorkHours.toFixed(1) }}h</div>
-        </div>
-      </div>
-
-      <div class="kpi-card card glow">
-        <div class="kpi-icon-box purple-box">
-          <TrendingUp :size="20" />
-        </div>
-        <div class="kpi-details">
-          <span class="kpi-label">Tổng giờ tăng ca (OT)</span>
-          <div class="kpi-val text-ot">{{ totalOtHours.toFixed(1) }}h</div>
-        </div>
-      </div>
-
-      <div class="kpi-card card glow">
-        <div class="kpi-icon-box amber-box">
-          <AlertTriangle :size="20" />
-        </div>
-        <div class="kpi-details">
-          <span class="kpi-label">Cảnh báo ăn trưa / muộn</span>
-          <div class="kpi-val text-alert">{{ totalAlerts }}</div>
-        </div>
-      </div>
-    </div>
-
     <!-- Export Loading Banner -->
     <div v-if="exporting" class="status-banner sync-banner anim-up">
       <div class="banner-content">
@@ -140,10 +97,7 @@ import SummaryTable from './components/SummaryTable.vue'
 import { 
   RotateCw, 
   FileSpreadsheet, 
-  Users, 
-  Clock, 
-  TrendingUp, 
-  AlertTriangle 
+  Clock 
 } from 'lucide-vue-next'
 
 const { t } = useI18n()
@@ -183,26 +137,6 @@ const pagination = reactive({
   size: 20,
   totalCount: 0,
   totalPages: 0
-})
-
-// KPI Metrics Computations
-const totalWorkHours = computed(() => {
-  return items.value.reduce((sum, item) => sum + (Number(item.work_hours) || 0), 0)
-})
-
-const totalOtHours = computed(() => {
-  return items.value.reduce((sum, item) => sum + (Number(item.hours_ot) || 0), 0)
-})
-
-const totalAlerts = computed(() => {
-  return items.value.filter(item => 
-    item.lunch_status === 'overdue' || 
-    item.lunch_status === 'MISSING_LUNCH_IN' ||
-    item.lunch_status === 'MISSING_LUNCH_OUT' ||
-    item.minutes_late > 0 || 
-    item.minutes_early_leave > 0 ||
-    item.note
-  ).length
 })
 
 const fetchData = async () => {
@@ -430,59 +364,6 @@ onUnmounted(() => {
 .spin-anim {
   animation: spin 0.8s linear infinite;
 }
-
-/* KPI Summary Cards Grid */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 4px;
-}
-
-.kpi-card {
-  padding: 16px 20px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  border-radius: var(--radius-lg);
-}
-
-.kpi-icon-box {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.emerald-box { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-.cyan-box { background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); }
-.purple-box { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
-.amber-box { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-
-.kpi-details {
-  display: flex;
-  flex-direction: column;
-}
-
-.kpi-label {
-  font-size: 0.74rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
-.kpi-val {
-  font-family: var(--font-mono);
-  font-size: 1.4rem;
-  font-weight: 800;
-  color: #fff;
-  margin-top: 2px;
-}
-.text-ot { color: #c084fc; }
-.text-alert { color: #fbbf24; }
 
 /* Detail modal list */
 .detail-list {
