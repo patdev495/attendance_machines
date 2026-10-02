@@ -72,9 +72,9 @@
             </div>
 
             <label v-if="isManagerRole">
-              <span>{{ $t('device.machine_employee.manager_password') }} <span class="required-star">*</span></span>
-              <input v-model.trim="form.password" type="text" autocomplete="off" :placeholder="$t('device.machine_employee.manager_password_unique_placeholder')" required />
-              <span class="field-hint">{{ $t('device.machine_employee.manager_password_hint') }}</span>
+              <span>{{ $t('device.machine_employee.promotion_password') }} <span class="required-star">*</span></span>
+              <input v-model.trim="form.promotionPassword" type="password" autocomplete="off" :placeholder="$t('device.machine_employee.promotion_password_placeholder')" required />
+              <span class="field-hint">{{ $t('device.machine_employee.promotion_password_hint') }}</span>
             </label>
 
             <div v-if="errorMessage" class="error-msg">⚠ {{ errorMessage }}</div>
@@ -115,7 +115,7 @@ const form = reactive({
   employeeId: '',
   name: '',
   role: 'employee',
-  password: '123456',
+  promotionPassword: '',
 })
 
 const isManagerRole = computed(() => form.role === 'admin' || form.role === 'super_admin')
@@ -123,7 +123,7 @@ const isManagerRole = computed(() => form.role === 'admin' || form.role === 'sup
 const canSubmit = computed(() => {
   if (!form.employeeId) return false
   if (isManagerRole.value && !photoBase64.value) return false
-  if (isManagerRole.value && !form.password.trim()) return false
+  if (isManagerRole.value && !form.promotionPassword.trim()) return false
   return true
 })
 
@@ -144,7 +144,7 @@ watch(() => props.isOpen, async (open) => {
   form.employeeId = ''
   form.name = ''
   form.role = 'employee'
-  form.password = '123456'
+  form.promotionPassword = ''
   clearPhoto()
   errorMessage.value = ''
   await nextTick()
@@ -215,7 +215,7 @@ function submit() {
     name: form.name,
     role: form.role,
     photoBase64: photoBase64.value,
-    password: form.password,
+    promotionPassword: form.promotionPassword,
   })
 }
 </script>

@@ -37,7 +37,7 @@ export function getMachineEmployeePhoto(ip, employeeId) {
   return apiFetch(`/${encodeURIComponent(ip)}/employees/${encodeURIComponent(employeeId)}/photo`)
 }
 
-export function addMachineEmployee(ip, employeeId, name = '', role = 'employee', photoBase64 = '', password = '123456') {
+export function addMachineEmployee(ip, employeeId, name = '', role = 'employee', photoBase64 = '', promotionPassword = '') {
   return apiFetch(`/${encodeURIComponent(ip)}/employees`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -46,7 +46,7 @@ export function addMachineEmployee(ip, employeeId, name = '', role = 'employee',
       name,
       role,
       photo_base64: photoBase64,
-      password,
+      promotion_password: promotionPassword,
     })
   })
 }
@@ -59,7 +59,7 @@ export function updateMachineEmployee(ip, employeeId, payload) {
       name: payload.name || '',
       role: payload.role || 'employee',
       photo_base64: payload.photoBase64 || '',
-      password: payload.password || '',
+      promotion_password: payload.promotionPassword || '',
     })
   })
 }

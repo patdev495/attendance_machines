@@ -204,7 +204,7 @@ async function handleAddEmployeeModal(payload) {
   isAddingEmployee.value = true
   const notifyId = notification.info(t('device.machine_employee.adding_notice', { role: roleLabel, id: normalizedId, ip: props.ip }), 0)
   try {
-    await store.addEmployee(normalizedId, payload.name?.trim() || '', payload.role, payload.photoBase64 || '', payload.password || '123456')
+    await store.addEmployee(normalizedId, payload.name?.trim() || '', payload.role, payload.photoBase64 || '', payload.promotionPassword || '')
     isAddModalOpen.value = false
     notification.success(t('device.machine_employee.add_success', { role: roleLabel, id: normalizedId, ip: props.ip }))
   } catch (e) {
@@ -225,7 +225,7 @@ async function handleUpdateMachineEmployee(payload) {
       name: payload.name?.trim() || '',
       role: payload.role,
       photoBase64: payload.photoBase64 || '',
-      password: payload.password || '',
+      promotionPassword: payload.promotionPassword || '',
     })
     isEditMachineEmployeeOpen.value = false
     editingMachineEmployee.value = null

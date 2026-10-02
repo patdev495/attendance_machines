@@ -27,6 +27,9 @@ load_dotenv(BASE_DIR / "backend" / ".env")
 # disables ZKTeco hardware connections, and optionally runs a
 # live-event simulator for demonstration purposes.
 DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+# Password used by an Operator to authorize Manager promotion in the web UI.
+# It can be overridden per deployment without exposing the device passwords.
+MANAGER_PROMOTION_PASSWORD = os.getenv("MANAGER_PROMOTION_PASSWORD", "admin123")
 
 class Config:
     # DB Settings

@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, cast, Dict, Any
 from datetime import datetime
 from database import get_db, EmployeeMetadata, EmployeeLocalRegistry
-from config import DEMO_MODE
+from config import DEMO_MODE, MANAGER_PROMOTION_PASSWORD
+import secrets
 
 if not DEMO_MODE:
     from . import service
@@ -51,14 +52,14 @@ class MachineEmployeeCreate(BaseModel):
     name: str = ""
     role: str = "employee"          # "employee" | "admin" | "super_admin"
     photo_base64: str = ""          # Optional for employee; REQUIRED for admin/super_admin
-    password: str = "123456"        # Manager password (must be unique on device)
+    promotion_password: str = ""    # Web authorization password for Manager promotion
     authority: int = 2              # 0 = Super Admin, 2 = Ordinary Admin (manager only)
 
 class MachineEmployeeUpdate(BaseModel):
     name: str = ""
     role: str = "employee"          # "employee" | "admin" | "super_admin"
     photo_base64: str = ""          # Optional; existing machine photo is preserved when omitted
-    password: str = ""              # Optional; existing manager password is preserved when omitted
+    promotion_password: str = ""    # Web authorization password for Manager promotion
 
 class FingerprintSyncRequest(BaseModel):
     ip: str
@@ -93,6 +94,17 @@ def _hanvon_not_supported(feature: str):
         status_code=410,
         detail=f"{feature} is a legacy ZKTeco operation and is not supported after switching machines to Hanvon.",
     )
+
+
+def _require_manager_promotion_password(role: str, promotion_password: str) -> None:
+    """Authorize Manager changes without reusing a device Manager password."""
+    if role not in {"admin", "super_admin"}:
+        return
+    if not secrets.compare_digest(promotion_password, MANAGER_PROMOTION_PASSWORD):
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid system authorization password for Manager promotion.",
+        )
 
 
 def _record_machine_employee_name(db: Session, employee_id: str, name: str) -> None:
@@ -222,6 +234,8 @@ def add_machine_employee(ip: str, req: MachineEmployeeCreate, db: Session = Depe
             detail=f"Invalid role '{req.role}'. Must be one of: {', '.join(sorted(valid_roles))}",
         )
 
+    _require_manager_promotion_password(req.role, req.promotion_password)
+
     # Managers require a real photo per device protocol §8.3
     if req.role in ("admin", "super_admin") and not req.photo_base64.strip():
         raise HTTPException(
@@ -235,7 +249,6 @@ def add_machine_employee(ip: str, req: MachineEmployeeCreate, db: Session = Depe
         name=req.name,
         role=req.role,
         photo_base64=req.photo_base64,
-        password=req.password,
         authority=req.authority,
     )
     if status != "Success":
@@ -260,6 +273,8 @@ def update_machine_employee(ip: str, employee_id: str, req: MachineEmployeeUpdat
             detail=f"Invalid role '{req.role}'. Must be one of: {', '.join(sorted(valid_roles))}",
         )
 
+    _require_manager_promotion_password(req.role, req.promotion_password)
+
     if DEMO_MODE:
         return {"status": "Success (Demo)", "employee_id": employee_id}
 
@@ -269,7 +284,6 @@ def update_machine_employee(ip: str, employee_id: str, req: MachineEmployeeUpdat
         name=req.name,
         role=req.role,
         photo_base64=req.photo_base64,
-        password=req.password,
     )
     if status != "Success":
         raise HTTPException(status_code=500, detail=status)

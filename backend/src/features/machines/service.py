@@ -7,6 +7,7 @@ from shared.hardware import (
     ip_sort_key
 )
 import logging
+import secrets
 import threading
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +27,23 @@ def _unsupported_hanvon_operation(operation: str):
     message = f"{operation} is not supported for Hanvon devices"
     logger.warning(message)
     return message
+
+
+def _generate_unique_manager_password(client: HanvonClient) -> str:
+    """Create a device-only password distinct from every current Machine Manager."""
+    existing_passwords = set()
+    for manager_id in client.get_manager_ids():
+        try:
+            password = str(client.get_manager(manager_id).get("password") or "")
+            if password:
+                existing_passwords.add(password)
+        except Exception as e:
+            logger.warning("Could not read Manager password for %s: %s", manager_id, e)
+
+    while True:
+        password = f"{secrets.randbelow(1_000_000):06d}"
+        if password not in existing_passwords:
+            return password
 
 
 # State for machine operations (deletion, etc.)
@@ -196,7 +214,6 @@ def add_user_to_machine(
     name: str = "",
     role: str = "employee",
     photo_base64: str = "",
-    password: str = "123456",
     authority: int = 2,
 ):
     """Add or update an employee or manager on a specific Hanvon machine.
@@ -218,7 +235,7 @@ def add_user_to_machine(
                 client.set_manager(
                     manager_id=employee_id,
                     photo_base64=photo_base64,
-                    password=password,
+                    password=_generate_unique_manager_password(client),
                     authority=authority_val,
                 )
             else:
@@ -235,7 +252,6 @@ def update_user_on_machine(
     name: str = "",
     role: str = "employee",
     photo_base64: str = "",
-    password: str = "",
 ):
     """Update one Hanvon employee/manager while preserving existing biometric data."""
     try:
@@ -277,7 +293,11 @@ def update_user_on_machine(
                 client.set_manager(
                     manager_id=employee_id,
                     photo_base64=manager_photo,
-                    password=(password or manager_detail.get("password") or "123456"),
+                    password=(
+                        str(manager_detail.get("password") or "")
+                        if is_manager
+                        else _generate_unique_manager_password(client)
+                    ),
                     authority=0 if role == "super_admin" else 2,
                 )
                 return "Success"

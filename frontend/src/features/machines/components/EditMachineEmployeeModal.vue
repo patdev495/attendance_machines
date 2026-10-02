@@ -32,9 +32,9 @@
             </label>
 
             <label v-if="isManagerRole">
-              <span>{{ $t('device.machine_employee.manager_password') }}</span>
-              <input v-model.trim="form.password" type="text" autocomplete="off" :placeholder="$t('device.machine_employee.manager_password_placeholder')" />
-              <small>{{ $t('device.machine_employee.manager_password_hint') }}</small>
+              <span>{{ $t('device.machine_employee.promotion_password') }}</span>
+              <input v-model.trim="form.promotionPassword" type="password" autocomplete="off" :placeholder="$t('device.machine_employee.promotion_password_placeholder')" required />
+              <small>{{ $t('device.machine_employee.promotion_password_hint') }}</small>
             </label>
 
             <div class="photo-section">
@@ -58,7 +58,7 @@
 
           <div class="modal-actions">
             <button type="button" class="btn btn-ghost" @click="close">{{ $t('common.cancel') }}</button>
-            <button type="submit" class="btn btn-primary" :disabled="isSubmitting || !employee?.user_id">
+            <button type="submit" class="btn btn-primary" :disabled="isSubmitting || !employee?.user_id || (isManagerRole && !form.promotionPassword.trim())">
               {{ isSubmitting ? $t('device.machine_employee.saving') : $t('device.machine_employee.save_changes') }}
             </button>
           </div>
@@ -96,7 +96,7 @@ let photoRequestId = 0
 const form = reactive({
   name: '',
   role: 'employee',
-  password: '',
+  promotionPassword: '',
 })
 
 const isManagerRole = computed(() => form.role === 'admin' || form.role === 'super_admin')
@@ -106,7 +106,7 @@ watch(() => props.isOpen, async (open) => {
   if (!open) return
   form.name = props.employee?.name || props.employee?.db_name || ''
   form.role = normalizeRole(props.employee?.role)
-  form.password = ''
+  form.promotionPassword = ''
   clearCurrentPhoto()
   clearNewPhoto()
   errorMessage.value = ''
@@ -187,7 +187,7 @@ function submit() {
     employeeId: props.employee?.user_id,
     name: form.name,
     role: form.role,
-    password: form.password,
+    promotionPassword: form.promotionPassword,
     photoBase64: photoBase64.value,
   })
 }
