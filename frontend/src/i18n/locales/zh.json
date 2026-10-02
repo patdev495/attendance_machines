@@ -567,6 +567,9 @@
     "delete_machine_confirm": "您确定要删除此考勤机吗？这也会停止该 IP 的实时监控。",
     "ip_placeholder": "例如：192.168.1.100",
     "add_btn": "添加",
-    "ip_invalid": "IP 地址格式无效"
+    "ip_invalid": "IP 地址格式无效",
+    "machine_add_success": "考勤机 {ip} 已成功添加。",
+    "machine_update_success": "考勤机 {ip} 已存在；其配置已更新。",
+    "machine_add_error": "无法添加考勤机 {ip}: {reason}"
   }
 }

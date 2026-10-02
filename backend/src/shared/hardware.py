@@ -1,9 +1,69 @@
 from config import config
 import ipaddress
 import logging
+import os
+import tempfile
+import threading
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# Configuration changes arrive through HTTP handlers, which FastAPI may run at
+# the same time.  Keep a process-local lock as well as an OS-level lock file so
+# two application instances cannot overwrite each other's complete file copy.
+_machine_config_lock = threading.RLock()
+
+
+@contextmanager
+def _locked_machine_config(file_path: Path | str):
+    """Serialize updates to one machines.txt file across threads/processes."""
+    path = Path(file_path)
+    lock_path = path.with_name(f"{path.name}.lock")
+
+    with _machine_config_lock:
+        with open(lock_path, "a+b") as lock_file:
+            lock_file.seek(0)
+            if not lock_file.read(1):
+                lock_file.seek(0)
+                lock_file.write(b"0")
+                lock_file.flush()
+
+            if os.name == "nt":
+                import msvcrt
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                try:
+                    yield
+                finally:
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _write_machine_config_atomically(file_path: Path | str, lines: list[str]) -> None:
+    """Replace the configuration only after its full new contents are durable."""
+    path = Path(file_path)
+    fd, temporary_path = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as temporary_file:
+            temporary_file.writelines(lines)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+        os.replace(temporary_path, path)
+    except Exception:
+        try:
+            os.unlink(temporary_path)
+        except FileNotFoundError:
+            pass
+        raise
 
 def ip_sort_key(item: Any) -> tuple[int, Any]:
     """
@@ -124,48 +184,50 @@ def update_machine_tags(ip, is_live, is_canteen, file_path=config.MACHINES_FILE)
     is_canteen=True adds # canteen
     """
     try:
-        lines = []
-        with open(file_path, "r") as f:
-            lines = f.readlines()
-            
-        new_lines = []
-        found = False
-        for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#'):
-                new_lines.append(line)
-                continue
-                
-            line_ip = stripped.split('#')[0].strip()
-            if line_ip == ip:
-                found = True
-                existing_cfg = _parse_machine_line(line) or {}
+        with _locked_machine_config(file_path):
+            with open(file_path, "r") as f:
+                lines = f.readlines()
+
+            new_lines = []
+            found = False
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+
+                line_ip = stripped.split('#')[0].strip()
+                if line_ip == ip:
+                    found = True
+                    existing_cfg = _parse_machine_line(line) or {}
+                    tags = []
+                    if not is_live:
+                        tags.append("nolive")
+                    if is_canteen:
+                        tags.append("canteen")
+                    if existing_cfg.get("meal_url"):
+                        tags.append(f"meal:{existing_cfg['meal_url']}")
+
+                    new_line = f"{ip}"
+                    if tags:
+                        new_line += " # " + " # ".join(tags)
+                    new_lines.append(new_line + "\n")
+                else:
+                    new_lines.append(line)
+
+            if not found:
                 tags = []
                 if not is_live:
                     tags.append("nolive")
                 if is_canteen:
                     tags.append("canteen")
-                if existing_cfg.get("meal_url"):
-                    tags.append(f"meal:{existing_cfg['meal_url']}")
-                
                 new_line = f"{ip}"
                 if tags:
                     new_line += " # " + " # ".join(tags)
                 new_lines.append(new_line + "\n")
-            else:
-                new_lines.append(line)
-                
-        if not found:
-            tags = []
-            if not is_live: tags.append("nolive")
-            if is_canteen: tags.append("canteen")
-            new_line = f"{ip}"
-            if tags: new_line += " # " + " # ".join(tags)
-            new_lines.append(new_line + "\n")
-            
-        with open(file_path, "w") as f:
-            f.writelines(new_lines)
-        return True, "Success"
+
+            _write_machine_config_atomically(file_path, new_lines)
+        return True, "added" if not found else "updated"
     except Exception as e:
         logger.error(f"Error updating machine tags: {e}")
         return False, str(e)
@@ -175,28 +237,23 @@ def delete_machine_config(ip, file_path=config.MACHINES_FILE):
     Deletes the configuration for a specific machine IP from machines.txt.
     """
     try:
-        lines = []
-        with open(file_path, "r") as f:
-            lines = f.readlines()
-            
-        new_lines = []
-        for line in lines:
-            stripped = line.strip()
-            if not stripped:
+        with _locked_machine_config(file_path):
+            with open(file_path, "r") as f:
+                lines = f.readlines()
+
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+
+                line_ip = stripped.split('#')[0].strip()
+                if line_ip == ip:
+                    continue
                 new_lines.append(line)
-                continue
-                
-            if stripped.startswith('#'):
-                new_lines.append(line)
-                continue
-                
-            line_ip = stripped.split('#')[0].strip()
-            if line_ip == ip:
-                continue
-            new_lines.append(line)
-            
-        with open(file_path, "w") as f:
-            f.writelines(new_lines)
+
+            _write_machine_config_atomically(file_path, new_lines)
         return True, "Success"
     except Exception as e:
         logger.error(f"Error deleting machine config: {e}")

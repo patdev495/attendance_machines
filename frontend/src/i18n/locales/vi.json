@@ -607,6 +607,9 @@
     "delete_machine_confirm": "Bạn có chắc chắn muốn xóa máy chấm công này khỏi hệ thống không? Hành động này cũng sẽ dừng theo dõi trực tiếp đối với IP này.",
     "ip_placeholder": "Ví dụ: 192.168.1.100",
     "add_btn": "Thêm",
-    "ip_invalid": "Định dạng địa chỉ IP không hợp lệ"
+    "ip_invalid": "Định dạng địa chỉ IP không hợp lệ",
+    "machine_add_success": "Đã thêm Attendance Machine {ip} thành công.",
+    "machine_update_success": "Attendance Machine {ip} đã có trong hệ thống; cấu hình đã được cập nhật.",
+    "machine_add_error": "Không thể thêm Attendance Machine {ip}: {reason}"
   }
 }

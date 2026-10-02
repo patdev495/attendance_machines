@@ -107,7 +107,7 @@
             </div>
             <div class="add-machine-row">
               <input
-                v-model="newMachineIp"
+                v-model.trim="newMachineIp"
                 class="add-machine-input"
                 type="text"
                 :placeholder="$t('meal.ip_placeholder') || 'VD: 192.168.1.100'"
@@ -123,6 +123,15 @@
                 <span>{{ addingMachine ? '...' : ($t('meal.add_btn') || 'Thêm') }}</span>
               </button>
             </div>
+            <p
+              v-if="machineConfigNotice"
+              class="machine-config-notice"
+              :class="`machine-config-notice--${machineConfigNotice.type}`"
+              role="status"
+              aria-live="polite"
+            >
+              {{ machineConfigNotice.message }}
+            </p>
           </div>
 
           <div class="modal-note">
@@ -234,6 +243,7 @@ const reconnectingIps = ref([])
 const deletingIps = ref([])
 const newMachineIp = ref('')
 const addingMachine = ref(false)
+const machineConfigNotice = ref(null)
 let statusInterval = null
 
 const onlineDeviceCount = computed(() => {
@@ -321,17 +331,25 @@ async function handleAddMachine() {
   if (!ip) return
   const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
   if (!ipRegex.test(ip)) {
-    alert(t('meal.ip_invalid') || 'Định dạng IP không hợp lệ')
+    machineConfigNotice.value = { type: 'error', message: t('meal.ip_invalid') }
     return
   }
   addingMachine.value = true
+  machineConfigNotice.value = null
   try {
-    await mealApi.updateMachineConfig(ip, { is_live: false, is_canteen: false })
+    const { data } = await mealApi.updateMachineConfig(ip, { is_live: false, is_canteen: false })
+    const messageKey = data?.action === 'added'
+      ? 'meal.machine_add_success'
+      : 'meal.machine_update_success'
+    machineConfigNotice.value = { type: 'success', message: t(messageKey, { ip }) }
     newMachineIp.value = ''
     await openMachineSettings()
   } catch (e) {
     console.error('Error adding machine:', e)
-    alert('Lỗi khi thêm máy: ' + (e.response?.data?.detail || e.message))
+    machineConfigNotice.value = {
+      type: 'error',
+      message: t('meal.machine_add_error', { ip, reason: e.response?.data?.detail || e.message })
+    }
   } finally {
     addingMachine.value = false
   }
@@ -766,6 +784,24 @@ async function handleDeleteMachine(ip) {
 
 .btn-add-machine {
   padding: 8px 18px;
+}
+
+.machine-config-notice {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.machine-config-notice--success {
+  color: #86efac;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.machine-config-notice--error {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.12);
+  border: 1px solid rgba(244, 63, 94, 0.35);
 }
 
 .modal-note {

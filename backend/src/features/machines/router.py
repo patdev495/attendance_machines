@@ -441,7 +441,7 @@ def update_machine_cfg(ip: str, req: MachineConfigUpdate):
     success, msg = update_machine_tags(ip, req.is_live, req.is_canteen)
     if not success:
         raise HTTPException(status_code=500, detail=msg)
-    return {"status": "success"}
+    return {"status": "success", "action": msg, "ip": ip}
 
 @router.delete("/{ip}")
 def delete_machine_endpoint(ip: str):

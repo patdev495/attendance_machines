@@ -575,6 +575,9 @@
     "delete_machine_confirm": "Are you sure you want to delete this machine? This will also stop live monitoring for this IP.",
     "ip_placeholder": "E.g. 192.168.1.100",
     "add_btn": "Add",
-    "ip_invalid": "Invalid IP address format"
+    "ip_invalid": "Invalid IP address format",
+    "machine_add_success": "Attendance Machine {ip} was added successfully.",
+    "machine_update_success": "Attendance Machine {ip} already exists; its configuration was updated.",
+    "machine_add_error": "Could not add Attendance Machine {ip}: {reason}"
   }
 }
