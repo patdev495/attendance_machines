@@ -61,16 +61,15 @@ def get_daily_summary(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    parts = build_daily_summary_query(db, parsed_start, parsed_end)
+    parts = build_daily_summary_query(
+        db, parsed_start, parsed_end, employee_search=employee_id
+    )
     query = parts.query
     union_keys = parts.union_keys
     agg_logs_sub = parts.agg_logs_sub
     roster_sub = parts.roster_sub
 
     # 5. Filters
-    if employee_id:
-        query = query.filter(employee_search_filter(db, employee_id, union_keys.c.employee_id))
-
     if machine_ip: query = query.filter(agg_logs_sub.c.machine_ip == machine_ip)
 
     if department:
@@ -116,9 +115,13 @@ def get_daily_summary(
         start_idx = (page - 1) * size
         summary_items = filtered_items[start_idx:start_idx + size]
     else:
-        # Standard case: Use database-level pagination
-        total = query.count()
-        results = query.offset((page - 1) * size).limit(size).all()
+        # Standard case: get the page and total in one database query.  Calling
+        # query.count() first repeats the expensive Raw Log aggregation.
+        paged_query = query.add_columns(func.count().over().label("total_count"))
+        results = paged_query.offset((page - 1) * size).limit(size).all()
+        # A window count is unavailable when a caller requests a page beyond
+        # the result set. Preserve the previous API contract for that edge.
+        total = results[0].total_count if results else query.count()
         summary_items = process_summary_rows(results, rules_pool=rules_pool, db=db)
 
 

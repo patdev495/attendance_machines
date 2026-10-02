@@ -139,21 +139,32 @@ const pagination = reactive({
   totalPages: 0
 })
 
+let summaryRequestController = null
+
 const fetchData = async () => {
+  summaryRequestController?.abort()
+  const controller = new AbortController()
+  summaryRequestController = controller
   loading.value = true
   try {
     const { data } = await dailySummaryApi.getSummary({
       ...filters,
       page: pagination.page,
-      size: pagination.size
+      size: pagination.size,
+      signal: controller.signal
     })
+    if (summaryRequestController !== controller) return
     items.value = data.items
     pagination.totalCount = data.total_count
     pagination.totalPages = data.total_pages
   } catch (e) {
+    if (controller.signal.aborted) return
     console.error('Failed to fetch summary', e)
   } finally {
-    loading.value = false
+    if (summaryRequestController === controller) {
+      loading.value = false
+      summaryRequestController = null
+    }
   }
 }
 
@@ -285,6 +296,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  summaryRequestController?.abort()
   exportOperation.dispose()
   syncOperation.dispose()
 })

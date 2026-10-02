@@ -8,11 +8,12 @@ export const dailySummaryApi = {
   },
   
   getSummary(params) {
+    const { signal, ...queryParams } = params
     // Strip empty strings to prevent FastAPI 422 errors
     const cleanParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+      Object.entries(queryParams).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
     )
-    return axios.get(API_BASE, { params: cleanParams })
+    return axios.get(API_BASE, { params: cleanParams, signal })
   },
   
   getDetail(employeeId, workDate) {

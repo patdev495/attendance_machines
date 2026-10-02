@@ -1,7 +1,7 @@
 from datetime import date, time, timedelta
 from typing import NamedTuple, Optional, Any
 
-from sqlalchemy import Date, Time, case, func, literal, text, true, union_all
+from sqlalchemy import Date, Time, case, func, literal, select, text, true, union_all
 from sqlalchemy.orm import Session, aliased
 
 from database import (
@@ -10,7 +10,7 @@ from database import (
     EmployeeLocalRegistry,
     EmployeeMetadata,
 )
-from features.employees.registry_service import REPORT_SOURCE_STATUSES
+from features.employees.registry_service import REPORT_SOURCE_STATUSES, employee_search_filter
 
 
 class DailySummaryQueryParts(NamedTuple):
@@ -50,6 +50,7 @@ def build_log_work_date_subquery(
     use_registry_shift_fallback: bool = False,
     trim_employee_joins: bool = False,
     date_padding_days: int = 0,
+    employee_ids=None,
     name: str = "base_calc",
 ):
     today_shift = aliased(EmployeeDailyShifts)
@@ -133,6 +134,10 @@ def build_log_work_date_subquery(
         log_filter.append(AttendanceLog.attendance_date >= (start_date - timedelta(days=date_padding_days)))
     if end_date:
         log_filter.append(AttendanceLog.attendance_date <= (end_date + timedelta(days=date_padding_days)))
+    if employee_ids is not None:
+        log_filter.append(
+            AttendanceLog.employee_id.in_(select(employee_ids.c.employee_id))
+        )
     if log_filter:
         query = query.filter(*log_filter)
 
@@ -154,6 +159,7 @@ def build_roster_subquery(
     db: Session,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    employee_ids=None,
     name: str = "roster",
 ):
     query = db.query(
@@ -165,23 +171,55 @@ def build_roster_subquery(
         query = query.filter(EmployeeDailyShifts.work_date >= start_date)
     if end_date:
         query = query.filter(EmployeeDailyShifts.work_date <= end_date)
+    if employee_ids is not None:
+        query = query.filter(
+            EmployeeDailyShifts.employee_id.in_(select(employee_ids.c.employee_id))
+        )
     return query.subquery(name)
+
+
+def build_matching_employee_ids_subquery(db: Session, employee_search: Optional[str]):
+    """Return only Employee IDs matching the Daily Summary search input.
+
+    This is deliberately shared by every source query so an Employee search
+    constrains Raw Logs, roster rows, and registry-generated dates before any
+    expensive aggregation or union takes place.
+    """
+    if not employee_search:
+        return None
+
+    registry_ids = db.query(
+        EmployeeLocalRegistry.employee_id.label("employee_id")
+    ).filter(
+        employee_search_filter(db, employee_search, EmployeeLocalRegistry.employee_id)
+    )
+    metadata_ids = db.query(
+        EmployeeMetadata.employee_id.label("employee_id")
+    ).filter(
+        employee_search_filter(db, employee_search, EmployeeMetadata.employee_id)
+    )
+    return registry_ids.union(metadata_ids).subquery("matching_employee_ids")
 
 
 def build_daily_summary_query(
     db: Session,
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    employee_search: Optional[str] = None,
 ) -> DailySummaryQueryParts:
+    matching_employee_ids = build_matching_employee_ids_subquery(db, employee_search)
     base_calc_sub = build_log_work_date_subquery(
         db,
         start_date,
         end_date,
         include_machine_ip=True,
         date_padding_days=1,
+        employee_ids=matching_employee_ids,
     )
     agg_logs_sub = build_aggregated_logs_subquery(db, base_calc_sub)
-    roster_sub = build_roster_subquery(db, start_date, end_date)
+    roster_sub = build_roster_subquery(
+        db, start_date, end_date, employee_ids=matching_employee_ids
+    )
 
     roster_keys = db.query(
         roster_sub.c.employee_id.label("employee_id"),
@@ -198,6 +236,12 @@ def build_daily_summary_query(
             report_dates,
             true(),
         ).filter(EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES))
+        if matching_employee_ids is not None:
+            registry_keys = registry_keys.filter(
+                EmployeeLocalRegistry.employee_id.in_(
+                    select(matching_employee_ids.c.employee_id)
+                )
+            )
 
     log_keys = db.query(
         agg_logs_sub.c.employee_id.label("employee_id"),
