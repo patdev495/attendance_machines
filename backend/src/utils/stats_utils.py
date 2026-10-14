@@ -200,18 +200,23 @@ def determine_missing_tap(tap_time, w_date, shift_code, department, rules_pool=N
         return "Missing Check-in/out"
 
 
-def extract_lunch_swipes(taps: List[datetime]) -> dict:
+def extract_lunch_swipes(
+    taps: List[datetime],
+    work_date=None,
+    is_night_shift: bool = False,
+) -> dict:
     """
     Extract lunch break start (lunch_out) and return (lunch_in) from a list of datetime taps.
 
     Rules:
-    1. lunch_out: First tap where 11:20 <= tap.time() < 12:40.
-    2. lunch_in: First tap after lunch_out where tap >= lunch_out + 5 min,
-       excluding evening work check-out taps (e.g. max tap when time >= 15:00).
-    3. lunch_status:
+    1. Day shift window: 11:00-13:00 on work_date.
+       Night shift window: 23:00 on work_date to 01:00 the next day.
+    2. lunch_out: First tap inside the applicable window.
+    3. lunch_in: Next tap in the same window where tap >= lunch_out + 5 min.
+    4. lunch_status:
        - 'OK': Both lunch_out and lunch_in present.
        - 'MISSING_LUNCH_IN': lunch_out present, but no valid lunch_in.
-       - 'NO_LUNCH_SWIPE': No tap in 11:20 - 12:40 window.
+       - 'NO_LUNCH_SWIPE': No tap in the 11:00 - 13:00 window.
     """
     if not taps:
         return {
@@ -222,14 +227,26 @@ def extract_lunch_swipes(taps: List[datetime]) -> dict:
         }
 
     sorted_taps = sorted(taps)
-    max_tap = sorted_taps[-1]
+    if work_date is not None:
+        if is_night_shift:
+            window_start = datetime.combine(work_date, time(23, 0))
+            window_end = datetime.combine(work_date + timedelta(days=1), time(1, 0))
+        else:
+            window_start = datetime.combine(work_date, time(11, 0))
+            window_end = datetime.combine(work_date, time(13, 0))
+    else:
+        window_start = None
+        window_end = None
 
     lunch_out = None
     lunch_out_idx = -1
 
     for idx, tap in enumerate(sorted_taps):
-        t = tap.time()
-        if time(11, 20) <= t < time(12, 40):
+        if window_start is not None:
+            is_in_window = window_start <= tap <= window_end
+        else:
+            is_in_window = time(11, 0) <= tap.time() <= time(13, 0)
+        if is_in_window:
             lunch_out = tap
             lunch_out_idx = idx
             break
@@ -246,10 +263,11 @@ def extract_lunch_swipes(taps: List[datetime]) -> dict:
     lunch_in = None
 
     for tap in sorted_taps[lunch_out_idx + 1:]:
+        if window_end is not None and tap > window_end:
+            break
+        if window_end is None and tap.time() > time(13, 0):
+            break
         if tap < min_lunch_in_time:
-            continue
-        # Exclude evening work check-out tap if it's the last tap of the day and >= 15:00
-        if tap == max_tap and tap.time() >= time(15, 0):
             continue
         lunch_in = tap
         break

@@ -6,7 +6,7 @@ import pandas as pd
 import threading
 import io
 from typing import List, Dict, Any, Optional
-from datetime import date
+from datetime import date, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import exists, text
 
@@ -90,6 +90,9 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             shift_code_display = effective_shift_raw.strip().upper()
             calculation_shift = shift_code_display
 
+        shift_window = parse_shift_window(
+            calculation_shift, department, rules_pool=rules_pool
+        )
 
         work_hours       = 0.0
         minutes_late     = 0
@@ -100,7 +103,9 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         is_leave_code = calculation_shift.strip().upper() in FULL_DAY_LEAVE_CODES
 
         # Gather all taps for lunch extraction
-        taps_list = logs_lookup.get((emp_id, w_date), [])
+        taps_list = list(logs_lookup.get((emp_id, w_date), []))
+        if shift_window.get('end_next_day') and w_date:
+            taps_list += logs_lookup.get((emp_id, w_date + timedelta(days=1)), [])
         if not taps_list:
             if first and last:
                 taps_list = [first] if first == last else [first, last]
@@ -109,11 +114,15 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             elif last:
                 taps_list = [last]
 
-        lunch_info = extract_lunch_swipes(taps_list)
+        lunch_info = extract_lunch_swipes(
+            taps_list,
+            work_date=w_date,
+            is_night_shift=shift_window.get('end_next_day', False),
+        )
 
         # 1. Handle Absent / No Taps
         if not first or not last or count == 0:
-            window = parse_shift_window(calculation_shift, department, rules_pool=rules_pool)
+            window = shift_window
             note_str = calculation_shift.strip().upper() if window['is_leave'] else "Vắng"
             summary_items.append({
                 "employee_id": row.employee_id,
@@ -149,7 +158,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
         # 2. Handle known leave code with some quets
         if is_leave_code:
-            window = parse_shift_window(calculation_shift, department, rules_pool=rules_pool)
+            window = shift_window
             summary_items.append({
                 "employee_id": row.employee_id,
                 "emp_name": getattr(row, "emp_name", None),

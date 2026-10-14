@@ -181,6 +181,12 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 shift_code_display = effective_shift_raw.strip().upper()
                 effective_shift = shift_code_display
 
+            emp_m = emp_meta.get(emp_id)
+            department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
+            shift_window = parse_shift_window(
+                effective_shift, department, rules_pool=rules_pool
+            )
+
             # Initialization for row record
             first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
             night_subsidy = 0.0
@@ -190,10 +196,16 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             note = ""
 
             # Extract lunch info
-            day_taps = logs_by_emp_date.get((emp_id, w_date), [])
+            day_taps = list(logs_by_emp_date.get((emp_id, w_date), []))
+            if shift_window.get('end_next_day'):
+                day_taps += logs_by_emp_date.get((emp_id, w_date + timedelta(days=1)), [])
             if not day_taps and row.tap_count >= 1:
                 day_taps = [row.first_tap] if row.tap_count == 1 else [row.first_tap, row.last_tap]
-            lunch_info = extract_lunch_swipes(day_taps)
+            lunch_info = extract_lunch_swipes(
+                day_taps,
+                work_date=w_date,
+                is_night_shift=shift_window.get('end_next_day', False),
+            )
             lunch_out_str = lunch_info["lunch_out"].strftime("%H:%M") if lunch_info["lunch_out"] else "-"
             lunch_in_str = lunch_info["lunch_in"].strftime("%H:%M") if lunch_info["lunch_in"] else "-"
             lunch_dur_str = str(lunch_info["lunch_duration_minutes"]) if lunch_info["lunch_duration_minutes"] is not None else "-"
@@ -209,9 +221,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 if row.tap_count >= 1: first_val = row.first_tap.strftime("%H:%M")
                 if row.tap_count >= 2: last_val = row.last_tap.strftime("%H:%M")
                 # Phase 15: Get standard hours and leave types for leave days
-                emp_m = emp_meta.get(emp_id)
-                dept = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
-                win = parse_shift_window(effective_shift, dept, rules_pool=rules_pool)
+                win = shift_window
                 std_expected = win.get('standard_hours', 8.0)
                 workday_base = win.get('workday_base', 8.0)
                 hp = win.get('leave_hours_p', 0.0)
@@ -223,8 +233,6 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             elif row.tap_count >= 1:
                 first_val = row.first_tap.strftime("%H:%M")
                 last_val = row.last_tap.strftime("%H:%M")
-                emp_m = emp_meta.get(emp_id)
-                department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
                 res_work, std, ot, late, early, hp, hr, ho, ht, hc, hk, night_subsidy, std_expected, workday_base = compute_day_stats(
                     row.first_tap,
                     row.last_tap,
