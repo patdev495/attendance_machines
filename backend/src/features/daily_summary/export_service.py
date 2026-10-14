@@ -48,6 +48,40 @@ def _get_shift_meta(shift_code, rules_pool):
                 return cat, bool(r.is_night_shift)
     return "NORMAL", False
 
+
+def _sheet1_indicators(view_mode: str):
+    lunch_indicators = ["Ra trưa", "Vào trưa"]
+    if view_mode == "time":
+        return ["Giờ In", "Giờ Out", *lunch_indicators, "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
+    if view_mode == "hours":
+        return ["Giờ Công", "Tăng Ca", *lunch_indicators, "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
+    return ["Giờ In", "Giờ Out", *lunch_indicators, "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
+
+
+def _sheet1_values(day_summary: dict, view_mode: str):
+    overtime = day_summary["ot"]
+    display_overtime = overtime if isinstance(overtime, (int, float)) and overtime > 0 else "-"
+    lunch_values = [
+        day_summary.get("lunch_out_str", "-"),
+        day_summary.get("lunch_in_str", "-"),
+    ]
+
+    if view_mode == "time":
+        return [
+            day_summary["first"], day_summary["last"], *lunch_values,
+            day_summary["late"], day_summary["early"], day_summary.get("shift_code", "-"),
+        ]
+    if view_mode == "hours":
+        return [
+            day_summary["std"], display_overtime, *lunch_values,
+            day_summary["late"], day_summary["early"], day_summary.get("shift_code", "-"),
+        ]
+    return [
+        day_summary["first"], day_summary["last"], *lunch_values,
+        day_summary["std"], display_overtime, day_summary["late"], day_summary["early"],
+        day_summary.get("shift_code", "-"),
+    ]
+
 def run_export_task(start_date: date, end_date: date, view_mode: str):
     global export_status
 
@@ -360,13 +394,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             export_status["current_step"] = "Generating Sheet 1..."
 
         current_row = 2
-        # Phase 13: Add "Mã công" row to the indicator set
-        if view_mode == "time":
-            all_indicators = ["Giờ In", "Giờ Out", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
-        elif view_mode == "hours":
-            all_indicators = ["Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
-        else:
-            all_indicators = ["Giờ In", "Giờ Out", "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
+        # Keep Sheet 1 indicator labels and values aligned across all view modes.
+        all_indicators = _sheet1_indicators(view_mode)
 
         num_rows = len(all_indicators)
 
@@ -422,15 +451,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                         _style_data_cell(cell, border_style, alignment_style)
                 else:
                     ds = emp_data[d]
-                    def fmt_ot(v):
-                        return v if (isinstance(v, (int, float)) and v > 0) else "-"
-
-                    if view_mode=="time":
-                        vals = [ds["first"], ds["last"], ds["late"], ds["early"], ds.get("shift_code", "-")]
-                    elif view_mode=="hours":
-                        vals = [ds["std"], fmt_ot(ds["ot"]), ds["late"], ds["early"], ds.get("shift_code", "-")]
-                    else:
-                        vals = [ds["first"], ds["last"], ds["std"], fmt_ot(ds["ot"]), ds["late"], ds["early"], ds.get("shift_code", "-")]
+                    vals = _sheet1_values(ds, view_mode)
 
                     for i, v in enumerate(vals):
                         cell = ws.cell(row=current_row+i, column=col, value=v)
