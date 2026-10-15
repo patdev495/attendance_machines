@@ -152,6 +152,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "lunch_out": lunch_info["lunch_out"],
                 "lunch_in": lunch_info["lunch_in"],
                 "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+                "lunch_late_minutes": lunch_info["lunch_late_minutes"],
                 "lunch_status": lunch_info["lunch_status"],
             })
             continue
@@ -186,6 +187,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "lunch_out": lunch_info["lunch_out"],
                 "lunch_in": lunch_info["lunch_in"],
                 "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+                "lunch_late_minutes": lunch_info["lunch_late_minutes"],
                 "lunch_status": lunch_info["lunch_status"],
             })
             continue
@@ -249,6 +251,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "lunch_out": lunch_info["lunch_out"],
             "lunch_in": lunch_info["lunch_in"],
             "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+            "lunch_late_minutes": lunch_info["lunch_late_minutes"],
             "lunch_status": lunch_info["lunch_status"],
         })
 

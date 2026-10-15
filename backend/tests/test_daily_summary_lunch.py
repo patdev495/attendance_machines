@@ -34,12 +34,14 @@ def test_process_summary_rows_includes_lunch_monitoring_fields():
     assert "lunch_out" in item
     assert "lunch_in" in item
     assert "lunch_duration_minutes" in item
+    assert "lunch_late_minutes" in item
     assert "lunch_status" in item
     assert "work_status" in item
 
     assert item["lunch_out"] == datetime(2026, 8, 5, 11, 25)
     assert item["lunch_in"] == datetime(2026, 8, 5, 12, 5)
     assert item["lunch_duration_minutes"] == 40
+    assert item["lunch_late_minutes"] == 0
     assert item["lunch_status"] == "OK"
     assert item["work_status"] == "OK"
 
@@ -92,4 +94,5 @@ def test_process_summary_rows_includes_next_day_lunch_taps_for_night_shift():
     assert item["lunch_out"] == datetime(2026, 8, 5, 23, 20)
     assert item["lunch_in"] == datetime(2026, 8, 6, 0, 10)
     assert item["lunch_duration_minutes"] == 50
+    assert item["lunch_late_minutes"] == 0
     assert item["lunch_status"] == "OK"

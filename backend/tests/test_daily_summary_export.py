@@ -1,6 +1,7 @@
 import pytest
 
 from features.daily_summary.export_service import (
+    _sheet2_headers,
     _sheet1_indicators,
     _sheet1_values,
 )
@@ -29,3 +30,10 @@ def test_sheet1_includes_lunch_taps_with_aligned_values(day_summary, view_mode):
     assert len(indicators) == len(values)
     assert values[indicators.index("Ra trưa")] == "11:30"
     assert values[indicators.index("Vào trưa")] == "12:15"
+
+
+def test_sheet2_includes_lunch_late_minutes_column():
+    headers = _sheet2_headers()
+
+    assert "Ăn trưa quá giờ (phút)" in headers
+    assert headers.index("Ăn trưa quá giờ (phút)") == headers.index("Trạng thái trưa") + 1

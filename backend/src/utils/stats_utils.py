@@ -209,20 +209,22 @@ def extract_lunch_swipes(
     Extract lunch break start (lunch_out) and return (lunch_in) from a list of datetime taps.
 
     Rules:
-    1. Day shift window: 11:00-13:00 on work_date.
-       Night shift window: 23:00 on work_date to 01:00 the next day.
+    1. Day shift window: 11:00-13:30 on work_date, with 13:00 as the
+       expected return time. Night shift window: 23:00 on work_date to
+       01:30 the next day, with 01:00 as the expected return time.
     2. lunch_out: First tap inside the applicable window.
     3. lunch_in: Next tap in the same window where tap >= lunch_out + 5 min.
     4. lunch_status:
        - 'OK': Both lunch_out and lunch_in present.
        - 'MISSING_LUNCH_IN': lunch_out present, but no valid lunch_in.
-       - 'NO_LUNCH_SWIPE': No tap in the 11:00 - 13:00 window.
+       - 'NO_LUNCH_SWIPE': No tap in the applicable lunch window.
     """
     if not taps:
         return {
             "lunch_out": None,
             "lunch_in": None,
             "lunch_duration_minutes": None,
+            "lunch_late_minutes": None,
             "lunch_status": "NO_LUNCH_SWIPE",
         }
 
@@ -230,13 +232,16 @@ def extract_lunch_swipes(
     if work_date is not None:
         if is_night_shift:
             window_start = datetime.combine(work_date, time(23, 0))
-            window_end = datetime.combine(work_date + timedelta(days=1), time(1, 0))
+            expected_return = datetime.combine(work_date + timedelta(days=1), time(1, 0))
+            window_end = datetime.combine(work_date + timedelta(days=1), time(1, 30))
         else:
             window_start = datetime.combine(work_date, time(11, 0))
-            window_end = datetime.combine(work_date, time(13, 0))
+            expected_return = datetime.combine(work_date, time(13, 0))
+            window_end = datetime.combine(work_date, time(13, 30))
     else:
         window_start = None
         window_end = None
+        expected_return = None
 
     lunch_out = None
     lunch_out_idx = -1
@@ -245,7 +250,7 @@ def extract_lunch_swipes(
         if window_start is not None:
             is_in_window = window_start <= tap <= window_end
         else:
-            is_in_window = time(11, 0) <= tap.time() <= time(13, 0)
+            is_in_window = time(11, 0) <= tap.time() <= time(13, 30)
         if is_in_window:
             lunch_out = tap
             lunch_out_idx = idx
@@ -256,6 +261,7 @@ def extract_lunch_swipes(
             "lunch_out": None,
             "lunch_in": None,
             "lunch_duration_minutes": None,
+            "lunch_late_minutes": None,
             "lunch_status": "NO_LUNCH_SWIPE",
         }
 
@@ -265,7 +271,7 @@ def extract_lunch_swipes(
     for tap in sorted_taps[lunch_out_idx + 1:]:
         if window_end is not None and tap > window_end:
             break
-        if window_end is None and tap.time() > time(13, 0):
+        if window_end is None and tap.time() > time(13, 30):
             break
         if tap < min_lunch_in_time:
             continue
@@ -274,15 +280,23 @@ def extract_lunch_swipes(
 
     if lunch_in:
         duration_minutes = int((lunch_in - lunch_out).total_seconds() // 60)
+        if expected_return is None:
+            expected_return = datetime.combine(lunch_in.date(), time(13, 0))
+        late_minutes = max(
+            0,
+            int((lunch_in - expected_return).total_seconds() // 60),
+        )
         status = "OK"
     else:
         duration_minutes = None
+        late_minutes = None
         status = "MISSING_LUNCH_IN"
 
     return {
         "lunch_out": lunch_out,
         "lunch_in": lunch_in,
         "lunch_duration_minutes": duration_minutes,
+        "lunch_late_minutes": late_minutes,
         "lunch_status": status,
     }
 

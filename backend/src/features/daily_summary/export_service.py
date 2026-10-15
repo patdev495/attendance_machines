@@ -82,6 +82,19 @@ def _sheet1_values(day_summary: dict, view_mode: str):
         day_summary.get("shift_code", "-"),
     ]
 
+
+def _sheet2_headers():
+    return [
+        "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
+        "Ngày", "Giờ In", "Giờ Out", "Ra trưa", "Vào trưa", "Phút trưa", "Trạng thái trưa",
+        "Ăn trưa quá giờ (phút)",
+        "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
+        "Công tiêu chuẩn", "Giờ trợ cấp ca đêm",
+        "Giờ ngày thường", "Giờ ngày nghỉ lễ", "Giờ ngày nghỉ luân phiên",
+        "TC thường - ca ngày", "TC lễ - ca ngày", "TC luân phiên - ca ngày",
+        "TC thường - ca đêm", "TC lễ - ca đêm", "TC luân phiên - ca đêm",
+    ]
+
 def run_export_task(start_date: date, end_date: date, view_mode: str):
     global export_status
 
@@ -243,6 +256,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             lunch_out_str = lunch_info["lunch_out"].strftime("%H:%M") if lunch_info["lunch_out"] else "-"
             lunch_in_str = lunch_info["lunch_in"].strftime("%H:%M") if lunch_info["lunch_in"] else "-"
             lunch_dur_str = str(lunch_info["lunch_duration_minutes"]) if lunch_info["lunch_duration_minutes"] is not None else "-"
+            lunch_late_minutes = lunch_info["lunch_late_minutes"] if lunch_info["lunch_late_minutes"] is not None else "-"
             lunch_status_str = lunch_info["lunch_status"]
 
             # Check for full-day leave
@@ -317,6 +331,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "first": first_val, "last": last_val,
                 "lunch_out_str": lunch_out_str, "lunch_in_str": lunch_in_str,
                 "lunch_dur_str": lunch_dur_str, "lunch_status_str": lunch_status_str,
+                "lunch_late_minutes": lunch_late_minutes,
                 "std": std, "ot": ot, "late": late, "early": early,
                 "shift": shift_code_display,
                 "shift_code": shift_code_display,
@@ -461,17 +476,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
         ws2 = wb.create_sheet(title="Thông tin chi tiết")
         # Added "Ngày vào làm" & Lunch Monitoring columns to Sheet 2
-        ws2.append([
-            "Mã máy", "Mã công ty", "Tên nhân viên", "Phòng ban", "Nhóm", "Ngày vào làm",
-            "Ngày", "Giờ In", "Giờ Out", "Ra trưa", "Vào trưa", "Phút trưa", "Trạng thái trưa",
-            "Giờ Công", "Tăng Ca", "Đi muộn (phút)", "Về sớm (phút)", "Mã công",
-            "Công tiêu chuẩn",
-            "Giờ trợ cấp ca đêm",
-            # 9 cột phân loại theo shift_category
-            "Giờ ngày thường", "Giờ ngày nghỉ lễ", "Giờ ngày nghỉ luân phiên",
-            "TC thường - ca ngày", "TC lễ - ca ngày", "TC luân phiên - ca ngày",
-            "TC thường - ca đêm", "TC lễ - ca đêm", "TC luân phiên - ca đêm",
-        ])
+        ws2.append(_sheet2_headers())
 
         for cell in ws2[1]:
             cell.font = bold_font
@@ -501,6 +506,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                         "lunch_in_str": "-",
                         "lunch_dur_str": "-",
                         "lunch_status_str": "NO_LUNCH_SWIPE",
+                        "lunch_late_minutes": "-",
                         "std": 0,
                         "ot": 0,
                         "late": 0,
@@ -533,6 +539,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     ds["first"], ds["last"],
                     ds.get("lunch_out_str", "-"), ds.get("lunch_in_str", "-"),
                     ds.get("lunch_dur_str", "-"), ds.get("lunch_status_str", "-"),
+                    ds.get("lunch_late_minutes", "-"),
                     ds["std"], display_ot, ds["late"], ds["early"],
                     shift_code_val,
                     ds.get("std_expected", 8.0),
