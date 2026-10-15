@@ -294,6 +294,7 @@
       "lunch_out": "Ra Trưa",
       "lunch_in": "Vào Trưa",
       "lunch_duration": "Phút Trưa",
+      "lunch_late_minutes": "Trưa Quá Giờ",
       "lunch_status": "Trạng Thái Trưa",
       "lunch_status_ok": "Đủ Quẹt",
       "lunch_status_missing_out": "Thiếu Quẹt Ra",

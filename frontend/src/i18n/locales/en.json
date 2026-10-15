@@ -293,6 +293,7 @@
       "lunch_out": "Lunch Out",
       "lunch_in": "Lunch Return",
       "lunch_duration": "Lunch (m)",
+      "lunch_late_minutes": "Lunch Late (m)",
       "lunch_status": "Lunch Status",
       "lunch_status_ok": "Complete",
       "lunch_status_missing_out": "Missing Out",

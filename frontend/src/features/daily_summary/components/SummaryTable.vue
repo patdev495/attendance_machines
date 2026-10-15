@@ -20,6 +20,7 @@
             <th style="width: 90px;">{{ $t('attendance.table.last_tap') }}</th>
             <th style="width: 90px;">{{ $t('attendance.table.lunch_out') }}</th>
             <th style="width: 90px;">{{ $t('attendance.table.lunch_in') }}</th>
+            <th style="width: 110px;">{{ $t('attendance.table.lunch_late_minutes') }}</th>
             <th style="width: 100px;">{{ $t('attendance.table.work_hours') }}</th>
             <th style="width: 90px;">{{ $t('attendance.table.hours_ot') }}</th>
             <th>{{ $t('attendance.table.note') }}</th>
@@ -29,7 +30,7 @@
         <tbody>
           <!-- Loading State -->
           <tr v-if="loading">
-            <td colspan="11" class="empty-state">
+            <td colspan="12" class="empty-state">
               <div class="spinner-sm"></div>
               <span>{{ $t('common.loading') }}</span>
             </td>
@@ -37,7 +38,7 @@
 
           <!-- Empty State -->
           <tr v-else-if="!items || items.length === 0">
-            <td colspan="11" class="empty-state">
+            <td colspan="12" class="empty-state">
               <Inbox :size="36" class="empty-icon" />
               <span>{{ $t('common.no_data') }}</span>
             </td>
@@ -68,6 +69,14 @@
             </td>
             <td class="time-cell">
               <span class="mono-text" v-if="item.lunch_in">{{ formatTime(item.lunch_in) }}</span>
+              <span class="dimmed" v-else>—</span>
+            </td>
+            <td class="time-cell">
+              <span
+                v-if="typeof item.lunch_late_minutes === 'number'"
+                class="mono-text"
+                :class="{ 'error-text': item.lunch_late_minutes > 0 }"
+              >{{ item.lunch_late_minutes }}m</span>
               <span class="dimmed" v-else>—</span>
             </td>
             <td>

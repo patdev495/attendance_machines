@@ -119,6 +119,13 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             work_date=w_date,
             is_night_shift=shift_window.get('end_next_day', False),
         )
+        lunch_fields = {
+            "lunch_out": lunch_info["lunch_out"],
+            "lunch_in": lunch_info["lunch_in"],
+            "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
+            "lunch_late_minutes": lunch_info["lunch_late_minutes"],
+            "lunch_status": lunch_info["lunch_status"],
+        }
 
         # 1. Handle Absent / No Taps
         if not first or not last or count == 0:
@@ -149,11 +156,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "minutes_late": 0,
                 "minutes_early_leave": 0,
                 "daily_shift_code": shift_code_display,
-                "lunch_out": lunch_info["lunch_out"],
-                "lunch_in": lunch_info["lunch_in"],
-                "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
-                "lunch_late_minutes": lunch_info["lunch_late_minutes"],
-                "lunch_status": lunch_info["lunch_status"],
+                **lunch_fields,
             })
             continue
 
@@ -184,11 +187,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
                 "minutes_late": 0,
                 "minutes_early_leave": 0,
                 "daily_shift_code": shift_code_display,
-                "lunch_out": lunch_info["lunch_out"],
-                "lunch_in": lunch_info["lunch_in"],
-                "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
-                "lunch_late_minutes": lunch_info["lunch_late_minutes"],
-                "lunch_status": lunch_info["lunch_status"],
+                **lunch_fields,
             })
             continue
 
@@ -248,11 +247,7 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
             "night_subsidy": night_subsidy,
             "standard_hours_shift": std_hours_shift,
             "workday_base": workday_base,
-            "lunch_out": lunch_info["lunch_out"],
-            "lunch_in": lunch_info["lunch_in"],
-            "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
-            "lunch_late_minutes": lunch_info["lunch_late_minutes"],
-            "lunch_status": lunch_info["lunch_status"],
+            **lunch_fields,
         })
 
     return summary_items

@@ -292,6 +292,7 @@
       "lunch_out": "午休外出",
       "lunch_in": "午休返回",
       "lunch_duration": "午休(分)",
+      "lunch_late_minutes": "午休超时(分)",
       "lunch_status": "午休状态",
       "lunch_status_ok": "打卡完整",
       "lunch_status_missing_out": "缺外出卡",
