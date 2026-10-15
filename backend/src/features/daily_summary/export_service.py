@@ -50,7 +50,7 @@ def _get_shift_meta(shift_code, rules_pool):
 
 
 def _sheet1_indicators(view_mode: str):
-    lunch_indicators = ["Ra trưa", "Vào trưa"]
+    lunch_indicators = ["Ra trưa", "Vào trưa", "Ăn trưa quá giờ (phút)"]
     if view_mode == "time":
         return ["Giờ In", "Giờ Out", *lunch_indicators, "Đi muộn (phút)", "Về sớm (phút)", "Mã công"]
     if view_mode == "hours":
@@ -64,6 +64,7 @@ def _sheet1_values(day_summary: dict, view_mode: str):
     lunch_values = [
         day_summary.get("lunch_out_str", "-"),
         day_summary.get("lunch_in_str", "-"),
+        day_summary.get("lunch_late_minutes", "-"),
     ]
 
     if view_mode == "time":

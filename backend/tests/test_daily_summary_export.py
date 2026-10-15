@@ -14,6 +14,7 @@ def day_summary():
         "last": "17:00",
         "lunch_out_str": "11:30",
         "lunch_in_str": "12:15",
+        "lunch_late_minutes": 15,
         "std": 8.0,
         "ot": 1.0,
         "late": 0,
@@ -30,6 +31,7 @@ def test_sheet1_includes_lunch_taps_with_aligned_values(day_summary, view_mode):
     assert len(indicators) == len(values)
     assert values[indicators.index("Ra trưa")] == "11:30"
     assert values[indicators.index("Vào trưa")] == "12:15"
+    assert values[indicators.index("Ăn trưa quá giờ (phút)")] == 15
 
 
 def test_sheet2_includes_lunch_late_minutes_column():
