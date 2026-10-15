@@ -76,7 +76,7 @@
                 v-if="typeof item.lunch_late_minutes === 'number'"
                 class="mono-text"
                 :class="{ 'error-text': item.lunch_late_minutes > 0 }"
-              >{{ item.lunch_late_minutes }}m</span>
+              >{{ item.lunch_late_minutes }}</span>
               <span class="dimmed" v-else>—</span>
             </td>
             <td>
