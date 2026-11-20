@@ -209,9 +209,9 @@ def extract_lunch_swipes(
     Extract lunch break start (lunch_out) and return (lunch_in) from a list of datetime taps.
 
     Rules:
-    1. Day shift window: 11:00-13:30 on work_date, with 13:00 as the
+    1. Day shift window: 11:00-13:01 on work_date, with 13:00 as the
        expected return time. Night shift window: 23:00 on work_date to
-       01:30 the next day, with 01:00 as the expected return time.
+       01:01 the next day, with 01:00 as the expected return time.
     2. lunch_out: First tap inside the applicable window.
     3. lunch_in: Next tap in the same window where tap >= lunch_out + 5 min.
     4. lunch_status:
@@ -229,15 +229,16 @@ def extract_lunch_swipes(
         }
 
     sorted_taps = sorted(taps)
+    day_window_end = time(13, 1)
     if work_date is not None:
         if is_night_shift:
             window_start = datetime.combine(work_date, time(23, 0))
             expected_return = datetime.combine(work_date + timedelta(days=1), time(1, 0))
-            window_end = datetime.combine(work_date + timedelta(days=1), time(1, 30))
+            window_end = datetime.combine(work_date + timedelta(days=1), time(1, 1))
         else:
             window_start = datetime.combine(work_date, time(11, 0))
             expected_return = datetime.combine(work_date, time(13, 0))
-            window_end = datetime.combine(work_date, time(13, 30))
+            window_end = datetime.combine(work_date, day_window_end)
     else:
         window_start = None
         window_end = None
@@ -250,7 +251,7 @@ def extract_lunch_swipes(
         if window_start is not None:
             is_in_window = window_start <= tap <= window_end
         else:
-            is_in_window = time(11, 0) <= tap.time() <= time(13, 30)
+            is_in_window = time(11, 0) <= tap.time() <= day_window_end
         if is_in_window:
             lunch_out = tap
             lunch_out_idx = idx
@@ -271,7 +272,7 @@ def extract_lunch_swipes(
     for tap in sorted_taps[lunch_out_idx + 1:]:
         if window_end is not None and tap > window_end:
             break
-        if window_end is None and tap.time() > time(13, 30):
+        if window_end is None and tap.time() > day_window_end:
             break
         if tap < min_lunch_in_time:
             continue
