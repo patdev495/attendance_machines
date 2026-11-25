@@ -1,9 +1,8 @@
-import os
 import threading
 import tempfile
 from datetime import date, timedelta
 from openpyxl import Workbook
-from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
+from openpyxl.styles import Alignment, Border, Font, NamedStyle, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from database import EmployeeLocalRegistry, ShiftDefinition, AttendanceLog, SessionLocal
@@ -13,8 +12,6 @@ from features.employees.registry_service import SOURCE_LOG_ONLY
 from .report_query import build_daily_summary_query
 from .service import needs_shift_review
 
-
-EXPORT_DATA_CELL_STYLES = os.getenv("EXPORT_DATA_CELL_STYLES", "false").lower() == "true"
 
 export_status = {
     "is_running": False,
@@ -26,14 +23,6 @@ export_status = {
     "error": None
 }
 export_lock = threading.Lock()
-
-def _style_data_cell(cell, border_style, alignment_style, font=None):
-    if not EXPORT_DATA_CELL_STYLES:
-        return
-    cell.border = border_style
-    cell.alignment = alignment_style
-    if font is not None:
-        cell.font = font
 
 def _get_shift_meta(shift_code, rules_pool):
     """Return (shift_category, is_night_shift) for a given shift_code.
@@ -115,13 +104,6 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
         results = build_daily_summary_query(db, start_date, end_date).query.all()
         emp_meta = {employee.employee_id: employee for employee in db.query(EmployeeLocalRegistry)}
-
-        # Pre-define styles
-        border_style = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-        header_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-        alignment_style = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        white_font = Font(color="FFFFFF")
-        bold_font = Font(bold=True)
 
         # Pre-fetch all raw logs for the export date range
         raw_logs = db.query(AttendanceLog).filter(
@@ -300,6 +282,21 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             curr += timedelta(days=1)
 
         wb = Workbook()
+        grid_line = Side(style="thin", color="FFB8C7D8")
+        center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        wb.add_named_style(NamedStyle(
+            name="Attendance Data", alignment=center,
+            border=Border(left=grid_line, right=grid_line, top=grid_line, bottom=grid_line),
+        ))
+        wb.add_named_style(NamedStyle(
+            name="Attendance Header", alignment=center,
+            border=Border(
+                left=grid_line, right=grid_line, top=grid_line,
+                bottom=Side(style="medium", color="FF587493"),
+            ),
+            font=Font(bold=True, color="FF19334D"),
+            fill=PatternFill(fill_type="solid", fgColor="FFE2EDF8"),
+        ))
         ws = wb.active
         if ws is None:
             ws = wb.create_sheet()
@@ -311,10 +308,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         ws.append(headers)
 
         for cell in ws[1]:
-            cell.font = bold_font
-            cell.alignment = alignment_style
-            cell.border = border_style
-            cell.fill = header_fill
+            cell.style = "Attendance Header"
 
         with export_lock:
             export_status["total"] = len(sorted_emp_ids)
@@ -345,16 +339,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             for r_offset in range(num_rows):
                 r_idx = current_row + r_offset
-                is_first = (r_offset == 0)
 
                 full_id_val = emp_data_info.get("full_id") or "-"
-                vals = [emp_id, full_id_val, emp_name, emp_dept, emp_group, emp_start]
+                vals = [emp_id, full_id_val, emp_name, emp_dept, emp_group, emp_start, all_indicators[r_offset]]
                 for c_idx, val in enumerate(vals, 1):
-                    cell = ws.cell(row=r_idx, column=c_idx, value=val)
-                    _style_data_cell(cell, border_style, alignment_style, None if is_first else white_font)
-
-                cell_ind = ws.cell(row=r_idx, column=7, value=all_indicators[r_offset])
-                _style_data_cell(cell_ind, border_style, alignment_style)
+                    ws.cell(row=r_idx, column=c_idx, value=val).style = "Attendance Data"
 
             # Fill in notes in the last column of the first row of each employee block
             notes_str = ""
@@ -364,23 +353,15 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     notes_str += f"{d.day}/{d.month}: {emp_data[d]['note']}"
 
             notes_col = len(dates_list) + 8
-            _style_data_cell(ws.cell(row=current_row, column=notes_col, value=notes_str if notes_str else "-"), border_style, alignment_style)
+            ws.cell(row=current_row, column=notes_col, value=notes_str or "-").style = "Attendance Data"
             for i in range(1, num_rows):
-                _style_data_cell(ws.cell(row=current_row+i, column=notes_col, value=""), border_style, alignment_style)
+                ws.cell(row=current_row+i, column=notes_col, value="").style = "Attendance Data"
 
             for date_idx, d in enumerate(dates_list):
                 col = date_idx + 8 # Date columns start after "Chỉ số" (Column 7)
-                if d not in emp_data:
-                    for i in range(num_rows):
-                        cell = ws.cell(row=current_row+i, column=col, value="-")
-                        _style_data_cell(cell, border_style, alignment_style)
-                else:
-                    ds = emp_data[d]
-                    vals = _sheet1_values(ds, view_mode)
-
-                    for i, v in enumerate(vals):
-                        cell = ws.cell(row=current_row+i, column=col, value=v)
-                        _style_data_cell(cell, border_style, alignment_style)
+                vals = _sheet1_values(emp_data[d], view_mode) if d in emp_data else ["-"] * num_rows
+                for i, value in enumerate(vals):
+                    ws.cell(row=current_row+i, column=col, value=value).style = "Attendance Data"
             current_row += num_rows
 
         with export_lock: export_status["current_step"] = "Generating Sheet 2..."
@@ -389,10 +370,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         ws2.append(_sheet2_headers())
 
         for cell in ws2[1]:
-            cell.font = bold_font
-            cell.alignment = alignment_style
-            cell.border = border_style
-            cell.fill = header_fill
+            cell.style = "Attendance Header"
 
         ws2_row = 2
         for idx, emp_id in enumerate(sorted_emp_ids):
@@ -434,8 +412,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
 
                 for c_idx, val in enumerate(row_data, 1):
-                    cell = ws2.cell(row=ws2_row, column=c_idx, value=val)
-                    _style_data_cell(cell, border_style, alignment_style)
+                    ws2.cell(row=ws2_row, column=c_idx, value=val).style = "Attendance Data"
 
                 ws2_row += 1
 
@@ -455,12 +432,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         ]
         ws3.append(ws3_headers)
         for cell in ws3[1]:
-            cell.font = bold_font
-            cell.alignment = alignment_style
-            cell.border = border_style
-            cell.fill = header_fill
+            cell.style = "Attendance Header"
 
-        for emp_id in sorted_emp_ids:
+        for row_idx, emp_id in enumerate(sorted_emp_ids, start=2):
             emp_info = processed_data[emp_id]
             emp_m = emp_meta.get(emp_id)
 
@@ -522,9 +496,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 round(sum_otnd, 2), round(sum_othd, 2), round(sum_otrd, 2),
                 round(sum_otnn, 2), round(sum_othn, 2), round(sum_otrn, 2)
             ]
-            ws3.append(row_data_ws3)
-            for cell in ws3[ws3.max_row]:
-                _style_data_cell(cell, border_style, alignment_style)
+            for col_idx, value in enumerate(row_data_ws3, start=1):
+                ws3.cell(row=row_idx, column=col_idx, value=value).style = "Attendance Data"
 
         for sheet in [ws, ws2, ws3]:
             for col_idx in range(1, sheet.max_column + 1):

@@ -1,5 +1,12 @@
-import pytest
+from datetime import date, datetime
+from io import BytesIO
 
+import pytest
+from openpyxl import load_workbook
+from sqlalchemy.orm import Session
+
+from database import AttendanceLog, EmployeeLocalRegistry
+from features.daily_summary import export_service
 from features.daily_summary.export_service import (
     _sheet2_headers,
     _sheet1_indicators,
@@ -39,3 +46,37 @@ def test_sheet2_includes_lunch_late_minutes_column():
 
     assert "Ăn trưa quá giờ (phút)" in headers
     assert headers.index("Ăn trưa quá giờ (phút)") == headers.index("Trạng thái trưa") + 1
+
+
+def test_downloaded_daily_summary_centers_and_borders_all_sheets(client, db_session, monkeypatch):
+    work_date = date(2026, 9, 10)
+    db_session.add(EmployeeLocalRegistry(employee_id="EXPORT-001", source_status="excel_synced"))
+    db_session.add(AttendanceLog(
+        employee_id="EXPORT-001", attendance_date=work_date,
+        attendance_time=datetime(2026, 9, 10, 8), machine_ip="10.0.0.1",
+    ))
+    db_session.flush()
+    connection = db_session.connection()
+    monkeypatch.setattr(export_service, "SessionLocal", lambda: Session(bind=connection))
+
+    response = client.post("/api/daily-summary/export", params={
+        "start_date": work_date.isoformat(), "end_date": work_date.isoformat(), "view_mode": "both",
+    })
+    assert response.status_code == 200
+    download = client.get("/api/daily-summary/export/download")
+    assert download.status_code == 200
+
+    workbook = load_workbook(BytesIO(download.content))
+    assert len(workbook.worksheets) == 3
+    for sheet in workbook.worksheets:
+        assert sheet["A2"].value == "EXPORT-001"
+        assert sheet["A1"].font.bold
+        assert sheet["A1"].fill.patternType == "solid"
+        for row in sheet.iter_rows():
+            for cell in row:
+                assert cell.alignment.horizontal == "center"
+                assert cell.alignment.vertical == "center"
+                assert all(
+                    getattr(cell.border, side).style in {"thin", "medium"}
+                    for side in ("left", "right", "top", "bottom")
+                )
