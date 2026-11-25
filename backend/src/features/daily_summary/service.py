@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import exists, text
 
 from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog
-from features.employees.registry_service import reconcile_employee_local_registry
+from features.employees.registry_service import SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY, reconcile_employee_local_registry
 
 from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window, extract_lunch_swipes
 
@@ -28,6 +28,11 @@ sync_status = {
     "machine_only_count": 0
 }
 status_lock = threading.Lock()
+
+
+def needs_shift_review(row, known_shift: bool) -> bool:
+    return not known_shift and getattr(row, "status", None) in (SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY)
+
 
 def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = None, db: Optional[Session] = None) -> List[Dict[str, Any]]:
     """
@@ -82,8 +87,8 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         # Only pull from rules_pool if we have one.
         valid_codes = {r.shift_code for r in rules_pool} if rules_pool else set()
         
-        # Display "-" if no shift, but internally calculate as "N"
-        if not effective_shift_raw or effective_shift_raw.strip().upper() not in valid_codes:
+        known_shift = bool(effective_shift_raw and effective_shift_raw.strip().upper() in valid_codes)
+        if not known_shift:
             shift_code_display = "NA"
             calculation_shift = "N" # Fallback for calculation
         else:
@@ -203,7 +208,12 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         )
         
         work_status = "OK"
-        if not (count > 1 and first != last and not is_double_checkin):
+        if needs_shift_review(row, known_shift):
+            hours_standard = hours_ot = minutes_late = minutes_early_lv = 0
+            hours_p = hours_r = hours_o = hours_t = hours_c = hours_k = 0
+            last = last if first != last else None
+            work_status = "REVIEW_SHIFT"
+        elif not (count > 1 and first != last and not is_double_checkin):
             note = determine_missing_tap(first, w_date, calculation_shift, department, rules_pool)
             # Single tap: suppress the metric we cannot know and set the missing tap to None for UI
             if note == "Missing Check-out":

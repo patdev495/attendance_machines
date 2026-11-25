@@ -10,10 +10,11 @@ from typing import Optional
 from datetime import date, datetime
 
 from database import get_db, AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, ShiftDefinition
-from features.employees.registry_service import find_employee_ids_for_search, normalize_employee_id, employee_search_filter
+from features.employees.registry_service import SOURCE_LOG_ONLY, employee_search_filter
 from utils.date_utils import parse_date_robust
 
 from .service import process_summary_rows, sync_employees_full, sync_status, status_lock
+from .employee_verification import verify_report_employees
 from .export_service import export_status, export_lock, run_export_task
 from .report_query import (
     build_daily_summary_query,
@@ -39,6 +40,7 @@ def get_unique_shifts(db: Session = Depends(get_db)):
 
 @router.get("")
 def get_daily_summary(
+    background_tasks: BackgroundTasks,
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     employee_id: Optional[str] = Query(None),
@@ -77,7 +79,7 @@ def get_daily_summary(
 
     if status and status != 'All':
         # Match against our dynamic status logic
-        dynamic_status = func.coalesce(EmployeeLocalRegistry.source_status, "machine_only")
+        dynamic_status = func.coalesce(EmployeeLocalRegistry.source_status, SOURCE_LOG_ONLY)
         query = query.filter(dynamic_status == status)
 
     if shift:
@@ -125,6 +127,9 @@ def get_daily_summary(
         summary_items = process_summary_rows(results, rules_pool=rules_pool, db=db)
 
 
+    if parsed_start and parsed_end and parsed_start <= parsed_end:
+        background_tasks.add_task(verify_report_employees, db.get_bind(), parsed_start, parsed_end, employee_id)
+
     return {
         "items": summary_items,
         "total_count": total,
@@ -148,6 +153,7 @@ def get_daily_detail(
         db,
         start_date=parsed_work_date,
         end_date=parsed_work_date,
+        use_registry_shift_fallback=True,
         date_padding_days=1,
     )
 
@@ -164,7 +170,8 @@ def start_export(
     background_tasks: BackgroundTasks,
     start_date: str = Query(...),
     end_date: str = Query(...),
-    view_mode: str = Query(..., description="'time', 'hours', or 'both'")
+    view_mode: str = Query(..., description="'time', 'hours', or 'both'"),
+    db: Session = Depends(get_db),
 ):
     try:
         parsed_start = parse_date_robust(start_date)
@@ -172,13 +179,14 @@ def start_export(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if parsed_start is None or parsed_end is None:
-        raise HTTPException(status_code=400, detail="Start date and end date are required.")
+    if parsed_start is None or parsed_end is None or parsed_start > parsed_end:
+        raise HTTPException(status_code=400, detail="A valid start date and end date are required.")
 
     with export_lock:
         if export_status["is_running"]:
             return {"message": "Export already running", "status": export_status}
     background_tasks.add_task(run_export_task, parsed_start, parsed_end, view_mode)
+    background_tasks.add_task(verify_report_employees, db.get_bind(), parsed_start, parsed_end)
     return {"message": "Export started"}
 
 @router.get("/export/status")

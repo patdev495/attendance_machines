@@ -243,6 +243,8 @@
       "missing_tap": "Missing Check-in/out",
       "missing_checkin": "Missing Check-in",
       "missing_checkout": "Missing Check-out",
+      "unverified_employee": "Employee record unverified",
+      "review_shift": "Shift needs verification",
       "absent": "Absent"
     },
     "excel_sync": {

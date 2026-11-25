@@ -1,7 +1,7 @@
 from datetime import date, time, timedelta
 from typing import NamedTuple, Optional, Any
 
-from sqlalchemy import Date, Time, case, func, literal, select, text, true, union_all
+from sqlalchemy import Date, Time, case, func, literal, or_, select, text, true, union_all
 from sqlalchemy.orm import Session, aliased
 
 from database import (
@@ -10,7 +10,7 @@ from database import (
     EmployeeLocalRegistry,
     EmployeeMetadata,
 )
-from features.employees.registry_service import REPORT_SOURCE_STATUSES, employee_search_filter
+from features.employees.registry_service import SOURCE_EXCEL_SYNCED, SOURCE_LOG_ONLY, employee_search_filter
 
 
 class DailySummaryQueryParts(NamedTuple):
@@ -51,6 +51,7 @@ def build_log_work_date_subquery(
     trim_employee_joins: bool = False,
     date_padding_days: int = 0,
     employee_ids=None,
+    employee_search: Optional[str] = None,
     name: str = "base_calc",
 ):
     today_shift = aliased(EmployeeDailyShifts)
@@ -94,6 +95,10 @@ def build_log_work_date_subquery(
                 & (func.cast(AttendanceLog.attendance_time, Time) < time(10, 0)),
                 func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date),
             ),
+            (
+                today_shift_code.is_(None) & yest_shift_code.is_(None),
+                func.cast(AttendanceLog.attendance_time, Date),
+            ),
             else_=func.cast(func.dateadd(text("hour"), text("-3"), AttendanceLog.attendance_time), Date),
         ).label("work_date"),
     )
@@ -136,7 +141,10 @@ def build_log_work_date_subquery(
         log_filter.append(AttendanceLog.attendance_date <= (end_date + timedelta(days=date_padding_days)))
     if employee_ids is not None:
         log_filter.append(
-            AttendanceLog.employee_id.in_(select(employee_ids.c.employee_id))
+            or_(
+                AttendanceLog.employee_id.in_(select(employee_ids.c.employee_id)),
+                AttendanceLog.employee_id.ilike(f"%{employee_search.strip()}%"),
+            )
         )
     if log_filter:
         query = query.filter(*log_filter)
@@ -160,6 +168,7 @@ def build_roster_subquery(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     employee_ids=None,
+    employee_search: Optional[str] = None,
     name: str = "roster",
 ):
     query = db.query(
@@ -173,7 +182,10 @@ def build_roster_subquery(
         query = query.filter(EmployeeDailyShifts.work_date <= end_date)
     if employee_ids is not None:
         query = query.filter(
-            EmployeeDailyShifts.employee_id.in_(select(employee_ids.c.employee_id))
+            or_(
+                EmployeeDailyShifts.employee_id.in_(select(employee_ids.c.employee_id)),
+                EmployeeDailyShifts.employee_id.ilike(f"%{employee_search.strip()}%"),
+            )
         )
     return query.subquery(name)
 
@@ -185,7 +197,7 @@ def build_matching_employee_ids_subquery(db: Session, employee_search: Optional[
     constrains Raw Logs, roster rows, and registry-generated dates before any
     expensive aggregation or union takes place.
     """
-    if not employee_search:
+    if not employee_search or not employee_search.strip():
         return None
 
     registry_ids = db.query(
@@ -213,12 +225,14 @@ def build_daily_summary_query(
         start_date,
         end_date,
         include_machine_ip=True,
+        use_registry_shift_fallback=True,
         date_padding_days=1,
         employee_ids=matching_employee_ids,
+        employee_search=employee_search,
     )
     agg_logs_sub = build_aggregated_logs_subquery(db, base_calc_sub)
     roster_sub = build_roster_subquery(
-        db, start_date, end_date, employee_ids=matching_employee_ids
+        db, start_date, end_date, employee_ids=matching_employee_ids, employee_search=employee_search
     )
 
     roster_keys = db.query(
@@ -235,7 +249,7 @@ def build_daily_summary_query(
         ).select_from(EmployeeLocalRegistry).join(
             report_dates,
             true(),
-        ).filter(EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES))
+        ).filter(EmployeeLocalRegistry.source_status == SOURCE_EXCEL_SYNCED)
         if matching_employee_ids is not None:
             registry_keys = registry_keys.filter(
                 EmployeeLocalRegistry.employee_id.in_(
@@ -267,7 +281,7 @@ def build_daily_summary_query(
         func.coalesce(EmployeeLocalRegistry.emp_name, EmployeeMetadata.emp_name).label("emp_name"),
         func.coalesce(EmployeeLocalRegistry.full_emp_id, EmployeeMetadata.full_emp_id).label("full_emp_id"),
         func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department).label("department"),
-        func.coalesce(EmployeeLocalRegistry.source_status, "machine_only").label("status"),
+        func.coalesce(EmployeeLocalRegistry.source_status, SOURCE_LOG_ONLY).label("status"),
         roster_sub.c.shift_code.label("daily_shift_code"),
     ).outerjoin(
         agg_logs_sub,
@@ -283,6 +297,6 @@ def build_daily_summary_query(
     ).outerjoin(
         EmployeeMetadata,
         union_keys.c.employee_id == EmployeeMetadata.employee_id,
-    ).filter(EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES))
+    )
 
     return DailySummaryQueryParts(query, union_keys, agg_logs_sub, roster_sub)

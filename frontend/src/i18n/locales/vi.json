@@ -244,6 +244,8 @@
       "missing_tap": "Thiếu Check-in/out",
       "missing_checkin": "Thiếu Check-in",
       "missing_checkout": "Thiếu Check-out",
+      "unverified_employee": "Chưa xác minh hồ sơ nhân viên",
+      "review_shift": "Cần xác minh ca làm",
       "absent": "Vắng mặt"
     },
     "excel_sync": {

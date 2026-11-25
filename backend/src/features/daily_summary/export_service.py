@@ -1,16 +1,17 @@
 import os
 import threading
 import tempfile
-from datetime import date, datetime, timedelta
-from sqlalchemy import func
+from datetime import date, timedelta
 from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
-from database import EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog, SessionLocal
+from database import EmployeeLocalRegistry, ShiftDefinition, AttendanceLog, SessionLocal
 
 from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap, extract_lunch_swipes
-from .report_query import REPORT_SOURCE_STATUSES, build_log_work_date_subquery
+from features.employees.registry_service import SOURCE_LOG_ONLY
+from .report_query import build_daily_summary_query
+from .service import needs_shift_review
 
 
 EXPORT_DATA_CELL_STYLES = os.getenv("EXPORT_DATA_CELL_STYLES", "false").lower() == "true"
@@ -93,7 +94,7 @@ def _sheet2_headers():
         "Công tiêu chuẩn", "Giờ trợ cấp ca đêm",
         "Giờ ngày thường", "Giờ ngày nghỉ lễ", "Giờ ngày nghỉ luân phiên",
         "TC thường - ca ngày", "TC lễ - ca ngày", "TC luân phiên - ca ngày",
-        "TC thường - ca đêm", "TC lễ - ca đêm", "TC luân phiên - ca đêm",
+        "TC thường - ca đêm", "TC lễ - ca đêm", "TC luân phiên - ca đêm", "Ghi chú",
     ]
 
 def run_export_task(start_date: date, end_date: date, view_mode: str):
@@ -112,76 +113,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         rules_pool = db.query(ShiftDefinition).all()
 
 
-        # Phase 13: Use 09:00 AM anchor for work_date (consistent with router.py)
-        # Phase 15 (export): Use the same shift-aware work_date logic as the daily summary router.
-        # The old -12h anchor was only based on EmployeeLocalRegistry.shift, which is often empty
-        # when the employee's shift is set only via daily shift codes (EmployeeDailyShifts).
-        # This fix aligns export grouping with the tab view.
-        base_calc_sub = build_log_work_date_subquery(
-            db,
-            include_registry_fields=True,
-            use_registry_shift_fallback=True,
-            trim_employee_joins=True,
-            name="export_base_calc",
-        )
-
-        # Phase 13: JOIN with EmployeeDailyShifts
-        query = db.query(
-            base_calc_sub.c.employee_id,
-            base_calc_sub.c.full_emp_id,
-            base_calc_sub.c.work_date,
-            func.min(base_calc_sub.c.attendance_time).label("first_tap"),
-            func.max(base_calc_sub.c.attendance_time).label("last_tap"),
-            func.count(base_calc_sub.c.id).label("tap_count"),
-            # Use daily shift code first, fallback to employee-level shift
-            func.coalesce(
-                func.max(EmployeeDailyShifts.shift_code),
-                base_calc_sub.c.shift
-            ).label("shift"),
-            base_calc_sub.c.department,
-            func.max(EmployeeDailyShifts.shift_code).label("daily_shift_code")
-        ).outerjoin(
-            EmployeeDailyShifts,
-            (func.ltrim(func.rtrim(base_calc_sub.c.employee_id)) == EmployeeDailyShifts.employee_id) &
-            (base_calc_sub.c.work_date == EmployeeDailyShifts.work_date)
-        )
-        query = query.filter(base_calc_sub.c.work_date >= start_date)
-        query = query.filter(base_calc_sub.c.work_date <= end_date)
-        query = query.group_by(
-            base_calc_sub.c.employee_id,
-            base_calc_sub.c.full_emp_id,
-            base_calc_sub.c.work_date,
-            base_calc_sub.c.shift,
-            base_calc_sub.c.department
-        ).order_by(base_calc_sub.c.work_date, base_calc_sub.c.employee_id)
-
-        results = query.all()
-
-        # Also load ALL daily shifts for the date range (for days without attendance logs)
-        all_daily_shifts = db.query(EmployeeDailyShifts).filter(
-            EmployeeDailyShifts.work_date >= start_date,
-            EmployeeDailyShifts.work_date <= end_date
-        ).all()
-        # Build a lookup: {(emp_id, work_date): shift_code}
-        daily_shift_lookup = {}
-        for ds in all_daily_shifts:
-            daily_shift_lookup[(ds.employee_id, ds.work_date)] = ds.shift_code
-
-        registry_employees = db.query(EmployeeLocalRegistry).filter(
-            EmployeeLocalRegistry.source_status.in_(REPORT_SOURCE_STATUSES)
-        ).all()
-        registry_emp_ids = {emp.employee_id for emp in registry_employees}
-
-        # Extract set of employee IDs from results
-        all_emp_ids = sorted(list(set(row.employee_id for row in results)))
-        # Also include employees that have daily shifts but no attendance logs
-        daily_shift_emp_ids = set(ds.employee_id for ds in all_daily_shifts)
-        all_emp_ids = sorted(list((set(all_emp_ids) | daily_shift_emp_ids | registry_emp_ids) & registry_emp_ids))
-
-        # Phase 13: Batch fetch to avoid SQL Server 2100 parameter limit
-        emp_meta = {}
-        for m in registry_employees:
-            emp_meta[m.employee_id] = m
+        results = build_daily_summary_query(db, start_date, end_date).query.all()
+        emp_meta = {employee.employee_id: employee for employee in db.query(EmployeeLocalRegistry)}
 
         # Pre-define styles
         border_style = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
@@ -208,11 +141,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
         for row in results:
             emp_id = row.employee_id
-            if emp_id not in registry_emp_ids:
-                continue
             w_date = row.work_date
             if emp_id not in processed_data:
-                processed_data[emp_id] = {"general_shift": row.shift, "days": {}}
+                processed_data[emp_id] = {"days": {}, "name": row.emp_name, "department": row.department}
 
             # Get effective shift code (daily override or fallback)
             daily_code = getattr(row, 'daily_shift_code', None)
@@ -220,9 +151,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             # Phase 13: Map to NA if not in definitions table
             valid_codes = {r.shift_code for r in rules_pool} if rules_pool else set()
-            effective_shift_raw = daily_code or row.shift or "N"
+            effective_shift_raw = (daily_code or row.shift or "").strip().upper()
+            known_shift = effective_shift_raw in valid_codes
 
-            if not effective_shift_raw or effective_shift_raw.strip().upper() not in valid_codes:
+            if not known_shift:
                 shift_code_display = "NA"
                 effective_shift = "N"
             else:
@@ -236,7 +168,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             )
 
             # Initialization for row record
-            first_val, last_val, std, ot, late, early = "-", "-", "-", "-", "-", "-"
+            first_val, last_val = "-", "-"
+            std = ot = late = early = 0
             night_subsidy = 0.0
             hp = hr = ho = ht = hc = hk = 0.0
             std_expected = 8.0
@@ -260,8 +193,13 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             lunch_late_minutes = lunch_info["lunch_late_minutes"] if lunch_info["lunch_late_minutes"] is not None else "-"
             lunch_status_str = lunch_info["lunch_status"]
 
-            # Check for full-day leave
-            if effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
+            if row.tap_count and needs_shift_review(row, known_shift):
+                first_val = row.first_tap.strftime("%H:%M")
+                if row.last_tap != row.first_tap:
+                    last_val = row.last_tap.strftime("%H:%M")
+                std_expected = 0.0
+                note = "Cần xác minh ca làm"
+            elif effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
                 std = 0
                 ot = 0
                 late = 0
@@ -307,6 +245,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                         note = "" # Leave note will be handled by the shift code or general notes
 
 
+            if row.tap_count and row.status == SOURCE_LOG_ONLY:
+                note = f"Chưa xác minh hồ sơ nhân viên. {note}".strip()
+
             # ── Classify std/ot by shift_category (NORMAL / HOLIDAY / ROTATION)
             #    and day vs night shift. Logic unchanged — only routing results.
             _cat, _is_night = _get_shift_meta(effective_shift, rules_pool)
@@ -349,36 +290,6 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             if full_emp_id:
                 processed_data[emp_id]["full_id"] = full_emp_id
-
-        # Phase 13: Add days with leave codes but no attendance logs
-        for (emp_id, w_date), shift_code in daily_shift_lookup.items():
-            if emp_id not in registry_emp_ids:
-                continue
-            if emp_id not in processed_data:
-                processed_data[emp_id] = {"general_shift": shift_code, "days": {}}
-            if w_date not in processed_data[emp_id]["days"]:
-                code_upper = shift_code.strip().upper()
-                if code_upper in FULL_DAY_LEAVE_CODES:
-                    processed_data[emp_id]["days"][w_date] = {
-                        "first": "-", "last": "-",
-                        "std": 0, "ot": 0, "late": 0, "early": 0,
-                        "shift": code_upper,
-                        "shift_code": code_upper,
-                        # Leave days: all category buckets = 0
-                        "work_normal": 0, "work_holiday": 0, "work_rotation": 0,
-                        "ot_normal_day": 0, "ot_holiday_day": 0, "ot_rotation_day": 0,
-                        "ot_normal_night": 0, "ot_holiday_night": 0, "ot_rotation_night": 0,
-                    }
-
-        for emp_id in all_emp_ids:
-            if emp_id not in processed_data:
-                emp_m = emp_meta.get(emp_id)
-                processed_data[emp_id] = {
-                    "general_shift": emp_m.shift if emp_m and emp_m.shift else "NA",
-                    "days": {},
-                }
-                if emp_m and emp_m.full_emp_id:
-                    processed_data[emp_id]["full_id"] = emp_m.full_emp_id
 
         sorted_emp_ids = sorted(processed_data.keys())
 
@@ -426,13 +337,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             emp_data_info = processed_data[emp_id]
             emp_data = emp_data_info["days"]
-            shift_val = emp_data_info["general_shift"]
             emp_m = emp_meta.get(emp_id)
-            emp_name = emp_m.emp_name if emp_m and emp_m.emp_name else emp_id
-            emp_dept = emp_m.department if emp_m and emp_m.department else "-"
+            emp_name = emp_data_info["name"] or "-"
+            emp_dept = emp_data_info["department"] or "-"
             emp_group = emp_m.group_name if emp_m and emp_m.group_name else "-"
             emp_start = emp_m.start_date.strftime("%d/%m/%Y") if emp_m and emp_m.start_date else "-"
-            shift_text = shift_val if shift_val else "-"
 
             for r_offset in range(num_rows):
                 r_idx = current_row + r_offset
@@ -496,44 +405,15 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             emp_info = processed_data[emp_id]
             emp_m = emp_meta.get(emp_id)
-            for d in dates_list:
-                ds = emp_info["days"].get(d)
-                if not ds:
-                    shift_code_val = emp_info.get("general_shift") or "NA"
-                    ds = {
-                        "first": "-",
-                        "last": "-",
-                        "lunch_out_str": "-",
-                        "lunch_in_str": "-",
-                        "lunch_dur_str": "-",
-                        "lunch_status_str": "NO_LUNCH_SWIPE",
-                        "lunch_late_minutes": "-",
-                        "std": 0,
-                        "ot": 0,
-                        "late": 0,
-                        "early": 0,
-                        "shift_code": shift_code_val,
-                        "std_expected": 8.0,
-                        "night_subsidy": 0,
-                        "work_normal": 0,
-                        "work_holiday": 0,
-                        "work_rotation": 0,
-                        "ot_normal_day": 0,
-                        "ot_holiday_day": 0,
-                        "ot_rotation_day": 0,
-                        "ot_normal_night": 0,
-                        "ot_holiday_night": 0,
-                        "ot_rotation_night": 0,
-                    }
-
+            for d, ds in sorted(emp_info["days"].items()):
                 ot = ds["ot"]
                 display_ot = ot if (isinstance(ot, (int, float)) and ot > 0) else 0
                 shift_code_val = ds.get("shift_code", ds.get("shift", "N"))
                 full_id_val = emp_info.get("full_id") or "-"
                 hired_date_val = emp_m.start_date.strftime("%d/%m/%Y") if emp_m and emp_m.start_date else "-"
                 row_data = [
-                    emp_id, full_id_val, emp_m.emp_name if emp_m else emp_id,
-                    emp_m.department if emp_m else "-",
+                    emp_id, full_id_val, emp_info["name"] or "-",
+                    emp_info["department"] or "-",
                     emp_m.group_name if emp_m else "-",
                     hired_date_val,
                     d.strftime("%d/%m/%Y"),
@@ -549,6 +429,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     ds.get("work_normal", 0), ds.get("work_holiday", 0), ds.get("work_rotation", 0),
                     ds.get("ot_normal_day", 0), ds.get("ot_holiday_day", 0), ds.get("ot_rotation_day", 0),
                     ds.get("ot_normal_night", 0), ds.get("ot_holiday_night", 0), ds.get("ot_rotation_night", 0),
+                    ds["note"],
                 ]
 
 
@@ -628,8 +509,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             hired_date_val = emp_m.start_date.strftime("%d/%m/%Y") if emp_m and emp_m.start_date else "-"
 
             row_data_ws3 = [
-                emp_id, full_id_val, emp_m.emp_name if emp_m else emp_id,
-                emp_m.department if emp_m else "-",
+                emp_id, full_id_val, emp_info["name"] or "-",
+                emp_info["department"] or "-",
                 emp_m.group_name if emp_m else "-",
                 hired_date_val,
                 round(total_workdays, 3),

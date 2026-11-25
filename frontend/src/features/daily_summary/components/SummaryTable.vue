@@ -91,6 +91,12 @@
               <span v-else class="dimmed">—</span>
             </td>
             <td class="note-cell">
+              <div v-if="item.tap_count && item.status === 'log_only'" class="sub-note">
+                {{ $t('attendance.table.unverified_employee') }}
+              </div>
+              <div v-if="item.work_status === 'REVIEW_SHIFT'" class="sub-note">
+                {{ $t('attendance.table.review_shift') }}
+              </div>
               <span :class="{ 'error-text': item.note }">{{ translateNote(item.note) }}</span>
               <div v-if="item.minutes_late" class="sub-note late">
                 {{ $t('attendance.table.late', { m: item.minutes_late }) }}
