@@ -194,6 +194,16 @@ def employee_name_map(db: Session, employee_ids: Iterable[str]) -> dict[str, str
     return names
 
 
+def employee_keyword_query(db: Session, model, words: list[str]):
+    conditions = [
+        model.employee_id.ilike(f"%{word}%")
+        | model.full_emp_id.ilike(f"%{word}%")
+        | safe_ilike(model.emp_name, f"%{word}%")
+        for word in words
+    ]
+    return db.query(model.employee_id.label("employee_id")).filter(*conditions)
+
+
 def employee_search_filter(db: Session, search: str, column):
     """
     Returns an SQLAlchemy filter clause matching employees by keyword search.
@@ -207,23 +217,8 @@ def employee_search_filter(db: Session, search: str, column):
     if not words:
         return true()
 
-    # Build subquery for EmployeeLocalRegistry matching all words
-    registry_conds = [
-        EmployeeLocalRegistry.employee_id.ilike(f"%{w}%")
-        | EmployeeLocalRegistry.full_emp_id.ilike(f"%{w}%")
-        | safe_ilike(EmployeeLocalRegistry.emp_name, f"%{w}%")
-        for w in words
-    ]
-    registry_subquery = db.query(EmployeeLocalRegistry.employee_id).filter(*registry_conds).scalar_subquery()
-
-    # Build subquery for EmployeeMetadata matching all words
-    metadata_conds = [
-        EmployeeMetadata.employee_id.ilike(f"%{w}%")
-        | EmployeeMetadata.full_emp_id.ilike(f"%{w}%")
-        | safe_ilike(EmployeeMetadata.emp_name, f"%{w}%")
-        for w in words
-    ]
-    metadata_subquery = db.query(EmployeeMetadata.employee_id).filter(*metadata_conds).scalar_subquery()
+    registry_subquery = employee_keyword_query(db, EmployeeLocalRegistry, words).scalar_subquery()
+    metadata_subquery = employee_keyword_query(db, EmployeeMetadata, words).scalar_subquery()
 
     return (
         column.in_(registry_subquery)

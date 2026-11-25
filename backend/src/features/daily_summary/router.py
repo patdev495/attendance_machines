@@ -1,6 +1,7 @@
 import os
 import io
 import logging
+from itertools import batched
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -67,12 +68,10 @@ def get_daily_summary(
         db, parsed_start, parsed_end, employee_search=employee_id
     )
     query = parts.query
-    union_keys = parts.union_keys
-    agg_logs_sub = parts.agg_logs_sub
-    roster_sub = parts.roster_sub
+    summary_days = parts.summary_days
 
     # 5. Filters
-    if machine_ip: query = query.filter(agg_logs_sub.c.machine_ip == machine_ip)
+    if machine_ip: query = query.filter(summary_days.c.machine_ip == machine_ip)
 
     if department:
         query = query.filter(func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department) == department)
@@ -84,38 +83,44 @@ def get_daily_summary(
 
     if shift:
         valid_shift_ids = db.query(ShiftDefinition.shift_code)
-        effective_shift = func.coalesce(roster_sub.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift)
+        effective_shift = func.coalesce(summary_days.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift)
         mapped_shift = case(
             (effective_shift.in_(valid_shift_ids), effective_shift),
             else_="NA"
         )
         query = query.filter(mapped_shift == shift)
 
-    query = query.order_by(desc(union_keys.c.work_date), union_keys.c.employee_id)
+    query = query.order_by(desc(summary_days.c.work_date), summary_days.c.employee_id)
 
     rules_pool = db.query(ShiftDefinition).all()
 
 
     if min_hours or max_hours or only_missing or late_arrival or early_departure:
-        # Complex calculation filters require fetching results to compute metrics
-        # But we still only fetch what is needed. For now, fetch ALL then filter.
-        # POTENTIAL FUTURE OPTIMIZATION: Push metrics into SQL.
-        all_results = query.all()
-        processed_items = process_summary_rows(all_results, rules_pool=rules_pool, db=db)
-
-        filtered_items = []
-        for item in processed_items:
-            if only_missing and not (item['tap_count'] < 2 or item['note']): continue
-            wh = item['work_hours'] or 0.0
-            if min_hours and wh < min_hours: continue
-            if max_hours and wh > max_hours: continue
-            if late_arrival and not (item.get('minutes_late') and item.get('minutes_late') > 0): continue
-            if early_departure and not (item.get('minutes_early_leave') and item.get('minutes_early_leave') > 0): continue
-            filtered_items.append(item)
-
-        total = len(filtered_items)
-        start_idx = (page - 1) * size
-        summary_items = filtered_items[start_idx:start_idx + size]
+        # These filters depend on the work calculation. Keep counting after
+        # collecting the requested page, then load lunch data for that page.
+        if min_hours and min_hours > 0:
+            query = query.filter(summary_days.c.tap_count > 0)
+        page_start = (page - 1) * size
+        page_rows = []
+        total = 0
+        for batch in batched(query.yield_per(256), 256):
+            items = process_summary_rows(batch, rules_pool=rules_pool, include_lunch=False)
+            for row, item in zip(batch, items):
+                if only_missing and not (item['tap_count'] < 2 or item['note']):
+                    continue
+                work_hours = item['work_hours'] or 0.0
+                if min_hours and work_hours < min_hours:
+                    continue
+                if max_hours and work_hours > max_hours:
+                    continue
+                if late_arrival and not item['minutes_late'] > 0:
+                    continue
+                if early_departure and not item['minutes_early_leave'] > 0:
+                    continue
+                if page_start <= total < page_start + size:
+                    page_rows.append(row)
+                total += 1
+        summary_items = process_summary_rows(page_rows, rules_pool=rules_pool, db=db)
     else:
         # Standard case: get the page and total in one database query.  Calling
         # query.count() first repeats the expensive Raw Log aggregation.

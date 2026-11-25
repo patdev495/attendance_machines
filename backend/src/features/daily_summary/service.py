@@ -6,9 +6,9 @@ import pandas as pd
 import threading
 import io
 from typing import List, Dict, Any, Optional
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import exists, text
+from sqlalchemy import and_, exists, or_, text
 
 from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog
 from features.employees.registry_service import SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY, reconcile_employee_local_registry
@@ -34,7 +34,10 @@ def needs_shift_review(row, known_shift: bool) -> bool:
     return not known_shift and getattr(row, "status", None) in (SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY)
 
 
-def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = None, db: Optional[Session] = None) -> List[Dict[str, Any]]:
+def process_summary_rows(
+    results: List[Any], rules_pool: Optional[List[Any]] = None, db: Optional[Session] = None,
+    *, include_lunch: bool = True,
+) -> List[Dict[str, Any]]:
     """
     Transform raw grouped SQLAlchemy rows into a list of summary dictionaries.
     Supports dynamic daily shift codes (Phase 13) and lunch monitoring (Phase 16).
@@ -51,25 +54,36 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
 
     # Pre-fetch raw logs batch if DB session is available
     logs_lookup = {}
-    if db and results:
+    if include_lunch and db and results:
         emp_ids = list({row.employee_id for row in results if hasattr(row, "employee_id") and row.employee_id})
-        dates_set = list({row.work_date for row in results if hasattr(row, "work_date") and row.work_date})
-        if emp_ids and dates_set:
+        work_dates = sorted({row.work_date for row in results if hasattr(row, "work_date") and row.work_date})
+        if emp_ids and work_dates:
+            # Keep one extra day for overnight shifts and merge adjacent windows.
+            windows = []
+            for work_date in work_dates:
+                start = datetime.combine(work_date, time.min)
+                end = start + timedelta(days=2)
+                if windows and start <= windows[-1][1]:
+                    windows[-1] = (windows[-1][0], end)
+                else:
+                    windows.append((start, end))
             try:
-                raw_logs = db.query(AttendanceLog).filter(
-                    AttendanceLog.employee_id.in_(emp_ids)
+                raw_logs = db.query(AttendanceLog.employee_id, AttendanceLog.attendance_time).filter(
+                    AttendanceLog.employee_id.in_(emp_ids),
+                    or_(*(
+                        and_(AttendanceLog.attendance_time >= start, AttendanceLog.attendance_time < end)
+                        for start, end in windows
+                    )),
                 ).all()
                 for log in raw_logs:
-                    log_date = log.attendance_time.date() if hasattr(log, "attendance_time") and log.attendance_time else getattr(log, "attendance_date", None)
-                    key = (log.employee_id, log_date)
-                    if key not in logs_lookup:
-                        logs_lookup[key] = []
-                    logs_lookup[key].append(log.attendance_time)
+                    key = (log.employee_id, log.attendance_time.date())
+                    logs_lookup.setdefault(key, []).append(log.attendance_time)
 
             except Exception as e:
                 logger.warning(f"Error fetching raw logs for lunch swipes: {e}")
 
     summary_items = []
+    valid_codes = {rule.shift_code for rule in rules_pool}
     for row in results:
         first      = getattr(row, "first_tap", None)
         last       = getattr(row, "last_tap", None)
@@ -82,10 +96,6 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         daily_code = getattr(row, "daily_shift_code", None)
         
         effective_shift_raw = daily_code or row_shift
-        
-        # Phase 13: Check if the shift code is defined in the ShiftDefinitions table
-        # Only pull from rules_pool if we have one.
-        valid_codes = {r.shift_code for r in rules_pool} if rules_pool else set()
         
         known_shift = bool(effective_shift_raw and effective_shift_raw.strip().upper() in valid_codes)
         if not known_shift:
@@ -107,30 +117,16 @@ def process_summary_rows(results: List[Any], rules_pool: Optional[List[Any]] = N
         # Check if this is a full-day leave code (Even if they quet)
         is_leave_code = calculation_shift.strip().upper() in FULL_DAY_LEAVE_CODES
 
-        # Gather all taps for lunch extraction
-        taps_list = list(logs_lookup.get((emp_id, w_date), []))
-        if shift_window.get('end_next_day') and w_date:
-            taps_list += logs_lookup.get((emp_id, w_date + timedelta(days=1)), [])
-        if not taps_list:
-            if first and last:
-                taps_list = [first] if first == last else [first, last]
-            elif first:
-                taps_list = [first]
-            elif last:
-                taps_list = [last]
-
-        lunch_info = extract_lunch_swipes(
-            taps_list,
-            work_date=w_date,
-            is_night_shift=shift_window.get('end_next_day', False),
-        )
-        lunch_fields = {
-            "lunch_out": lunch_info["lunch_out"],
-            "lunch_in": lunch_info["lunch_in"],
-            "lunch_duration_minutes": lunch_info["lunch_duration_minutes"],
-            "lunch_late_minutes": lunch_info["lunch_late_minutes"],
-            "lunch_status": lunch_info["lunch_status"],
-        }
+        lunch_fields = {}
+        if include_lunch:
+            taps_list = list(logs_lookup.get((emp_id, w_date), []))
+            if shift_window.get('end_next_day') and w_date:
+                taps_list += logs_lookup.get((emp_id, w_date + timedelta(days=1)), [])
+            if not taps_list:
+                taps_list = [tap for tap in dict.fromkeys((first, last)) if tap is not None]
+            lunch_fields = extract_lunch_swipes(
+                taps_list, work_date=w_date, is_night_shift=shift_window.get('end_next_day', False),
+            )
 
         # 1. Handle Absent / No Taps
         if not first or not last or count == 0:

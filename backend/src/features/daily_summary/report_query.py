@@ -1,7 +1,7 @@
 from datetime import date, time, timedelta
 from typing import NamedTuple, Optional, Any
 
-from sqlalchemy import Date, Time, case, func, literal, or_, select, text, true, union_all
+from sqlalchemy import Date, Time, case, func, literal, null, or_, select, text, true, union_all
 from sqlalchemy.orm import Session, aliased
 
 from database import (
@@ -10,14 +10,12 @@ from database import (
     EmployeeLocalRegistry,
     EmployeeMetadata,
 )
-from features.employees.registry_service import SOURCE_EXCEL_SYNCED, SOURCE_LOG_ONLY, employee_search_filter
+from features.employees.registry_service import SOURCE_EXCEL_SYNCED, SOURCE_LOG_ONLY, employee_keyword_query
 
 
 class DailySummaryQueryParts(NamedTuple):
     query: Any
-    union_keys: Any
-    agg_logs_sub: Any
-    roster_sub: Any
+    summary_days: Any
 
 
 def date_range_subquery(
@@ -200,17 +198,10 @@ def build_matching_employee_ids_subquery(db: Session, employee_search: Optional[
     if not employee_search or not employee_search.strip():
         return None
 
-    registry_ids = db.query(
-        EmployeeLocalRegistry.employee_id.label("employee_id")
-    ).filter(
-        employee_search_filter(db, employee_search, EmployeeLocalRegistry.employee_id)
-    )
-    metadata_ids = db.query(
-        EmployeeMetadata.employee_id.label("employee_id")
-    ).filter(
-        employee_search_filter(db, employee_search, EmployeeMetadata.employee_id)
-    )
-    return registry_ids.union(metadata_ids).subquery("matching_employee_ids")
+    words = employee_search.split()
+    registry_ids = employee_keyword_query(db, EmployeeLocalRegistry, words)
+    metadata_ids = employee_keyword_query(db, EmployeeMetadata, words)
+    return registry_ids.union(metadata_ids).cte("matching_employee_ids")
 
 
 def build_daily_summary_query(
@@ -238,6 +229,8 @@ def build_daily_summary_query(
     roster_keys = db.query(
         roster_sub.c.employee_id.label("employee_id"),
         roster_sub.c.work_date.label("work_date"),
+        null(), null(), null(), null(),
+        roster_sub.c.shift_code,
     )
 
     registry_keys = None
@@ -246,6 +239,7 @@ def build_daily_summary_query(
         registry_keys = db.query(
             EmployeeLocalRegistry.employee_id.label("employee_id"),
             report_dates.c.work_date.label("work_date"),
+            null(), null(), null(), null(), null(),
         ).select_from(EmployeeLocalRegistry).join(
             report_dates,
             true(),
@@ -257,46 +251,54 @@ def build_daily_summary_query(
                 )
             )
 
-    log_keys = db.query(
-        agg_logs_sub.c.employee_id.label("employee_id"),
-        agg_logs_sub.c.work_date.label("work_date"),
-    )
-    if start_date:
-        log_keys = log_keys.filter(agg_logs_sub.c.work_date >= start_date)
-    if end_date:
-        log_keys = log_keys.filter(agg_logs_sub.c.work_date <= end_date)
-
-    union_parts = [roster_keys, log_keys]
-    if registry_keys is not None:
-        union_parts.insert(0, registry_keys)
-    union_keys = union_parts[0].union(*union_parts[1:]).subquery("union_keys")
-
-    query = db.query(
-        union_keys.c.employee_id,
-        union_keys.c.work_date,
+    log_days = db.query(
+        agg_logs_sub.c.employee_id,
+        agg_logs_sub.c.work_date,
         agg_logs_sub.c.first_tap,
         agg_logs_sub.c.last_tap,
-        func.coalesce(agg_logs_sub.c.tap_count, 0).label("tap_count"),
-        func.coalesce(roster_sub.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).label("shift"),
+        agg_logs_sub.c.tap_count,
+        agg_logs_sub.c.machine_ip,
+        null().label("shift_code"),
+    )
+    if start_date:
+        log_days = log_days.filter(agg_logs_sub.c.work_date >= start_date)
+    if end_date:
+        log_days = log_days.filter(agg_logs_sub.c.work_date <= end_date)
+
+    # Raw Logs and roster each contribute at most one row per employee/day.
+    # Combine their values in one pass, including days with no Raw Logs.
+    union_parts = [log_days, roster_keys]
+    if registry_keys is not None:
+        union_parts.append(registry_keys)
+    source_days = union_all(*(part.statement for part in union_parts)).subquery("source_days")
+    summary_days = db.query(
+        source_days.c.employee_id,
+        source_days.c.work_date,
+        func.max(source_days.c.first_tap).label("first_tap"),
+        func.max(source_days.c.last_tap).label("last_tap"),
+        func.max(source_days.c.tap_count).label("tap_count"),
+        func.max(source_days.c.machine_ip).label("machine_ip"),
+        func.max(source_days.c.shift_code).label("shift_code"),
+    ).group_by(source_days.c.employee_id, source_days.c.work_date).subquery("summary_days")
+
+    query = db.query(
+        summary_days.c.employee_id,
+        summary_days.c.work_date,
+        summary_days.c.first_tap,
+        summary_days.c.last_tap,
+        func.coalesce(summary_days.c.tap_count, 0).label("tap_count"),
+        func.coalesce(summary_days.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).label("shift"),
         func.coalesce(EmployeeLocalRegistry.emp_name, EmployeeMetadata.emp_name).label("emp_name"),
         func.coalesce(EmployeeLocalRegistry.full_emp_id, EmployeeMetadata.full_emp_id).label("full_emp_id"),
         func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department).label("department"),
         func.coalesce(EmployeeLocalRegistry.source_status, SOURCE_LOG_ONLY).label("status"),
-        roster_sub.c.shift_code.label("daily_shift_code"),
-    ).outerjoin(
-        agg_logs_sub,
-        (union_keys.c.employee_id == agg_logs_sub.c.employee_id)
-        & (union_keys.c.work_date == agg_logs_sub.c.work_date),
-    ).outerjoin(
-        roster_sub,
-        (union_keys.c.employee_id == roster_sub.c.employee_id)
-        & (union_keys.c.work_date == roster_sub.c.work_date),
+        summary_days.c.shift_code.label("daily_shift_code"),
     ).outerjoin(
         EmployeeLocalRegistry,
-        union_keys.c.employee_id == EmployeeLocalRegistry.employee_id,
+        summary_days.c.employee_id == EmployeeLocalRegistry.employee_id,
     ).outerjoin(
         EmployeeMetadata,
-        union_keys.c.employee_id == EmployeeMetadata.employee_id,
+        summary_days.c.employee_id == EmployeeMetadata.employee_id,
     )
 
-    return DailySummaryQueryParts(query, union_keys, agg_logs_sub, roster_sub)
+    return DailySummaryQueryParts(query, summary_days)

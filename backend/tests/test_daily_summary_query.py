@@ -65,3 +65,189 @@ def test_daily_summary_employee_search_preserves_pagination(client, db_session):
     assert payload["total_pages"] == 2
     assert payload["page"] == 2
     assert [item["employee_id"] for item in payload["items"]] == ["EMP-001"]
+
+def test_daily_summary_night_lunch_does_not_read_employee_history(client, db_session):
+    from datetime import time, timedelta
+
+    from database import EmployeeDailyShifts, ShiftDefinition
+
+    employee_id = "NIGHT-001"
+    work_date = date(2026, 9, 10)
+    db_session.add_all([
+        EmployeeLocalRegistry(employee_id=employee_id, source_status="excel_synced", shift="D"),
+        EmployeeDailyShifts(employee_id=employee_id, work_date=work_date, shift_code="D"),
+        ShiftDefinition(shift_code="D", start_time=time(20), end_time=time(5), is_night_shift=True),
+    ])
+    taps = [
+        datetime(2026, 9, 10, 20),
+        datetime(2026, 9, 10, 23, 20),
+        datetime(2026, 9, 11, 0, 10),
+        datetime(2026, 9, 11, 5),
+    ]
+    taps.extend(taps[0] - timedelta(days=7, minutes=i) for i in range(500))
+    db_session.add_all(
+        AttendanceLog(
+            employee_id=employee_id, attendance_date=tap.date(),
+            attendance_time=tap, machine_ip="10.0.0.1",
+        )
+        for tap in taps
+    )
+    db_session.flush()
+
+    connection = db_session.connection().connection.driver_connection
+    original_factory = connection.row_factory
+    returned_rows = 0
+
+    def count_rows(cursor, row):
+        nonlocal returned_rows
+        returned_rows += 1
+        return original_factory(cursor, row) if original_factory else row
+
+    connection.row_factory = count_rows
+    try:
+        response = client.get("/api/daily-summary", params={
+            "start_date": work_date.isoformat(), "end_date": work_date.isoformat(),
+        })
+    finally:
+        connection.row_factory = original_factory
+
+    assert response.status_code == 200
+    item, = response.json()["items"]
+    assert item["lunch_out"] == "2026-09-10T23:20:00"
+    assert item["lunch_in"] == "2026-09-11T00:10:00"
+    assert item["lunch_duration_minutes"] == 50
+    assert returned_rows < 50
+
+
+def test_daily_summary_filters_before_paging_and_only_reads_lunch_for_page(client, db_session):
+    from datetime import time
+
+    from database import ShiftDefinition
+
+    work_date = date(2026, 9, 10)
+    db_session.add(ShiftDefinition(shift_code="N", start_time=time(8), end_time=time(17), work_hours=8))
+    for index in range(60):
+        employee_id = f"FILTER-{index:03}"
+        db_session.add(EmployeeLocalRegistry(employee_id=employee_id, source_status="excel_synced", shift="N"))
+        hours = [8] if index < 20 else [8, 11, 12, 15 if index < 40 else 17]
+        db_session.add_all(
+            AttendanceLog(
+                employee_id=employee_id, attendance_date=work_date,
+                attendance_time=datetime.combine(work_date, time(hour)), machine_ip="10.0.0.1",
+            )
+            for hour in hours
+        )
+    db_session.flush()
+
+    connection = db_session.connection().connection.driver_connection
+    original_factory = connection.row_factory
+    returned_rows = 0
+
+    def count_rows(cursor, row):
+        nonlocal returned_rows
+        returned_rows += 1
+        return original_factory(cursor, row) if original_factory else row
+
+    connection.row_factory = count_rows
+    try:
+        response = client.get("/api/daily-summary", params={
+            "start_date": work_date.isoformat(), "end_date": work_date.isoformat(),
+            "employee_id": "FILTER-", "min_hours": 4, "early_departure": True,
+            "page": 2, "size": 2,
+        })
+    finally:
+        connection.row_factory = original_factory
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total_count"] == 20
+    assert payload["total_pages"] == 10
+    assert [item["employee_id"] for item in payload["items"]] == ["FILTER-022", "FILTER-023"]
+    assert [item["lunch_duration_minutes"] for item in payload["items"]] == [60, 60]
+    assert returned_rows < 100
+
+
+def test_daily_summary_partial_name_keeps_matches_from_both_employee_sources(client, db_session):
+    from database import EmployeeMetadata
+
+    work_date = date(2026, 9, 10)
+    for index in range(300):
+        employee_id = f"SEARCH-{index:03}"
+        db_session.add(EmployeeLocalRegistry(
+            employee_id=employee_id, emp_name="Alex Example" if index == 1 else "Other Name",
+            source_status="excel_synced",
+        ))
+        db_session.add(EmployeeMetadata(
+            employee_id=employee_id, emp_name="Alexa Example" if index == 2 else "Legacy Name",
+        ))
+    db_session.flush()
+
+    connection = db_session.connection().connection.driver_connection
+    statement_steps = 0
+
+    def count_steps():
+        nonlocal statement_steps
+        statement_steps += 1000
+        return 0
+
+    connection.set_progress_handler(count_steps, 1000)
+    try:
+        response = client.get("/api/daily-summary", params={
+            "start_date": work_date.isoformat(), "end_date": work_date.isoformat(),
+            "employee_id": "lex exa", "status": "excel_synced", "size": 1,
+        })
+    finally:
+        connection.set_progress_handler(None, 0)
+
+    assert response.status_code == 200
+    assert response.json()["total_count"] == 2
+    assert [item["employee_id"] for item in response.json()["items"]] == ["SEARCH-001"]
+    assert statement_steps < 15_000
+
+
+def test_daily_summary_combines_logs_roster_and_absences_with_bounded_work(client, db_session):
+    from datetime import time, timedelta
+
+    from database import EmployeeDailyShifts, ShiftDefinition
+
+    work_date = date(2026, 9, 10)
+    db_session.add(ShiftDefinition(shift_code="N", start_time=time(8), end_time=time(17), work_hours=8))
+    db_session.add_all([
+        EmployeeLocalRegistry(employee_id="A", source_status="excel_synced", shift="N"),
+        EmployeeLocalRegistry(employee_id="B", source_status="excel_synced", shift="N"),
+        EmployeeDailyShifts(employee_id="A", work_date=work_date, shift_code="N"),
+    ])
+    for day in (work_date, work_date - timedelta(days=1)):
+        db_session.add_all(
+            AttendanceLog(
+                employee_id="A", attendance_date=day,
+                attendance_time=datetime.combine(day, time(8)) + timedelta(minutes=i),
+                machine_ip="10.0.0.1",
+            )
+            for i in range(450)
+        )
+    db_session.flush()
+
+    connection = db_session.connection().connection.driver_connection
+    statement_steps = 0
+
+    def count_steps():
+        nonlocal statement_steps
+        statement_steps += 1000
+        return 0
+
+    connection.set_progress_handler(count_steps, 1000)
+    try:
+        response = client.get("/api/daily-summary", params={
+            "start_date": work_date.isoformat(), "end_date": work_date.isoformat(),
+            "shift": "N", "status": "excel_synced",
+        })
+    finally:
+        connection.set_progress_handler(None, 0)
+
+    assert response.status_code == 200
+    assert response.json()["total_count"] == 2
+    assert [(item["employee_id"], item["tap_count"]) for item in response.json()["items"]] == [
+        ("A", 450), ("B", 0),
+    ]
+    assert statement_steps < 195_000
