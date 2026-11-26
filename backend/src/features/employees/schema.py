@@ -38,6 +38,7 @@ class UpdateStatusOut(BaseModel):
 
 class DeleteHardwareOut(BaseModel):
     results: Dict[str, str]
+    log_only: bool
 
 class UpdateHardwareOut(BaseModel):
     results: Dict[str, str]

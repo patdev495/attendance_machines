@@ -140,6 +140,7 @@
     <BulkDeleteHardwareModal
       :isOpen="isBulkDeleteModalOpen"
       @close="isBulkDeleteModalOpen = false"
+      @completed="fetchEmployees"
     />
 
     <BulkPushHardwareModal
@@ -400,8 +401,12 @@ const onDelete = async (emp) => {
   )
   if (confirmed) {
     try {
-      await employeesApi.deleteEmployee(emp.employee_id)
-      notification.success(t('device.delete_success', { id: emp.employee_id }))
+      const result = await employeesApi.deleteEmployee(emp.employee_id)
+      if (result.log_only) {
+        notification.success(t('employees.delete_log_only', { id: emp.employee_id }))
+      } else {
+        notification.warn(t('employees.delete_not_verified', { id: emp.employee_id }))
+      }
       fetchEmployees()
     } catch (err) {
       notification.error(t('common.error'))

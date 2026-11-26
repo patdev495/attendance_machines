@@ -77,6 +77,18 @@ def test_offboarded_employee_returns_to_excel_status_on_import(client, db_sessio
     items = client.get("/api/employees", params={"search": "OFF101"}).json()["items"]
     assert items[0]["source_status"] == "log_only"
 
+    unrelated_workbook = Workbook()
+    unrelated_workbook.active.append(["EMP_ID", "EMP_NAME"])
+    unrelated_workbook.active.append(["OTHER", "Other employee"])
+    unrelated_upload = BytesIO()
+    unrelated_workbook.save(unrelated_upload)
+    assert client.post(
+        "/api/daily-summary/sync-excel",
+        files={"file": ("roster.xlsx", unrelated_upload.getvalue())},
+    ).status_code == 200
+    employee, = client.get("/api/employees", params={"search": "OFF101"}).json()["items"]
+    assert employee["source_status"] == "log_only"
+
     workbook = Workbook()
     workbook.active.append(["EMP_ID", "EMP_NAME"])
     workbook.active.append(["OFF101", "New roster"])
@@ -120,3 +132,80 @@ def test_export_includes_full_period_for_offboarded_employee_only_when_they_tapp
         assert row[14:16] == (0, 0)
         assert row[-1] == "Không chấm công"
     assert download_details("2026-09-04", "2026-09-06") == []
+
+
+def test_delete_from_employees_preserves_history_and_marks_registry_log_only(
+    client, db_session, attendance_machine, monkeypatch,
+):
+    monkeypatch.setattr("features.employees.service.get_machine_list", lambda: ["192.0.2.1"])
+    db_session.add_all([
+        EmployeeLocalRegistry(employee_id="OFF101", emp_name="Employee A", source_status="excel_synced"),
+        EmployeeMetadata(employee_id="OFF101", emp_name="Employee A"),
+        AttendanceLog(employee_id="OFF101", attendance_date=date(2026, 11, 25),
+                      attendance_time=datetime(2026, 11, 25, 8), machine_ip="192.0.2.1"),
+    ])
+    db_session.flush()
+
+    deleted = client.delete("/api/employees/OFF101")
+    assert deleted.status_code == 200
+    assert deleted.json()["log_only"] is True
+    repeated = client.delete("/api/employees/OFF101")
+    assert repeated.status_code == 200
+    assert repeated.json()["log_only"] is True
+    assert client.post("/api/employees/update-registry").status_code == 200
+    employee, = client.get("/api/employees", params={"search": "OFF101"}).json()["items"]
+    assert (employee["emp_name"], employee["source_status"]) == ("Employee A", "log_only")
+    logs = client.get("/api/daily-summary/detail", params={
+        "employee_id": "OFF101", "work_date": "2026-11-25",
+    }).json()
+    assert len(logs) == 1
+    assert logs[0]["employee_id"] == "OFF101"
+
+
+@pytest.mark.parametrize("other_machine_online", [True, False])
+def test_delete_from_file_marks_only_employees_confirmed_absent_from_every_machine(
+    client, db_session, monkeypatch, attendance_machine, other_machine_online,
+):
+    target, other = "192.0.2.1", "192.0.2.2"
+    machine_rosters = {
+        target: {"REMOVED", "STILL-REGISTERED", "REFUSED"},
+        other: {"STILL-REGISTERED"},
+    }
+
+    class FileDeleteHanvon(attendance_machine):
+        def __init__(self, ip, **kwargs):
+            if ip == other and not other_machine_online:
+                raise ConnectionError("Machine offline")
+            self.employee_ids = machine_rosters[ip]
+
+        def delete_employee(self, employee_id):
+            if employee_id == "REFUSED":
+                raise RuntimeError("Device refused removal")
+            super().delete_employee(employee_id)
+
+    monkeypatch.setattr("features.machines.service.HanvonClient", FileDeleteHanvon)
+    monkeypatch.setattr("features.machines.service.get_machine_list", lambda: [target, other])
+    db_session.add_all(
+        EmployeeLocalRegistry(employee_id=employee_id, source_status="excel_synced")
+        for employee_id in ("REMOVED", "STILL-REGISTERED", "REFUSED", "ALREADY-ABSENT")
+    )
+    db_session.flush()
+
+    result = client.post(
+        "/api/employees/bulk-delete-hardware",
+        files={"file": ("employees.txt", b"REMOVED\nSTILL-REGISTERED\nREFUSED\nALREADY-ABSENT\nUNKNOWN\n")},
+        data={"machine_ips": target},
+    )
+    assert result.status_code == 200
+    status = client.get("/api/machines/bulk-delete-status").json()
+    assert status["is_running"] is False
+    statuses = {
+        item["employee_id"]: item["source_status"]
+        for item in client.get("/api/employees").json()["items"]
+    }
+    verified_ids = {"REMOVED", "ALREADY-ABSENT"} if other_machine_online else set()
+    expected = dict.fromkeys(("REMOVED", "STILL-REGISTERED", "REFUSED", "ALREADY-ABSENT"), "excel_synced")
+    expected.update(dict.fromkeys(verified_ids, "log_only"))
+    assert statuses == expected
+    assert set(status["log_only_employee_ids"]) == verified_ids
+    assert status["unverified_machine_ips"] == ([] if other_machine_online else [other])

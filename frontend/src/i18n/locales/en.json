@@ -45,6 +45,8 @@
     "search_placeholder": "Search by ID or Name...",
     "all_shifts": "All Shifts",
     "none_shift": "No information",
+    "delete_log_only": "Employee {id} is now Log only.",
+    "delete_not_verified": "Could not confirm that employee {id} was removed from every machine.",
     "delete_hardware_confirm": "Are you sure you want to delete {name} from hardware?",
     "delete_bulk_global_confirm": "Are you sure you want to delete {count} employees from ALL hardware terminals? This cannot be undone.",
     "edit_title": "Edit Employee",
@@ -152,6 +154,9 @@
       "delete_error": "Error deleting shift"
     },
     "bulk_hardware_delete": {
+      "registry_result": "{updated}/{total} employee IDs are now Log only.",
+      "registry_unverified": "Some machines could not be verified. Employee statuses were left unchanged.",
+      "registry_failed": "Employee statuses could not be updated.",
       "title": "Bulk Delete from Machines",
       "subtitle": "Delete employee data directly from machine memory.",
       "upload_label": "Upload ID List (.txt)",

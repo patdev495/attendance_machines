@@ -29,7 +29,7 @@ from .service import (
     run_bulk_push_on_machines,
     bulk_push_status
 )
-from .registry_service import filter_registry_by_employee_search
+from .registry_service import filter_registry_by_employee_search, mark_employees_log_only
 from features.machines.service import (
     get_biometric_coverage, 
     run_bulk_delete_on_machines,
@@ -122,9 +122,13 @@ def get_update_status():
     return UpdateStatusOut(**registry_update_state)
 
 @router.delete("/{employee_id}", response_model=DeleteHardwareOut)
-def delete_employee_from_hardware(employee_id: str):
+def delete_employee_from_hardware(employee_id: str, db: Session = Depends(get_db)):
     results = delete_user_from_hardware(employee_id)
-    return DeleteHardwareOut(results=results)
+    verified = bool(results) and all(
+        result == "Not found" or result.startswith("Success:") for result in results.values()
+    )
+    marked = mark_employees_log_only(db, {employee_id}) if verified else set()
+    return DeleteHardwareOut(results=results, log_only=employee_id in marked)
 
 @router.put("/{employee_id}", response_model=UpdateHardwareOut)
 def update_employee(employee_id: str, payload: EmployeeUpdate, db: Session = Depends(get_db)):
@@ -160,26 +164,28 @@ def get_biometric_coverage_endpoint(employee_id: str):
 async def bulk_delete_hardware_endpoint(
     bg_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    machine_ips: str = Form(...)
+    machine_ips: str = Form(...),
+    db: Session = Depends(get_db),
 ):
-    # 1. Parse IDs from file
     content = await file.read()
-    text = content.decode('utf-8')
-    # Filter out empty lines and strip whitespace
-    employee_ids = [line.strip() for line in text.splitlines() if line.strip()]
-    
+    try:
+        file_text = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="The employee ID file must be UTF-8") from exc
+    employee_ids = list(dict.fromkeys(line.strip() for line in file_text.splitlines() if line.strip()))
     if not employee_ids:
         raise HTTPException(status_code=400, detail="No valid Employee IDs found in file")
-        
-    ips = [ip.strip() for ip in machine_ips.split(",") if ip.strip()]
+
+    ips = list(dict.fromkeys(ip.strip() for ip in machine_ips.split(",") if ip.strip()))
     if not ips:
         raise HTTPException(status_code=400, detail="No target machines selected")
 
     if bulk_delete_status["is_running"]:
         raise HTTPException(status_code=400, detail="Another bulk operation is in progress")
-        
-    bg_tasks.add_task(run_bulk_delete_on_machines, employee_ids, ips)
+
+    bg_tasks.add_task(run_bulk_delete_on_machines, employee_ids, ips, db.get_bind())
     return {"status": "Started", "count": len(employee_ids), "total_machines": len(ips)}
+
 
 @router.post("/bulk-push-hardware")
 async def bulk_push_hardware_endpoint(

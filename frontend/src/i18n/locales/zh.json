@@ -44,6 +44,8 @@
     "search_placeholder": "按 ID 或姓名搜素...",
     "all_shifts": "所有班次",
     "none_shift": "无信息",
+    "delete_log_only": "员工 {id} 已设为仅打卡记录。",
+    "delete_not_verified": "无法确认员工 {id} 已从所有考勤机移除。",
     "delete_hardware_confirm": "您确定要从硬件中删除 {name} 吗？",
     "delete_bulk_global_confirm": "您确定要从所有考勤机中删除这 {count} 名员工吗？此操作无法撤销。",
     "edit_title": "编辑员工信息",
@@ -151,6 +153,9 @@
       "delete_error": "删除班次时出错"
     },
     "bulk_hardware_delete": {
+      "registry_result": "{updated}/{total} 个员工编号已设为仅打卡记录。",
+      "registry_unverified": "部分考勤机无法核实，员工状态未更改。",
+      "registry_failed": "无法更新员工状态。",
       "title": "从机器批量删除",
       "subtitle": "直接从考勤机内存中删除员工数据。",
       "upload_label": "上传 ID 列表 (.txt)",

@@ -47,6 +47,28 @@ def _apply_excel_metadata(registry_entry: EmployeeLocalRegistry, metadata: Emplo
     registry_entry.source_status = SOURCE_EXCEL_SYNCED
 
 
+def mark_employees_log_only(db: Session, employee_ids: set[str]) -> set[str]:
+    marked = set()
+    ordered_ids = sorted(employee_ids)
+    # Keep the IN clauses below SQL Server's parameter limit.
+    for offset in range(0, len(ordered_ids), 500):
+        candidates = ordered_ids[offset:offset + 500]
+        rows = db.query(EmployeeLocalRegistry).filter(EmployeeLocalRegistry.employee_id.in_(candidates))
+        # Acquire the registry row locks before checking for existing offboarding markers.
+        rows.update({EmployeeLocalRegistry.source_status: SOURCE_LOG_ONLY}, synchronize_session=False)
+        batch = {employee_id for (employee_id,) in rows.with_entities(EmployeeLocalRegistry.employee_id)}
+        existing = {
+            employee_id
+            for (employee_id,) in db.query(EmployeeOffboarding.employee_id).filter(
+                EmployeeOffboarding.employee_id.in_(batch),
+            )
+        }
+        db.add_all(EmployeeOffboarding(employee_id=employee_id) for employee_id in batch - existing)
+        marked.update(batch)
+    db.commit()
+    return marked
+
+
 def reconcile_employee_local_registry(
     db: Session,
     machine_employee_ids: Optional[Iterable[str]] = None,

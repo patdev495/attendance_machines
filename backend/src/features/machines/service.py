@@ -1,6 +1,9 @@
 from config import config, DEMO_MODE
 
+from sqlalchemy.orm import Session
+
 from database import SessionLocal, EmployeeMetadata
+from features.employees.registry_service import mark_employees_log_only
 from features.hanvon.client import HanvonClient
 from shared.hardware import (
     get_machine_list, update_machine_tags, get_all_machine_configs, delete_machine_config,
@@ -533,7 +536,10 @@ bulk_delete_status = {
     "total_machines": 0,
     "processed_count": 0,
     "current_ip": "",
-    "results": {}
+    "results": {},
+    "log_only_employee_ids": [],
+    "unverified_machine_ips": [],
+    "registry_update_failed": False,
 }
 
 bulk_status_lock = threading.Lock()
@@ -590,7 +596,10 @@ def bulk_delete_users_from_all_machines(employee_ids: list):
             "results": {},
             "processed_count": 0,
             "current_ip": "Starting...",
-            "total_machines": 0
+            "total_machines": 0,
+            "log_only_employee_ids": [],
+            "unverified_machine_ips": [],
+            "registry_update_failed": False,
         })
 
     try:
@@ -605,7 +614,15 @@ def bulk_delete_users_from_all_machines(employee_ids: list):
         with bulk_status_lock:
             bulk_delete_status["is_running"] = False
 
-def run_bulk_delete_on_machines(employee_ids: list, target_ips: list):
+def _read_registered_ids(ip: str) -> set[str]:
+    with HanvonClient(
+        ip, port=config.HANVON_PORT, secret_key=config.HANVON_SECRET_KEY, timeout=10,
+    ) as client:
+        employees, _ = client.get_employee_ids()
+        return set(employees).union(client.get_manager_ids())
+
+
+def run_bulk_delete_on_machines(employee_ids: list, target_ips: list, db_bind):
     """
     Background task for bulk deletion across SELECTED machines.
     """
@@ -618,14 +635,54 @@ def run_bulk_delete_on_machines(employee_ids: list, target_ips: list):
             "results": {},
             "processed_count": 0,
             "current_ip": "Starting...",
-            "total_machines": len(target_ips)
+            "total_machines": len(target_ips),
+            "log_only_employee_ids": [],
+            "unverified_machine_ips": [],
+            "registry_update_failed": False,
         })
 
     try:
-        # This helper now updates progress internally
-        bulk_delete_ids_from_selected_machines(employee_ids, target_ips)
+        configured_ips = set(get_machine_list())
+        if not configured_ips or not set(target_ips).issubset(configured_ips):
+            raise ValueError("The configured Attendance Machines no longer match the selected targets")
+        results = bulk_delete_ids_from_selected_machines(employee_ids, target_ips)
+        confirmed_absent = set(employee_ids)
+        for result in results.values():
+            details = result.get("details", {})
+            confirmed_absent.intersection_update(
+                employee_id for employee_id, detail in details.items()
+                if detail["status"] in ("Success", "Not found")
+            )
+
+        other_machines = configured_ips - results.keys()
+        unverified = []
+        if confirmed_absent and other_machines:
+            with bulk_status_lock:
+                bulk_delete_status["current_ip"] = "Verifying remaining machines"
+            with ThreadPoolExecutor(max_workers=len(other_machines)) as executor:
+                pending = {executor.submit(_read_registered_ids, ip): ip for ip in other_machines}
+                for future in concurrent.futures.as_completed(pending):
+                    try:
+                        confirmed_absent.difference_update(future.result())
+                    except Exception:
+                        ip = pending[future]
+                        logger.exception("Could not verify employee registration on %s", ip)
+                        unverified.append(ip)
+
+        marked = set()
+        if confirmed_absent and not unverified:
+            with Session(db_bind) as db:
+                marked = mark_employees_log_only(db, confirmed_absent)
         with bulk_status_lock:
-            bulk_delete_status["current_ip"] = "Done"
+            bulk_delete_status.update({
+                "current_ip": "Done",
+                "log_only_employee_ids": sorted(marked),
+                "unverified_machine_ips": sorted(unverified),
+            })
+    except Exception:
+        logger.exception("Bulk employee deletion could not update the registry")
+        with bulk_status_lock:
+            bulk_delete_status["registry_update_failed"] = True
     finally:
         with bulk_status_lock:
             bulk_delete_status["is_running"] = False

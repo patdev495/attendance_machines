@@ -45,6 +45,8 @@
     "search_placeholder": "Tìm theo Mã hoặc Tên...",
     "all_shifts": "Tất Cả Ca",
     "none_shift": "Không có thông tin",
+    "delete_log_only": "Đã chuyển mã {id} sang Chỉ có trong log.",
+    "delete_not_verified": "Chưa xác nhận mã {id} đã được gỡ khỏi mọi máy.",
     "delete_hardware_confirm": "Bạn có chắc muốn xóa {name} khỏi phần cứng?",
     "delete_bulk_global_confirm": "Bạn có chắc muốn xóa {count} nhân viên khỏi TẤT CẢ các máy chấm công? Hành động này không thể hoàn tác.",
     "edit_title": "Chỉnh Sửa Nhân Viên",
@@ -153,6 +155,9 @@
       "delete_error": "Lỗi khi xóa"
     },
     "bulk_hardware_delete": {
+      "registry_result": "{updated}/{total} mã ở trạng thái Chỉ có trong log.",
+      "registry_unverified": "Có máy chưa xác minh được. Hồ sơ chưa đổi trạng thái.",
+      "registry_failed": "Lỗi khi cập nhật trạng thái hồ sơ.",
       "title": "Xóa hàng loạt khỏi máy",
       "subtitle": "Xóa dữ liệu nhân viên trực tiếp từ bộ nhớ máy chấm công.",
       "upload_label": "Tải lên danh sách ID (.txt)",

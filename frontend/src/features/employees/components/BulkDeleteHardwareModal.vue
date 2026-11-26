@@ -73,6 +73,13 @@
               <!-- Results Section -->
               <div v-if="results" class="results-section mt-6">
                 <div class="divider"></div>
+                <p>{{ $t('employees.bulk_hardware_delete.registry_result', { updated: registryUpdated, total: requestedCount }) }}</p>
+                <p v-if="progressInfo?.unverified_machine_ips?.length">
+                  {{ $t('employees.bulk_hardware_delete.registry_unverified') }}
+                </p>
+                <p v-if="progressInfo?.registry_update_failed">
+                  {{ $t('employees.bulk_hardware_delete.registry_failed') }}
+                </p>
                 <table class="results-table">
                   <thead>
                     <tr>
@@ -111,21 +118,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { employeesApi } from '../api'
 import { getMachines, getBulkDeleteStatus } from '../../machines/api'
 import { useNotificationStore } from '@/stores/notification'
 
 const notification = useNotificationStore()
 
-// Add getBulkDeleteStatus to employeesApi if not there, or use it directly
-employeesApi.getBulkDeleteStatus = getBulkDeleteStatus
-
 const props = defineProps({
   isOpen: Boolean
 })
 
-const emit = defineEmits(['close'])
+const emit = defineEmits(['close', 'completed'])
 
 const isLoading = ref(false)
 const machineList = ref([])
@@ -133,6 +137,8 @@ const selectedMachineIps = ref([])
 const selectedFile = ref(null)
 const results = ref(null)
 const progressInfo = ref(null)
+const requestedCount = ref(0)
+const registryUpdated = computed(() => progressInfo.value?.log_only_employee_ids?.length ?? 0)
 let pollTimer = null
 
 onMounted(async () => {
@@ -169,7 +175,8 @@ async function handleStart() {
   progressInfo.value = { processed_count: 0, total_machines: selectedMachineIps.value.length, current_ip: 'Initializing...' }
   
   try {
-    await employeesApi.bulkDeleteHardware(selectedFile.value, selectedMachineIps.value)
+    const { count } = await employeesApi.bulkDeleteHardware(selectedFile.value, selectedMachineIps.value)
+    requestedCount.value = count
     
     // Start polling
     startPolling()
@@ -185,7 +192,7 @@ function startPolling() {
   
   pollTimer = setInterval(async () => {
     try {
-      const status = await employeesApi.getBulkDeleteStatus()
+      const status = await getBulkDeleteStatus()
       progressInfo.value = status
       
       if (!status.is_running) {
@@ -193,6 +200,7 @@ function startPolling() {
         pollTimer = null
         results.value = status.results
         isLoading.value = false
+        emit('completed')
       }
     } catch (e) {
       console.error('Polling failed', e)
