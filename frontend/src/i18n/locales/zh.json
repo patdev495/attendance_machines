@@ -467,6 +467,7 @@
   "actions": {
     "delete_confirm": "是否从设备 {ip} 中删除员工 {id}？",
     "delete_single_warn": "您确定要从机器 {ip} 中删除员工 {id} 吗？\n（注：此操作仅删除此机器上的数据，不影响其他机器）。",
+    "delete_excel_employee_warn": "确定从机器 {ip} 删除员工 {id} 吗？\n删除成功后，员工状态将变为仅有打卡记录。报表仅在导出期间有打卡时列出该员工。再次从 Excel 导入此员工将恢复 Excel 已同步状态。",
     "delete_all_confirm": "是否从所有考勤机中删除员工 {id}？",
     "delete_global_warn": "警告：您正在从所有连接的机器中删除员工 {id}。\n此操作无法撤销。您确定要继续吗？",
     "delete_initiating": "正在初始化 {id} 的删除命令...",

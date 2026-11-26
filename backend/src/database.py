@@ -89,6 +89,11 @@ class EmployeeFingerprint(Base):
 # IMPORTANT: existing tables (ShiftRules, AttendanceLogs, EmployeeMetadata,
 # EmployeeFingerprints) are NOT modified. This is an additive-only change.
 # ──────────────────────────────────────────────────────────────────────────────
+class EmployeeOffboarding(Base):
+    __tablename__ = "EmployeeOffboarding"
+    employee_id = Column(String(50), primary_key=True)
+
+
 class EmployeeLocalRegistry(Base):
     __tablename__ = "EmployeeLocalRegistry"
     employee_id  = Column(String(50), primary_key=True)

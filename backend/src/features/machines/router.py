@@ -3,7 +3,8 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, cast, Dict, Any
 from datetime import datetime
-from database import get_db, EmployeeMetadata, EmployeeLocalRegistry
+from database import get_db, EmployeeMetadata, EmployeeLocalRegistry, EmployeeOffboarding
+from features.employees.registry_service import SOURCE_EXCEL_SYNCED, SOURCE_LOG_ONLY
 from config import DEMO_MODE, MANAGER_PROMOTION_PASSWORD
 import secrets
 
@@ -315,9 +316,24 @@ def get_machine_employee_photo(ip: str, employee_id: str):
     }
 
 @router.delete("/{ip}/employees/{employee_id}")
-def delete_machine_employee(ip: str, employee_id: str):
+def delete_machine_employee(ip: str, employee_id: str, db: Session = Depends(get_db)):
     """Delete a single employee from a machine."""
-    return delete_user_from_machine(ip, employee_id)
+    if DEMO_MODE:
+        _hanvon_not_supported("Machine employee deletion")
+
+    result = delete_user_from_machine(ip, employee_id)
+    if result == "Not found":
+        raise HTTPException(status_code=404, detail=result)
+    if not result.startswith("Success:"):
+        raise HTTPException(status_code=502, detail=result)
+
+    changed = db.query(EmployeeLocalRegistry).filter_by(
+        employee_id=employee_id, source_status=SOURCE_EXCEL_SYNCED,
+    ).update({EmployeeLocalRegistry.source_status: SOURCE_LOG_ONLY})
+    if changed:
+        db.add(EmployeeOffboarding(employee_id=employee_id))
+        db.commit()
+    return result
 
 @router.post("/{ip}/employees/bulk-delete")
 def bulk_delete_machine_employees(ip: str, req: BulkDeleteRequest):

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from compat import safe_ilike
 from config import DEMO_MODE
-from database import AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata
+from database import AttendanceLog, EmployeeLocalRegistry, EmployeeMetadata, EmployeeOffboarding
 
 
 SOURCE_EXCEL_SYNCED = "excel_synced"
@@ -66,12 +66,15 @@ def reconcile_employee_local_registry(
         for (employee_id,) in db.query(AttendanceLog.employee_id).distinct().all()
         if normalize_employee_id(employee_id)
     }
+    offboarded_users = {employee_id for (employee_id,) in db.query(EmployeeOffboarding.employee_id)}
 
     all_active_ids = set(excel_users.keys()) | machine_users | log_users
 
     for registry_entry in db.query(EmployeeLocalRegistry).all():
         employee_id = normalize_employee_id(registry_entry.employee_id)
-        if employee_id not in all_active_ids:
+        if employee_id in offboarded_users:
+            registry_entry.source_status = SOURCE_LOG_ONLY
+        elif employee_id not in all_active_ids:
             db.delete(registry_entry)
         elif employee_id in excel_users:
             _apply_excel_metadata(registry_entry, excel_users[employee_id])

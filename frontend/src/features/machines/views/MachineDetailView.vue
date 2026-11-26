@@ -160,8 +160,9 @@ function handleEdit(u) {
 }
 
 async function handleDelete(employeeId) {
+  const fromExcel = store.allEmployees.find(employee => employee.user_id === employeeId)?.source_status === 'excel_synced'
   const confirmed = await notification.confirm(
-    t('actions.delete_single_warn', { id: employeeId, ip: props.ip }),
+    t(fromExcel ? 'actions.delete_excel_employee_warn' : 'actions.delete_single_warn', { id: employeeId, ip: props.ip }),
     t('actions.confirm')
   )
   if (!confirmed) return

@@ -5,7 +5,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, NamedStyle, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from database import EmployeeLocalRegistry, ShiftDefinition, AttendanceLog, SessionLocal
+from database import EmployeeLocalRegistry, EmployeeOffboarding, ShiftDefinition, AttendanceLog, SessionLocal
 
 from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap, extract_lunch_swipes
 from features.employees.registry_service import SOURCE_LOG_ONLY
@@ -50,7 +50,9 @@ def _sheet1_indicators(view_mode: str):
 
 def _sheet1_values(day_summary: dict, view_mode: str):
     overtime = day_summary["ot"]
-    display_overtime = overtime if isinstance(overtime, (int, float)) and overtime > 0 else "-"
+    display_overtime = overtime if day_summary.get("offboarded_without_taps") or (
+        isinstance(overtime, (int, float)) and overtime > 0
+    ) else "-"
     lunch_values = [
         day_summary.get("lunch_out_str", "-"),
         day_summary.get("lunch_in_str", "-"),
@@ -102,8 +104,9 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         rules_pool = db.query(ShiftDefinition).all()
 
 
-        results = build_daily_summary_query(db, start_date, end_date).query.all()
+        results = build_daily_summary_query(db, start_date, end_date, include_offboarded_period=True).query.all()
         emp_meta = {employee.employee_id: employee for employee in db.query(EmployeeLocalRegistry)}
+        offboarded_ids = {employee_id for (employee_id,) in db.query(EmployeeOffboarding.employee_id)}
 
         # Pre-fetch all raw logs for the export date range
         raw_logs = db.query(AttendanceLog).filter(
@@ -124,6 +127,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
         for row in results:
             emp_id = row.employee_id
             w_date = row.work_date
+            offboarded_without_taps = emp_id in offboarded_ids and not row.tap_count
             if emp_id not in processed_data:
                 processed_data[emp_id] = {"days": {}, "name": row.emp_name, "department": row.department}
 
@@ -162,6 +166,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             day_taps = list(logs_by_emp_date.get((emp_id, w_date), []))
             if shift_window.get('end_next_day'):
                 day_taps += logs_by_emp_date.get((emp_id, w_date + timedelta(days=1)), [])
+            if offboarded_without_taps:
+                day_taps = []
             if not day_taps and row.tap_count >= 1:
                 day_taps = [row.first_tap] if row.tap_count == 1 else [row.first_tap, row.last_tap]
             lunch_info = extract_lunch_swipes(
@@ -175,7 +181,10 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             lunch_late_minutes = lunch_info["lunch_late_minutes"] if lunch_info["lunch_late_minutes"] is not None else "-"
             lunch_status_str = lunch_info["lunch_status"]
 
-            if row.tap_count and needs_shift_review(row, known_shift):
+            if offboarded_without_taps:
+                std_expected = 0.0
+                note = "Không chấm công"
+            elif row.tap_count and needs_shift_review(row, known_shift):
                 first_val = row.first_tap.strftime("%H:%M")
                 if row.last_tap != row.first_tap:
                     last_val = row.last_tap.strftime("%H:%M")
@@ -227,7 +236,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                         note = "" # Leave note will be handled by the shift code or general notes
 
 
-            if row.tap_count and row.status == SOURCE_LOG_ONLY:
+            if row.tap_count and row.status == SOURCE_LOG_ONLY and emp_id not in offboarded_ids:
                 note = f"Chưa xác minh hồ sơ nhân viên. {note}".strip()
 
             # ── Classify std/ot by shift_category (NORMAL / HOLIDAY / ROTATION)
@@ -260,6 +269,7 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "shift": shift_code_display,
                 "shift_code": shift_code_display,
                 "note": note,
+                "offboarded_without_taps": offboarded_without_taps,
                 "night_subsidy": night_subsidy,
                 "std_expected": std_expected,
                 "workday_base": workday_base,

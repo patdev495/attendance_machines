@@ -1,7 +1,7 @@
 from datetime import date, time, timedelta
 from typing import NamedTuple, Optional, Any
 
-from sqlalchemy import Date, Time, case, func, literal, null, or_, select, text, true, union_all
+from sqlalchemy import Date, String, Time, case, cast, func, literal, null, or_, select, text, true, union_all
 from sqlalchemy.orm import Session, aliased
 
 from database import (
@@ -9,6 +9,7 @@ from database import (
     EmployeeDailyShifts,
     EmployeeLocalRegistry,
     EmployeeMetadata,
+    EmployeeOffboarding,
 )
 from features.employees.registry_service import SOURCE_EXCEL_SYNCED, SOURCE_LOG_ONLY, employee_keyword_query
 
@@ -209,6 +210,8 @@ def build_daily_summary_query(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     employee_search: Optional[str] = None,
+    *,
+    include_offboarded_period: bool = False,
 ) -> DailySummaryQueryParts:
     matching_employee_ids = build_matching_employee_ids_subquery(db, employee_search)
     base_calc_sub = build_log_work_date_subquery(
@@ -233,6 +236,34 @@ def build_daily_summary_query(
         roster_sub.c.shift_code,
     )
 
+    log_days = db.query(
+        agg_logs_sub.c.employee_id,
+        agg_logs_sub.c.work_date,
+        agg_logs_sub.c.first_tap,
+        agg_logs_sub.c.last_tap,
+        agg_logs_sub.c.tap_count,
+        agg_logs_sub.c.machine_ip,
+        cast(null(), String(10)).label("shift_code"),
+    )
+    if start_date:
+        log_days = log_days.filter(agg_logs_sub.c.work_date >= start_date)
+    if end_date:
+        log_days = log_days.filter(agg_logs_sub.c.work_date <= end_date)
+
+    registry_filter = EmployeeLocalRegistry.source_status == SOURCE_EXCEL_SYNCED
+    if include_offboarded_period and start_date and end_date:
+        period_logs = log_days.cte("period_logs")
+        log_days = db.query(period_logs)
+        offboarded_ids = select(EmployeeOffboarding.employee_id)
+        offboarded_with_taps = select(period_logs.c.employee_id).where(
+            period_logs.c.employee_id.in_(offboarded_ids),
+        )
+        registry_filter = or_(registry_filter, EmployeeLocalRegistry.employee_id.in_(offboarded_with_taps))
+        roster_keys = roster_keys.filter(or_(
+            roster_sub.c.employee_id.not_in(offboarded_ids),
+            roster_sub.c.employee_id.in_(offboarded_with_taps),
+        ))
+
     registry_keys = None
     if start_date and end_date:
         report_dates = date_range_subquery(db, start_date, end_date)
@@ -243,27 +274,13 @@ def build_daily_summary_query(
         ).select_from(EmployeeLocalRegistry).join(
             report_dates,
             true(),
-        ).filter(EmployeeLocalRegistry.source_status == SOURCE_EXCEL_SYNCED)
+        ).filter(registry_filter)
         if matching_employee_ids is not None:
             registry_keys = registry_keys.filter(
                 EmployeeLocalRegistry.employee_id.in_(
                     select(matching_employee_ids.c.employee_id)
                 )
             )
-
-    log_days = db.query(
-        agg_logs_sub.c.employee_id,
-        agg_logs_sub.c.work_date,
-        agg_logs_sub.c.first_tap,
-        agg_logs_sub.c.last_tap,
-        agg_logs_sub.c.tap_count,
-        agg_logs_sub.c.machine_ip,
-        null().label("shift_code"),
-    )
-    if start_date:
-        log_days = log_days.filter(agg_logs_sub.c.work_date >= start_date)
-    if end_date:
-        log_days = log_days.filter(agg_logs_sub.c.work_date <= end_date)
 
     # Raw Logs and roster each contribute at most one row per employee/day.
     # Combine their values in one pass, including days with no Raw Logs.

@@ -10,7 +10,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, exists, or_, text
 
-from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog
+from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog, EmployeeOffboarding
 from features.employees.registry_service import SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY, reconcile_employee_local_registry
 
 from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window, extract_lunch_swipes
@@ -464,6 +464,11 @@ def sync_employees_full(file_bytes: Optional[io.BytesIO] = None):
             sync_status["current_step"] = "Scanning machines and logs to sync registry..."
             sync_status["progress"] = 60
             
+        if file_bytes is not None:
+            imported_employees = db.query(EmployeeMetadata.employee_id).statement
+            db.query(EmployeeOffboarding).filter(EmployeeOffboarding.employee_id.in_(imported_employees)).delete(
+                synchronize_session=False,
+            )
         reconcile_employee_local_registry(db)
         
         excel_count = db.query(EmployeeLocalRegistry).filter_by(source_status='excel_synced').count()

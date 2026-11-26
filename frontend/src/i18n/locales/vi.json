@@ -473,6 +473,7 @@
   "actions": {
     "delete_confirm": "Xóa nhân viên {id} khỏi máy {ip}?",
     "delete_single_warn": "Bạn có chắc chắn muốn xóa nhân viên {id} khỏi máy {ip} KHÔNG?\n(Lưu ý: Hành động này CHỈ xóa dữ liệu trên máy này, không ảnh hưởng đến các máy khác).",
+    "delete_excel_employee_warn": "Xóa nhân viên {id} khỏi máy {ip}?\nKhi xóa thành công, hồ sơ sẽ chuyển sang Chỉ có trong log. Báo cáo chỉ đưa nhân viên này vào kỳ có lượt chấm công. Đồng bộ Excel có mã này sẽ khôi phục trạng thái Đồng bộ từ Excel.",
     "delete_all_confirm": "Xóa nhân viên {id} khỏi tất cả các máy?",
     "delete_global_warn": "CẢNH BÁO: Bạn đang thực hiện xóa nhân viên {id} trên TOÀN BỘ CÁC MÁY chấm công.\nHành động này không thể hoàn tác. Bạn có chắc chắn muốn tiếp tục không?",
     "delete_initiating": "Đang khởi tạo lệnh xóa cho {id}...",

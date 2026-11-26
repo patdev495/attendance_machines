@@ -4,12 +4,12 @@ from datetime import date
 from threading import Lock
 from time import monotonic
 
-from sqlalchemy import or_, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import config
-from database import EmployeeLocalRegistry
+from database import EmployeeLocalRegistry, EmployeeOffboarding
 from features.employees.registry_service import (
     SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY, employee_search_filter, normalize_employee_id,
 )
@@ -55,6 +55,7 @@ def verify_report_employees(bind, start_date: date, end_date: date, employee_sea
                 .outerjoin(EmployeeLocalRegistry, EmployeeLocalRegistry.employee_id == logs.c.employee_id)
                 .filter(
                     logs.c.work_date.between(start_date, end_date),
+                    logs.c.employee_id.not_in(select(EmployeeOffboarding.employee_id)),
                     employee_search_filter(db, employee_search, logs.c.employee_id),
                     or_(EmployeeLocalRegistry.employee_id.is_(None),
                         EmployeeLocalRegistry.source_status == SOURCE_LOG_ONLY),
@@ -87,6 +88,7 @@ def verify_report_employees(bind, start_date: date, end_date: date, employee_sea
                             db.execute(update(EmployeeLocalRegistry).where(
                                 EmployeeLocalRegistry.employee_id == employee_id,
                                 EmployeeLocalRegistry.source_status == SOURCE_LOG_ONLY,
+                                EmployeeLocalRegistry.employee_id.not_in(select(EmployeeOffboarding.employee_id)),
                             ).values(source_status=SOURCE_MACHINE_ONLY))
                 except IntegrityError:
                     if db.get(EmployeeLocalRegistry, employee_id) is None:

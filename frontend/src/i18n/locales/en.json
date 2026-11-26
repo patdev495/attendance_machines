@@ -472,6 +472,7 @@
   "actions": {
     "delete_confirm": "Delete {id} from {ip}?",
     "delete_single_warn": "Are you sure you want to delete employee {id} from machine {ip} ONLY?\n(Note: This action ONLY removes data from this machine and does not affect others).",
+    "delete_excel_employee_warn": "Remove employee {id} from machine {ip}?\nAfter successful removal, their registry status changes to Log-only. Reports will include them only for periods with a punch. Importing this employee from Excel restores Excel-synced status.",
     "delete_all_confirm": "Delete {id} from all machines?",
     "delete_global_warn": "WARNING: You are deleting employee {id} from ALL connected machines.\nThis action cannot be undone. Do you really want to proceed?",
     "delete_initiating": "Initiating deletion for {id}...",
