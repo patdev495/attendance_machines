@@ -6,6 +6,7 @@ import math
 # ── Full-day leave/absence codes (Legacy fallback) ──────────────────────────
 # These are used if the code is not found in the ShiftDefinitions table.
 FULL_DAY_LEAVE_CODES = {'P', 'O', 'T', 'C', 'R', 'K', 'X'}
+WORKSHOP_ONE_DEPARTMENT = 'Xưởng 1一部'
 
 def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] = None):
     """
@@ -13,6 +14,7 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
     ShiftDefinitions table (passed via rules_pool).
     """
     code = (shift_code or 'N').strip().upper()
+    allow_overtime = (department or '').strip() != WORKSHOP_ONE_DEPARTMENT
 
     # Find the rule in the pool (rules_pool is now List[ShiftDefinition])
     matching_rule = None
@@ -37,7 +39,7 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
             'work_hours_expected': matching_rule.work_hours,
 
             'break_hours': matching_rule.break_hours,
-            'has_overtime': True, 
+            'has_overtime': allow_overtime,
             'max_hours': None,
             'standard_hours': matching_rule.standard_hours,
             'workday_base': matching_rule.workday_base or 8.0,
@@ -45,6 +47,9 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
 
     # ── Fallback logic for undefined codes ──
     is_leave = code in FULL_DAY_LEAVE_CODES
+    night = code in ('D', 'D12')
+    twelve_hours = code in ('N12', 'D12')
+    expected = 0.0 if is_leave else 12.0 if twelve_hours else 8.0
     return {
         'is_leave': is_leave,
         'leave_hours_p': 8.0 if code == 'P' else 0.0,
@@ -53,15 +58,15 @@ def parse_shift_window(shift_code, department, rules_pool: Optional[List[Any]] =
         'leave_hours_c': 8.0 if code == 'C' else 0.0,
         'leave_hours_o': 8.0 if code in ('O', 'X') else 0.0,
         'leave_hours_k': 8.0 if code == 'K' else 0.0,
-        'official_start': time(8, 0),
-        'official_end': time(17, 0),
-        'end_next_day': code == 'D', # Legacy D was overnight
-        'work_hours_expected': 0.0 if is_leave else 8.0,
-        'break_hours': 1.0 if not is_leave else 0.0,
-        'has_overtime': not is_leave,
+        'official_start': time(20, 0) if night else time(8, 0),
+        'official_end': {'D': time(5, 0), 'D12': time(8, 0), 'N12': time(20, 0)}.get(code, time(17, 0)),
+        'end_next_day': night,
+        'work_hours_expected': expected,
+        'break_hours': 0.0 if is_leave or code == 'N12' else 1.0,
+        'has_overtime': allow_overtime,
         'max_hours': None,
-        'standard_hours': 0.0 if is_leave else 8.0,
-        'workday_base': 8.0,
+        'standard_hours': expected,
+        'workday_base': 12.0 if twelve_hours else 8.0,
     }
 
 
@@ -113,7 +118,7 @@ def compute_day_stats(first, last, w_date, department, shift_code, rules_pool=No
     else:
         actual_ot_threshold = official_end_dt
     
-    if last > actual_ot_threshold:
+    if window['has_overtime'] and last > actual_ot_threshold:
         raw_ot = (last - actual_ot_threshold).total_seconds() / 3600.0
         # Round down to nearest 0.5 (e.g. 1.4 -> 1.0, 1.9 -> 1.5)
         rounded_ot = math.floor(raw_ot * 2) / 2

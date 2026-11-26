@@ -1,7 +1,7 @@
 from datetime import date, time, timedelta
 from typing import NamedTuple, Optional, Any
 
-from sqlalchemy import Date, String, Time, case, cast, func, literal, null, or_, select, text, true, union_all
+from sqlalchemy import Date, String, Time, Unicode, case, cast, func, literal, null, or_, select, text, true, union_all
 from sqlalchemy.orm import Session, aliased
 
 from database import (
@@ -10,13 +10,17 @@ from database import (
     EmployeeLocalRegistry,
     EmployeeMetadata,
     EmployeeOffboarding,
+    ShiftDefinition,
 )
 from features.employees.registry_service import SOURCE_EXCEL_SYNCED, SOURCE_LOG_ONLY, employee_keyword_query
+
+from utils.stats_utils import WORKSHOP_ONE_DEPARTMENT
 
 
 class DailySummaryQueryParts(NamedTuple):
     query: Any
     summary_days: Any
+    effective_shift: Any
 
 
 def date_range_subquery(
@@ -39,6 +43,19 @@ def _trimmed(value):
     return func.ltrim(func.rtrim(value))
 
 
+def resolve_report_shift(daily_code, department):
+    code = func.upper(_trimmed(daily_code))
+    valid_codes = select(ShiftDefinition.shift_code)
+    workshop_one = _trimmed(department) == literal(WORKSHOP_ONE_DEPARTMENT, type_=Unicode())
+    assigned_shift = case(
+        (workshop_one & code.in_(("D", "D12")), "D12"),
+        (workshop_one & code.in_(("N", "N12")), "N12"),
+        (code.in_(("N", "D", "N12", "D12")) | code.in_(valid_codes), code),
+    )
+    default_shift = case((workshop_one, "N12"), else_="N")
+    return func.coalesce(assigned_shift, default_shift), assigned_shift
+
+
 def build_log_work_date_subquery(
     db: Session,
     start_date: Optional[date] = None,
@@ -46,7 +63,6 @@ def build_log_work_date_subquery(
     *,
     include_machine_ip: bool = False,
     include_registry_fields: bool = False,
-    use_registry_shift_fallback: bool = False,
     trim_employee_joins: bool = False,
     date_padding_days: int = 0,
     employee_ids=None,
@@ -56,11 +72,10 @@ def build_log_work_date_subquery(
     today_shift = aliased(EmployeeDailyShifts)
     yest_shift = aliased(EmployeeDailyShifts)
 
-    today_shift_code = today_shift.shift_code
-    yest_shift_code = yest_shift.shift_code
-    if use_registry_shift_fallback:
-        today_shift_code = func.coalesce(today_shift.shift_code, EmployeeLocalRegistry.shift)
-        yest_shift_code = func.coalesce(yest_shift.shift_code, EmployeeLocalRegistry.shift)
+    today_shift_code = func.upper(_trimmed(today_shift.shift_code))
+    yest_shift_code = func.upper(_trimmed(yest_shift.shift_code))
+    night_codes = select(ShiftDefinition.shift_code).where(ShiftDefinition.is_night_shift == true())
+    yesterday_is_night = yest_shift_code.in_(("D", "D12")) | yest_shift_code.in_(night_codes)
 
     columns = [
         AttendanceLog.id,
@@ -80,18 +95,7 @@ def build_log_work_date_subquery(
         *columns,
         case(
             (
-                (func.coalesce(today_shift_code, "").like("%D%"))
-                & (func.cast(AttendanceLog.attendance_time, Time) < time(12, 0)),
-                func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date),
-            ),
-            (
-                (func.coalesce(today_shift_code, "").like("%D%"))
-                & (func.cast(AttendanceLog.attendance_time, Time) >= time(18, 0)),
-                func.cast(AttendanceLog.attendance_time, Date),
-            ),
-            (
-                (func.coalesce(yest_shift_code, "").like("%D%"))
-                & (func.cast(AttendanceLog.attendance_time, Time) < time(10, 0)),
+                yesterday_is_night & (func.cast(AttendanceLog.attendance_time, Time) < time(10, 0)),
                 func.cast(func.dateadd(text("day"), text("-1"), AttendanceLog.attendance_time), Date),
             ),
             (
@@ -102,7 +106,7 @@ def build_log_work_date_subquery(
         ).label("work_date"),
     )
 
-    if include_registry_fields or use_registry_shift_fallback:
+    if include_registry_fields:
         left_id = AttendanceLog.employee_id
         right_id = EmployeeLocalRegistry.employee_id
         if trim_employee_joins:
@@ -219,7 +223,6 @@ def build_daily_summary_query(
         start_date,
         end_date,
         include_machine_ip=True,
-        use_registry_shift_fallback=True,
         date_padding_days=1,
         employee_ids=matching_employee_ids,
         employee_search=employee_search,
@@ -298,16 +301,19 @@ def build_daily_summary_query(
         func.max(source_days.c.shift_code).label("shift_code"),
     ).group_by(source_days.c.employee_id, source_days.c.work_date).subquery("summary_days")
 
+    department = func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department)
+    effective_shift, assigned_shift = resolve_report_shift(summary_days.c.shift_code, department)
     query = db.query(
         summary_days.c.employee_id,
         summary_days.c.work_date,
         summary_days.c.first_tap,
         summary_days.c.last_tap,
         func.coalesce(summary_days.c.tap_count, 0).label("tap_count"),
-        func.coalesce(summary_days.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift).label("shift"),
+        effective_shift.label("shift"),
+        assigned_shift.label("assigned_shift"),
         func.coalesce(EmployeeLocalRegistry.emp_name, EmployeeMetadata.emp_name).label("emp_name"),
         func.coalesce(EmployeeLocalRegistry.full_emp_id, EmployeeMetadata.full_emp_id).label("full_emp_id"),
-        func.coalesce(EmployeeLocalRegistry.department, EmployeeMetadata.department).label("department"),
+        department.label("department"),
         func.coalesce(EmployeeLocalRegistry.source_status, SOURCE_LOG_ONLY).label("status"),
         summary_days.c.shift_code.label("daily_shift_code"),
     ).outerjoin(
@@ -318,4 +324,4 @@ def build_daily_summary_query(
         summary_days.c.employee_id == EmployeeMetadata.employee_id,
     )
 
-    return DailySummaryQueryParts(query, summary_days)
+    return DailySummaryQueryParts(query, summary_days, effective_shift)

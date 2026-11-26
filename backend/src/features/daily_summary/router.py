@@ -5,7 +5,7 @@ from itertools import batched
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, case
+from sqlalchemy import func, desc
 from starlette.background import BackgroundTask
 from typing import Optional
 from datetime import date, datetime
@@ -34,8 +34,7 @@ def get_unique_shifts(db: Session = Depends(get_db)):
     results = [r[0] for r in q.all()]
     unique_shifts = sorted(list(set(s.strip().upper() for s in results if s and s.strip())))
 
-    # Always include NA at the beginning
-    return ["NA"] + unique_shifts
+    return sorted(set(unique_shifts) | {"N", "D", "N12", "D12"})
 
 
 
@@ -82,13 +81,7 @@ def get_daily_summary(
         query = query.filter(dynamic_status == status)
 
     if shift:
-        valid_shift_ids = db.query(ShiftDefinition.shift_code)
-        effective_shift = func.coalesce(summary_days.c.shift_code, EmployeeLocalRegistry.shift, EmployeeMetadata.shift)
-        mapped_shift = case(
-            (effective_shift.in_(valid_shift_ids), effective_shift),
-            else_="NA"
-        )
-        query = query.filter(mapped_shift == shift)
+        query = query.filter(parts.effective_shift == shift)
 
     query = query.order_by(desc(summary_days.c.work_date), summary_days.c.employee_id)
 
@@ -158,7 +151,6 @@ def get_daily_detail(
         db,
         start_date=parsed_work_date,
         end_date=parsed_work_date,
-        use_registry_shift_fallback=True,
         date_padding_days=1,
     )
 

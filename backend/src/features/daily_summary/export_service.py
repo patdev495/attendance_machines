@@ -10,7 +10,6 @@ from database import EmployeeLocalRegistry, EmployeeOffboarding, ShiftDefinition
 from utils.stats_utils import compute_day_stats, parse_shift_window, FULL_DAY_LEAVE_CODES, determine_missing_tap, extract_lunch_swipes
 from features.employees.registry_service import SOURCE_LOG_ONLY
 from .report_query import build_daily_summary_query
-from .service import needs_shift_review
 
 
 export_status = {
@@ -131,26 +130,14 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             if emp_id not in processed_data:
                 processed_data[emp_id] = {"days": {}, "name": row.emp_name, "department": row.department}
 
-            # Get effective shift code (daily override or fallback)
-            daily_code = getattr(row, 'daily_shift_code', None)
-            full_emp_id = getattr(row, 'full_emp_id', None)
-
-            # Phase 13: Map to NA if not in definitions table
-            valid_codes = {r.shift_code for r in rules_pool} if rules_pool else set()
-            effective_shift_raw = (daily_code or row.shift or "").strip().upper()
-            known_shift = effective_shift_raw in valid_codes
-
-            if not known_shift:
-                shift_code_display = "NA"
-                effective_shift = "N"
-            else:
-                shift_code_display = effective_shift_raw.strip().upper()
-                effective_shift = shift_code_display
+            effective_shift = row.shift
+            day_rules = rules_pool if row.assigned_shift is not None else ()
+            full_emp_id = row.full_emp_id
 
             emp_m = emp_meta.get(emp_id)
             department = getattr(row, 'department', None) or (emp_m.department if emp_m else None)
             shift_window = parse_shift_window(
-                effective_shift, department, rules_pool=rules_pool
+                effective_shift, department, rules_pool=day_rules
             )
 
             # Initialization for row record
@@ -158,8 +145,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             std = ot = late = early = 0
             night_subsidy = 0.0
             hp = hr = ho = ht = hc = hk = 0.0
-            std_expected = 8.0
-            workday_base = 8.0
+            std_expected = shift_window['standard_hours']
+            workday_base = shift_window['workday_base']
             note = ""
 
             # Extract lunch info
@@ -184,12 +171,6 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
             if offboarded_without_taps:
                 std_expected = 0.0
                 note = "Không chấm công"
-            elif row.tap_count and needs_shift_review(row, known_shift):
-                first_val = row.first_tap.strftime("%H:%M")
-                if row.last_tap != row.first_tap:
-                    last_val = row.last_tap.strftime("%H:%M")
-                std_expected = 0.0
-                note = "Cần xác minh ca làm"
             elif effective_shift.strip().upper() in FULL_DAY_LEAVE_CODES:
                 std = 0
                 ot = 0
@@ -217,11 +198,11 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                     w_date,
                     department,
                     effective_shift,
-                    rules_pool=rules_pool
+                    rules_pool=day_rules
                 )
                 # If only 1 tap, OR multiple taps but they are within 5 minutes (duplicate taps)
                 if row.tap_count == 1 or (row.last_tap - row.first_tap).total_seconds() < 300:
-                    note = determine_missing_tap(row.first_tap, w_date, effective_shift, department, rules_pool)
+                    note = determine_missing_tap(row.first_tap, w_date, effective_shift, department, day_rules)
                     # Single tap: suppress the metric we cannot know
                     if note == "Missing Check-out":
                         early = 0   # don't know when they left
@@ -241,7 +222,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
 
             # ── Classify std/ot by shift_category (NORMAL / HOLIDAY / ROTATION)
             #    and day vs night shift. Logic unchanged — only routing results.
-            _cat, _is_night = _get_shift_meta(effective_shift, rules_pool)
+            _cat, _ = _get_shift_meta(effective_shift, day_rules)
+            _is_night = shift_window['end_next_day']
             _std_num = std if isinstance(std, (int, float)) else 0.0
             _ot_num  = ot  if isinstance(ot,  (int, float)) else 0.0
             work_normal = work_holiday = work_rotation = 0.0
@@ -266,8 +248,8 @@ def run_export_task(start_date: date, end_date: date, view_mode: str):
                 "lunch_dur_str": lunch_dur_str, "lunch_status_str": lunch_status_str,
                 "lunch_late_minutes": lunch_late_minutes,
                 "std": std, "ot": ot, "late": late, "early": early,
-                "shift": shift_code_display,
-                "shift_code": shift_code_display,
+                "shift": effective_shift,
+                "shift_code": effective_shift,
                 "note": note,
                 "offboarded_without_taps": offboarded_without_taps,
                 "night_subsidy": night_subsidy,

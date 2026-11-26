@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, exists, or_, text
 
 from database import SessionLocal, EmployeeMetadata, EmployeeLocalRegistry, EmployeeDailyShifts, ShiftDefinition, AttendanceLog, EmployeeOffboarding
-from features.employees.registry_service import SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY, reconcile_employee_local_registry
+from features.employees.registry_service import reconcile_employee_local_registry
 
 from utils.stats_utils import compute_day_stats, determine_missing_tap, parse_shift_window, extract_lunch_swipes
 
@@ -28,10 +28,6 @@ sync_status = {
     "machine_only_count": 0
 }
 status_lock = threading.Lock()
-
-
-def needs_shift_review(row, known_shift: bool) -> bool:
-    return not known_shift and getattr(row, "status", None) in (SOURCE_LOG_ONLY, SOURCE_MACHINE_ONLY)
 
 
 def process_summary_rows(
@@ -83,30 +79,18 @@ def process_summary_rows(
                 logger.warning(f"Error fetching raw logs for lunch swipes: {e}")
 
     summary_items = []
-    valid_codes = {rule.shift_code for rule in rules_pool}
     for row in results:
         first      = getattr(row, "first_tap", None)
         last       = getattr(row, "last_tap", None)
         count      = getattr(row, "tap_count", 0)
         w_date     = getattr(row, "work_date", None)
         emp_id     = getattr(row, "employee_id", None)
-        # Use the combined calculation shift from the row object
-        row_shift  = getattr(row, "shift", None)
         department = getattr(row, "department", None)
-        daily_code = getattr(row, "daily_shift_code", None)
-        
-        effective_shift_raw = daily_code or row_shift
-        
-        known_shift = bool(effective_shift_raw and effective_shift_raw.strip().upper() in valid_codes)
-        if not known_shift:
-            shift_code_display = "NA"
-            calculation_shift = "N" # Fallback for calculation
-        else:
-            shift_code_display = effective_shift_raw.strip().upper()
-            calculation_shift = shift_code_display
+        calculation_shift = shift_code_display = row.shift or "N"
+        day_rules = rules_pool if getattr(row, "assigned_shift", row.shift) is not None else ()
 
         shift_window = parse_shift_window(
-            calculation_shift, department, rules_pool=rules_pool
+            calculation_shift, department, rules_pool=day_rules
         )
 
         work_hours       = 0.0
@@ -193,24 +177,19 @@ def process_summary_rows(
             continue
 
         # Logic: If all taps are before shift start, treat as Missing Out.
-        boundary_hour = 20 if calculation_shift.upper() == 'D' else 8
+        boundary_hour = 20 if shift_window['end_next_day'] else 8
         is_double_checkin = (count > 1 and first != last and 
                              last.date() == first.date() and 
                              last.hour < boundary_hour)
         
         # compute_day_stats now returns 14 values
         res_work, hours_standard, hours_ot, minutes_late, minutes_early_lv, hours_p, hours_r, hours_o, hours_t, hours_c, hours_k, night_subsidy, std_hours_shift, workday_base = compute_day_stats(
-            first, last, w_date, department, calculation_shift, rules_pool=rules_pool
+            first, last, w_date, department, calculation_shift, rules_pool=day_rules
         )
         
         work_status = "OK"
-        if needs_shift_review(row, known_shift):
-            hours_standard = hours_ot = minutes_late = minutes_early_lv = 0
-            hours_p = hours_r = hours_o = hours_t = hours_c = hours_k = 0
-            last = last if first != last else None
-            work_status = "REVIEW_SHIFT"
-        elif not (count > 1 and first != last and not is_double_checkin):
-            note = determine_missing_tap(first, w_date, calculation_shift, department, rules_pool)
+        if not (count > 1 and first != last and not is_double_checkin):
+            note = determine_missing_tap(first, w_date, calculation_shift, department, day_rules)
             # Single tap: suppress the metric we cannot know and set the missing tap to None for UI
             if note == "Missing Check-out":
                 minutes_early_lv = 0   # don't know when they left

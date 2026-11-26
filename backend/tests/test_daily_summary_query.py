@@ -251,3 +251,73 @@ def test_daily_summary_combines_logs_roster_and_absences_with_bounded_work(clien
         ("A", 450), ("B", 0),
     ]
     assert statement_steps < 195_000
+
+
+def test_unassigned_employee_uses_day_shift_regardless_of_roster_source(client, db_session):
+    from datetime import time
+
+    from database import ShiftDefinition
+
+    work_date = date(2026, 11, 25)
+    db_session.add(ShiftDefinition(shift_code="N", start_time=time(9), end_time=time(18), work_hours=7))
+    for source in ("excel_synced", "machine_only", "log_only"):
+        db_session.add(EmployeeLocalRegistry(employee_id=source, source_status=source, shift="D"))
+        db_session.add_all(
+            AttendanceLog(
+                employee_id=source, attendance_date=work_date,
+                attendance_time=datetime(2026, 11, 25, hour, minute), machine_ip="10.0.0.1",
+            )
+            for hour, minute in ((7, 39), (20, 2))
+        )
+    db_session.flush()
+
+    response = client.get("/api/daily-summary", params={
+        "start_date": work_date.isoformat(), "end_date": work_date.isoformat(),
+    })
+
+    assert response.status_code == 200
+    assert {
+        item["employee_id"]: (item["shift"], item["work_status"], item["work_hours"], item["hours_ot"])
+        for item in response.json()["items"]
+    } == {source: ("N", "OK", 8, 3) for source in ("excel_synced", "machine_only", "log_only")}
+
+
+def test_workshop_one_uses_twelve_hour_day_and_night_shifts_without_overtime(client, db_session):
+    from datetime import time, timedelta
+
+    from database import EmployeeDailyShifts, ShiftDefinition
+
+    work_date = date(2026, 11, 25)
+    db_session.add_all([
+        ShiftDefinition(shift_code="N12", start_time=time(8), end_time=time(20),
+                        ot_start_time=time(21), work_hours=12),
+        ShiftDefinition(shift_code="D12", start_time=time(20), end_time=time(8),
+                        ot_start_time=time(9), is_night_shift=True, break_hours=1, work_hours=12),
+        EmployeeDailyShifts(employee_id="night", work_date=work_date, shift_code="D"),
+    ])
+    for employee, taps in {
+        "day": [datetime.combine(work_date, time(7, 36)), datetime.combine(work_date, time(22, 30))],
+        "night": [datetime.combine(work_date, time(19, 50)),
+                  datetime.combine(work_date + timedelta(days=1), time(9, 30))],
+    }.items():
+        db_session.add(EmployeeLocalRegistry(
+            employee_id=employee, department="X\u01b0\u1edfng 1\u4e00\u90e8", source_status="machine_only",
+        ))
+        db_session.add_all(
+            AttendanceLog(employee_id=employee, attendance_date=tap.date(), attendance_time=tap,
+                          machine_ip="10.0.0.1")
+            for tap in taps
+        )
+    db_session.flush()
+    params = {"start_date": work_date.isoformat(), "end_date": work_date.isoformat()}
+
+    response = client.get("/api/daily-summary", params=params)
+    assert response.status_code == 200
+    assert {
+        item["employee_id"]: (item["shift"], item["work_status"], item["work_hours"], item["hours_ot"])
+        for item in response.json()["items"]
+    } == {"day": ("N12", "OK", 12, 0), "night": ("D12", "OK", 12, 0)}
+
+    filtered = client.get("/api/daily-summary", params={**params, "shift": "D12"})
+    night, = filtered.json()["items"]
+    assert night["last_tap"] == "2026-11-26T09:30:00"

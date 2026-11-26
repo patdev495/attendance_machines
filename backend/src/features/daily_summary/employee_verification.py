@@ -48,7 +48,7 @@ def verify_report_employees(bind, start_date: date, end_date: date, employee_sea
         with Session(bind) as db:
             logs = build_log_work_date_subquery(
                 db, start_date, end_date, include_machine_ip=True,
-                use_registry_shift_fallback=True, date_padding_days=1,
+                date_padding_days=1,
             )
             candidates = (
                 db.query(logs.c.employee_id, logs.c.machine_ip)

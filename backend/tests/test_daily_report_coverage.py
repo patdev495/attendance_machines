@@ -36,7 +36,7 @@ def test_report_includes_unverified_tap_and_scheduled_absence(client, db_session
     assert set(items) == {"NEW-EMP", "SCHEDULED"}
     assert items["NEW-EMP"]["first_tap"] == "2026-11-25T01:47:01"
     assert items["NEW-EMP"]["status"] == "log_only"
-    assert items["NEW-EMP"]["shift"] == "NA"
+    assert items["NEW-EMP"]["shift"] == "N"
     assert items["SCHEDULED"]["tap_count"] == 0
 
     response = client.get("/api/daily-summary", params={**PERIOD, "employee_id": "NEW-EMP"})

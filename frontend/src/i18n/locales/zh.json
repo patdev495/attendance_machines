@@ -243,7 +243,6 @@
       "missing_checkin": "缺打卡 (上班)",
       "missing_checkout": "缺打卡 (下班)",
       "unverified_employee": "员工档案待核实",
-      "review_shift": "班次待核实",
       "absent": "缺勤"
     },
     "excel_sync": {
